@@ -1,12 +1,22 @@
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { defineStore } from 'pinia'
 
-export const useCounterStore = defineStore('counter', () => {
-  const count = ref(0)
-  const doubleCount = computed(() => count.value * 2)
-  function increment() {
-    count.value++
+export const useQuizStore = defineStore('quiz', () => {
+  const correctAnswers = ref(0)
+  const incorrectAnswers = ref(0)
+
+  function incrementCorrect() {
+    correctAnswers.value++
   }
 
-  return { count, doubleCount, increment }
+  function incrementIncorrect() {
+    incorrectAnswers.value++
+  }
+
+  return {
+    correctAnswers,
+    incorrectAnswers,
+    incrementCorrect,
+    incrementIncorrect,
+  }
 })
