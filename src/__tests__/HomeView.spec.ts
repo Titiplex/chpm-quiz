@@ -1,41 +1,61 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createMemoryHistory } from 'vue-router'
 
 import HomeView from '@/views/HomeView.vue'
-import QuestionView from '@/views/QuestionView.vue'
+import AdminBuilderView from '@/views/AdminBuilderView.vue'
+import RespondentView from '@/views/RespondentView.vue'
+import ModeratorView from '@/views/ModeratorView.vue'
+import StatsView from '@/views/StatsView.vue'
+import ArchitectureView from '@/views/ArchitectureView.vue'
 
-// Create a mocked router instance for testing
-const router = createRouter({
-  history: createWebHistory(),
-  routes: [{ path: '/question', component: QuestionView }],
-})
+function makeRouter() {
+  return createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/', component: HomeView },
+      { path: '/admin', component: AdminBuilderView },
+      { path: '/questionnaire', component: RespondentView },
+      { path: '/moderation', component: ModeratorView },
+      { path: '/stats', component: StatsView },
+      { path: '/architecture', component: ArchitectureView },
+    ],
+  })
+}
 
 describe('HomeView', () => {
-  it('should render the home view', () => {
-    const wrapper = mount(HomeView)
-    expect(wrapper.find('h2').text()).toBe('Welcome to the Vigil Quiz')
-    expect(wrapper.find('p').text()).toBe(
-      'Get ready to learn more about this amazing company through our interactive quiz!',
-    )
-    expect(wrapper.find('button').text()).toBe('Start')
-  })
-  it('should navigate to the question route when the button is clicked', async () => {
+  it('renders the CHPM prototype overview', async () => {
+    const router = makeRouter()
+    router.push('/')
+    await router.isReady()
+
     const wrapper = mount(HomeView, {
       global: {
-        mocks: {
-          $router: router,
-        },
+        plugins: [router],
       },
     })
 
-    // Simulate a click on the button
-    wrapper.find('button').trigger('click')
+    expect(wrapper.text()).toContain('Cahier des charges illustré')
+    expect(wrapper.text()).toContain('Questionnaire adaptatif')
+    expect(wrapper.text()).toContain('Administration no-code')
+    expect(wrapper.text()).toContain('Pilotage statistique')
+  })
 
-    // Wait for the navigation to complete
+  it('exposes the main demo navigation links', async () => {
+    const router = makeRouter()
+    router.push('/')
     await router.isReady()
 
-    // Check if the router was navigated to the '/question' route
-    expect(router.currentRoute.value.path).toBe('/question')
+    const wrapper = mount(HomeView, {
+      global: {
+        plugins: [router],
+      },
+    })
+
+    const html = wrapper.html()
+    expect(html).toContain('href="/admin"')
+    expect(html).toContain('href="/questionnaire"')
+    expect(html).toContain('href="/moderation"')
+    expect(html).toContain('href="/stats"')
   })
 })

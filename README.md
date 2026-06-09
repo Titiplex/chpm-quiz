@@ -1,54 +1,56 @@
-# chm-quiz
+# CHPM Survey — Prototype front
 
-This template should help get you started developing with Vue 3 in Vite.
+Prototype Vue 3 + Vite illustrant un cahier des charges pour une plateforme de questionnaires adaptatifs, anonymisés et
+administrables sans compétence informatique.
 
-## Recommended IDE Setup
+## Objectif
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+Cette version ne contient pas de backend. Elle sert à présenter visuellement le périmètre fonctionnel attendu :
 
-## Recommended Browser Setup
+- constructeur de questionnaires adaptatifs ;
+- groupes de questions, ordre conditionnel et mélange aléatoire ;
+- réponses libres et échelles Likert ;
+- popups explicatifs configurables ;
+- télémétrie de compréhension : temps de réponse, popups ouvertes, progression ;
+- invitations par modérateur avec email et code unique ;
+- reprise avant soumission, soumission unique ensuite ;
+- séparation visuelle entre base métier et base email ;
+- statistiques administrateur par question, questionnaire, soumission anonyme et bâtiment.
 
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
+## Écrans
 
-## Type Support for `.vue` Imports in TS
+- `/` : vue d’ensemble du cahier des charges illustré.
+- `/admin` : constructeur visuel administrateur.
+- `/moderation` : interface modérateur pour invitations et suivi par bâtiment.
+- `/questionnaire` : expérience répondant.
+- `/stats` : panel statistique administrateur.
+- `/architecture` : architecture visuelle des données et des droits.
 
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
+## Installation
 
 ```sh
 npm install
 ```
 
-### Compile and Hot-Reload for Development
+## Développement
 
 ```sh
 npm run dev
 ```
 
-### Type-Check, Compile and Minify for Production
+## Build
 
 ```sh
 npm run build
 ```
 
-### Run Unit Tests with [Vitest](https://vitest.dev/)
+## Tests
 
 ```sh
-npm run test:unit
+npm run test:unit -- --run --pool=forks
 ```
 
-### Lint with [ESLint](https://eslint.org/)
+## Note technique
 
-```sh
-npm run lint
-```
+Bootstrap reste la base CSS de la démo d’origine. Le prototype ajoute `src/assets/demo.css` pour obtenir un rendu plus
+produit : cartes, badges, shell applicatif, histogrammes simulés, sections statistiques, timeline et schémas visuels.

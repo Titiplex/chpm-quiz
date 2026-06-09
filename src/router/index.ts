@@ -6,19 +6,38 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      component: () => import('../views/HomeView.vue')
+      component: () => import('../views/HomeView.vue'),
     },
     {
-      path: '/question',
-      name: 'question',
-      component: () => import('../views/QuestionView.vue')
+      path: '/admin',
+      name: 'admin',
+      component: () => import('../views/AdminBuilderView.vue'),
     },
     {
-      path: '/summary',
-      name: 'summary',
-      component: () => import('../views/SummaryView.vue')
-    }
-  ]
+      path: '/moderation',
+      name: 'moderation',
+      component: () => import('../views/ModeratorView.vue'),
+    },
+    {
+      path: '/questionnaire',
+      name: 'questionnaire',
+      component: () => import('../views/RespondentView.vue'),
+    },
+    {
+      path: '/stats',
+      name: 'stats',
+      component: () => import('../views/StatsView.vue'),
+    },
+    {
+      path: '/architecture',
+      name: 'architecture',
+      component: () => import('../views/ArchitectureView.vue'),
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      redirect: '/',
+    },
+  ],
 })
 
 export default router
