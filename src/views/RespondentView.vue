@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
+
 const telemetry = [
   { label: 'Temps sur la question Q-014', value: '01:42', progress: 68 },
   { label: 'Popup “coordination inter-site” ouverte', value: '2 fois', progress: 42 },
@@ -23,6 +25,8 @@ const telemetry = [
               </div>
               <span class="badge-soft success align-self-start">Code actif : 8F4K-29QX</span>
             </div>
+
+            <RoleGateInfo class="mb-4" />
 
             <div class="screen-preview">
               <div class="screen-topbar">

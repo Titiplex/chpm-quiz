@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import KpiCard from '@/components/common/KpiCard.vue'
+import PageHeader from '@/components/common/PageHeader.vue'
+import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
+
 const bars = [62, 78, 48, 86, 54, 70, 91]
 
 const questionStats = [
@@ -17,51 +21,32 @@ const anonymousSubmissions = [
 <template>
   <section class="demo-page">
     <div class="container-fluid px-4 px-xl-5">
-      <div class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
-        <div>
-          <p class="section-eyebrow mb-2">Administrateurs</p>
-          <h1 class="h2 fw-bold mb-1">Panel statistique complet</h1>
-          <p class="muted mb-0">
-            Visualisation anonyme des soumissions, détection des questions difficiles, analyse par
-            bâtiment et mesure des temps de réponse au niveau question/questionnaire.
-          </p>
-        </div>
-        <div class="d-flex gap-2">
+      <PageHeader
+        eyebrow="Administrateurs"
+        title="Panel statistique complet"
+        description="Visualisation anonyme des soumissions, détection des questions difficiles, analyse par bâtiment et mesure des temps de réponse au niveau question/questionnaire."
+      >
+        <template #actions>
           <select class="form-select" aria-label="Questionnaire sélectionné">
             <option>Questionnaire CHPM · v1.4</option>
           </select>
           <button class="btn btn-primary">Exporter</button>
-        </div>
-      </div>
+        </template>
+      </PageHeader>
+      <RoleGateInfo class="mb-4" />
 
       <div class="row g-4 mb-4">
         <div class="col-md-6 col-xl-3">
-          <div class="kpi-card h-100">
-            <span>Soumissions anonymes</span>
-            <strong>1 284</strong>
-            <p class="small text-success mb-0">+14 % cette semaine</p>
-          </div>
+          <KpiCard label="Soumissions anonymes" value="1 284" detail="+14 % cette semaine" tone="success" />
         </div>
         <div class="col-md-6 col-xl-3">
-          <div class="kpi-card h-100">
-            <span>Temps médian questionnaire</span>
-            <strong>16:21</strong>
-            <p class="small muted mb-0">Objectif : 15–20 minutes</p>
-          </div>
+          <KpiCard label="Temps médian questionnaire" value="16:21" detail="Objectif : 15–20 minutes" />
         </div>
         <div class="col-md-6 col-xl-3">
-          <div class="kpi-card h-100">
-            <span>Ouvertures popup/question</span>
-            <strong>1.8</strong>
-            <p class="small text-warning mb-0">Q-014 à surveiller</p>
-          </div>
+          <KpiCard label="Ouvertures popup/question" value="1.8" detail="Q-014 à surveiller" tone="warning" />
         </div>
         <div class="col-md-6 col-xl-3">
-          <div class="kpi-card h-100">
-            <span>Bâtiments actifs</span>
-            <strong>42</strong>
-            <p class="small muted mb-0">11 pays représentés</p>
-          </div>
+          <KpiCard label="Bâtiments actifs" value="42" detail="11 pays représentés" />
         </div>
       </div>
 

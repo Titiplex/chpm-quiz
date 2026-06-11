@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import KpiCard from '@/components/common/KpiCard.vue'
+import PageHeader from '@/components/common/PageHeader.vue'
+import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
+
 const invitations = [
   { building: 'Montréal · Bâtiment A', sent: 84, completed: 61, pending: 18, blocked: 5 },
   { building: 'Paris · Bâtiment C', sent: 53, completed: 41, pending: 10, blocked: 2 },
@@ -9,17 +13,13 @@ const invitations = [
 <template>
   <section class="demo-page">
     <div class="container-fluid px-4 px-xl-5">
-      <div class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
-        <div>
-          <p class="section-eyebrow mb-2">Modérateurs multi-sites</p>
-          <h1 class="h2 fw-bold mb-1">Envoi contrôlé des liens à usage unique</h1>
-          <p class="muted mb-0">
-            Les modérateurs sélectionnent les personnes à tester dans leur périmètre bâtiment/site,
-            saisissent l’adresse mail et suivent l’état du lien sans accéder aux réponses nominatives.
-          </p>
-        </div>
-        <span class="badge-soft">Rôle : modérateur régional</span>
-      </div>
+      <PageHeader
+        eyebrow="Modérateurs multi-sites"
+        title="Envoi contrôlé des liens à usage unique"
+        description="Les modérateurs sélectionnent les personnes à tester dans leur périmètre bâtiment/site, saisissent l’adresse mail et suivent l’état du lien sans accéder aux réponses nominatives."
+        badge="Rôle : modérateur régional"
+      />
+      <RoleGateInfo class="mb-4" />
 
       <div class="row g-4">
         <div class="col-xl-5">
@@ -105,22 +105,13 @@ const invitations = [
 
             <div class="row g-3">
               <div class="col-md-4">
-                <div class="kpi-card h-100">
-                  <span>Taux de réponse global</span>
-                  <strong>73 %</strong>
-                </div>
+                <KpiCard label="Taux de réponse global" value="73 %" />
               </div>
               <div class="col-md-4">
-                <div class="kpi-card h-100">
-                  <span>Liens réactivables</span>
-                  <strong>37</strong>
-                </div>
+                <KpiCard label="Liens réactivables" value="37" />
               </div>
               <div class="col-md-4">
-                <div class="kpi-card h-100">
-                  <span>Soumissions verrouillées</span>
-                  <strong>128</strong>
-                </div>
+                <KpiCard label="Soumissions verrouillées" value="128" />
               </div>
             </div>
 

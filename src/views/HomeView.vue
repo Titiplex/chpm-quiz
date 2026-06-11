@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
 
+import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
+
 const scopeItems = [
   {
     title: 'Questionnaire adaptatif',
@@ -46,6 +48,7 @@ const principles = [
             passage du questionnaire, modération des invitations, séparation des données sensibles et
             statistiques de compréhension.
           </p>
+          <RoleGateInfo class="mb-4" />
           <div class="d-flex flex-wrap gap-2">
             <RouterLink class="btn btn-primary btn-lg" to="/admin">Explorer la maquette admin</RouterLink>
             <RouterLink class="btn btn-outline-primary btn-lg" to="/architecture">

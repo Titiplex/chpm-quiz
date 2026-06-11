@@ -1,3 +1,7 @@
+<script setup lang="ts">
+import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
+</script>
+
 <template>
   <section class="demo-page">
     <div class="container-fluid px-4 px-xl-5">
@@ -5,11 +9,12 @@
         <div class="position-relative z-1">
           <p class="hero-eyebrow mb-2">Architecture visuelle</p>
           <h1 class="h2 fw-bold mb-3">Serveur central, accès mondial, séparation stricte email ↔ réponses</h1>
-          <p class="hero-text mb-0">
+          <p class="hero-text mb-4">
             Cette page ne décrit pas une implémentation backend complète ; elle rend visibles les
             contraintes à intégrer au cahier des charges technique : centralisation, anonymisation,
             traçabilité, droits par rôle et accès exceptionnel aux emails sur décision judiciaire.
           </p>
+          <RoleGateInfo />
         </div>
       </div>
 

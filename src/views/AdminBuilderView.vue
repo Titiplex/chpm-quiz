@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import PageHeader from '@/components/common/PageHeader.vue'
+import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
+
 const groups = [
   { name: 'Accueil', count: 2, mode: 'Ordre fixe', active: true },
   { name: 'Compréhension clinique', count: 8, mode: 'Mélange aléatoire', active: false },
@@ -34,20 +37,17 @@ const questions = [
 <template>
   <section class="demo-page">
     <div class="container-fluid px-4 px-xl-5">
-      <div class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
-        <div>
-          <p class="section-eyebrow mb-2">Administrateur non-informaticien</p>
-          <h1 class="h2 fw-bold mb-1">Constructeur visuel de questionnaire</h1>
-          <p class="muted mb-0">
-            La maquette présente un outil no-code : l’admin configure structure, réponses, pages,
-            groupes, ordre conditionnel et explications sans manipuler de JSON ni de règles techniques.
-          </p>
-        </div>
-        <div class="d-flex gap-2">
+      <PageHeader
+        eyebrow="Administrateur non-informaticien"
+        title="Constructeur visuel de questionnaire"
+        description="La maquette présente un outil no-code : l’admin configure structure, réponses, pages, groupes, ordre conditionnel et explications sans manipuler de JSON ni de règles techniques."
+      >
+        <template #actions>
           <button class="btn btn-outline-primary">Aperçu répondant</button>
           <button class="btn btn-primary">Publier la version 1.4</button>
-        </div>
-      </div>
+        </template>
+      </PageHeader>
+      <RoleGateInfo class="mb-4" />
 
       <div class="row g-4">
         <div class="col-xl-3">
