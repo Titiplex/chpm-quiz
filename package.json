@@ -1,5 +1,5 @@
 {
-  "name": "chm-quiz",
+  "name": "survey-app",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,7 +13,10 @@
     "lint": "run-s lint:*",
     "lint:oxlint": "oxlint . --fix",
     "lint:eslint": "eslint . --fix --cache",
-    "format": "prettier --write --experimental-cli src/"
+    "format": "prettier --write --experimental-cli src/",
+    "dev:frontend": "vite",
+    "validate": "run-s type-check build-only",
+    "check": "run-s lint type-check"
   },
   "dependencies": {
     "bootstrap": "^5.3.8",
@@ -47,5 +50,6 @@
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
-  }
+  },
+  "description": "Quiz structuré avec routing par rôle et socle backend/shared."
 }
