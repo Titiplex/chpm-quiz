@@ -23,7 +23,7 @@ body {
   margin: 0;
   color: var(--demo-text);
   background: radial-gradient(circle at top left, #edf4ff 0, rgba(237, 244, 255, 0) 30%),
-    var(--demo-bg);
+  var(--demo-bg);
 }
 
 .app-shell {
@@ -510,5 +510,63 @@ body {
     width: 100%;
     flex-wrap: wrap;
     border-radius: 22px;
+  }
+}
+
+.user-menu {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.35rem;
+  border: 1px solid var(--demo-line);
+  border-radius: 999px;
+  background: #fff;
+}
+
+.user-menu-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding-left: 0.2rem;
+}
+
+.user-menu-identity strong,
+.user-menu-identity small {
+  display: block;
+  line-height: 1.1;
+}
+
+.user-menu-identity small {
+  color: var(--demo-muted);
+  font-size: 0.75rem;
+}
+
+.login-page .hero-title {
+  max-width: 720px;
+}
+
+.demo-account-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--demo-line);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+@media (max-width: 767.98px) {
+  .user-menu,
+  .user-menu-identity,
+  .demo-account-card {
+    width: 100%;
+    align-items: flex-start;
+    border-radius: 22px;
+  }
+
+  .user-menu,
+  .demo-account-card {
+    flex-direction: column;
   }
 }
