@@ -2,21 +2,27 @@ import { randomBytes, createHash } from 'node:crypto'
 
 import { Injectable, UnauthorizedException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
-import type { Building, User } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import type { Request, Response } from 'express'
 
 import { PrismaService } from '../prisma/prisma.service'
 import { roleProfiles } from './role-permissions'
-import type { AuthenticatedSession, AuthenticatedUser } from './auth.types'
+import type {
+  AuthBuilding,
+  AuthenticatedSession,
+  AuthenticatedUser,
+  AuthSessionRecord,
+  AuthUserRecord,
+} from './auth.types'
+import type { Permission, UserRole } from './role-permissions'
 
 export interface PublicUserProfile {
   id: string
   email: string
   displayName: string
-  role: User['role']
-  permissions: string[]
-  building: Pick<Building, 'id' | 'code' | 'label' | 'city' | 'country' | 'timezone'> | null
+  role: UserRole
+  permissions: Permission[]
+  building: Pick<AuthBuilding, 'id' | 'code' | 'label' | 'city' | 'country' | 'timezone'> | null
 }
 
 @Injectable()
@@ -37,10 +43,10 @@ export class AuthService {
     response: Response,
   ): Promise<PublicUserProfile> {
     const normalizedEmail = email.trim().toLowerCase()
-    const user = await this.prisma.user.findUnique({
+    const user = (await this.prisma.user.findUnique({
       where: { email: normalizedEmail },
       include: { building: true },
-    })
+    })) as AuthUserRecord | null
 
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Identifiants invalides')
@@ -79,14 +85,14 @@ export class AuthService {
 
   async validateSessionToken(rawToken: string): Promise<AuthenticatedSession | null> {
     const tokenHash = this.hashToken(rawToken)
-    const session = await this.prisma.session.findUnique({
+    const session = (await this.prisma.session.findUnique({
       where: { tokenHash },
       include: {
         user: {
           include: { building: true },
         },
       },
-    })
+    })) as (AuthSessionRecord & { user: AuthUserRecord }) | null
 
     if (!session || session.expiresAt <= new Date() || !session.user.isActive) {
       if (session) {
@@ -115,11 +121,7 @@ export class AuthService {
   }
 
   toPublicProfile(
-    user:
-      | AuthenticatedUser
-      | (User & {
-          building: Building | null
-        }),
+    user: AuthenticatedUser | AuthUserRecord,
   ): PublicUserProfile {
     return {
       id: user.id,

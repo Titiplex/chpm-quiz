@@ -5,7 +5,9 @@
   "description": "API centrale NestJS pour Quiz.",
   "license": "UNLICENSED",
   "scripts": {
+    "prebuild": "prisma generate",
     "build": "nest build",
+    "predev": "prisma generate",
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "start:prod": "node dist/main.js",

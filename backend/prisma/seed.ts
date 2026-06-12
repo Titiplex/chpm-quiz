@@ -1,5 +1,8 @@
-import { PrismaClient, type QuestionType, type UserRole } from '@prisma/client'
+import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+
+type UserRole = 'admin' | 'moderator' | 'respondent'
+type QuestionType = 'single_choice' | 'likert' | 'free_text' | 'information'
 
 const prisma = new PrismaClient()
 

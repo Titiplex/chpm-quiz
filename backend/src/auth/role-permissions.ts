@@ -1,4 +1,6 @@
-import type { UserRole } from '@prisma/client'
+export const userRoles = ['admin', 'moderator', 'respondent'] as const
+
+export type UserRole = (typeof userRoles)[number]
 
 export type Permission =
   | 'questionnaire:configure'
