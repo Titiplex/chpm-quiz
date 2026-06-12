@@ -46,14 +46,16 @@ export const roleProfiles: Record<UserRole, RoleProfile> = {
     role: 'moderator',
     label: 'Modérateur',
     shortLabel: 'Modérateur',
-    description: 'Invite les répondants de son périmètre et suit les liens sans voir les réponses nominatives.',
+    description:
+      'Invite les répondants de son périmètre et suit les liens sans voir les réponses nominatives.',
     permissions: ['questionnaire:preview', 'invitation:create', 'invitation:readScoped'],
   },
   respondent: {
     role: 'respondent',
     label: 'Répondant',
     shortLabel: 'Répondant',
-    description: 'Accède au questionnaire par code unique et répond uniquement à ses propres pages.',
+    description:
+      'Accède au questionnaire par code unique et répond uniquement à ses propres pages.',
     permissions: ['response:answerOwn'],
   },
 }
