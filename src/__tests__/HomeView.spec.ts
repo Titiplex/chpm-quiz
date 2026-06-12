@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
@@ -10,61 +10,98 @@ import ModeratorView from '@/views/ModeratorView.vue'
 import StatsView from '@/views/StatsView.vue'
 import ArchitectureView from '@/views/ArchitectureView.vue'
 import AccessDeniedView from '@/views/AccessDeniedView.vue'
+import LoginView from '@/views/LoginView.vue'
+import { useSessionStore } from '@/stores/session'
 import { allRoles } from '@shared/types/rbac'
 
 function makeRouter() {
   return createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/', component: HomeView, meta: { label: 'Accueil', allowedRoles: allRoles, requiresAuthenticatedUser: true } },
-      { path: '/admin', component: AdminBuilderView, meta: { label: 'Admin', allowedRoles: ['admin'], requiresAuthenticatedUser: true } },
-      { path: '/questionnaire', component: RespondentView, meta: { label: 'Questionnaire', allowedRoles: allRoles, requiresAuthenticatedUser: true } },
-      { path: '/moderation', component: ModeratorView, meta: { label: 'Modération', allowedRoles: ['admin', 'moderator'], requiresAuthenticatedUser: true } },
-      { path: '/stats', component: StatsView, meta: { label: 'Statistiques', allowedRoles: ['admin'], requiresAuthenticatedUser: true } },
-      { path: '/architecture', component: ArchitectureView, meta: { label: 'Architecture', allowedRoles: ['admin'], requiresAuthenticatedUser: true } },
-      { path: '/403', component: AccessDeniedView, meta: { label: 'Accès refusé', allowedRoles: allRoles, requiresAuthenticatedUser: true } },
+      {
+        path: '/login',
+        component: LoginView,
+        meta: { label: 'Connexion', allowedRoles: allRoles, requiresAuthenticatedUser: false },
+      },
+      {
+        path: '/',
+        component: HomeView,
+        meta: { label: 'Accueil', allowedRoles: allRoles, requiresAuthenticatedUser: true },
+      },
+      {
+        path: '/admin',
+        component: AdminBuilderView,
+        meta: { label: 'Admin', allowedRoles: ['admin'], requiresAuthenticatedUser: true },
+      },
+      {
+        path: '/questionnaire',
+        component: RespondentView,
+        meta: { label: 'Questionnaire', allowedRoles: allRoles, requiresAuthenticatedUser: true },
+      },
+      {
+        path: '/moderation',
+        component: ModeratorView,
+        meta: {
+          label: 'Modération',
+          allowedRoles: ['admin', 'moderator'],
+          requiresAuthenticatedUser: true,
+        },
+      },
+      {
+        path: '/stats',
+        component: StatsView,
+        meta: { label: 'Statistiques', allowedRoles: ['admin'], requiresAuthenticatedUser: true },
+      },
+      {
+        path: '/architecture',
+        component: ArchitectureView,
+        meta: { label: 'Architecture', allowedRoles: ['admin'], requiresAuthenticatedUser: true },
+      },
+      {
+        path: '/403',
+        component: AccessDeniedView,
+        meta: { label: 'Accès refusé', allowedRoles: allRoles, requiresAuthenticatedUser: true },
+      },
     ],
   })
 }
 
 beforeEach(() => {
-  window.localStorage.clear()
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(JSON.stringify({ message: 'Unauthorized' }), { status: 401 })),
+  )
 })
 
 describe('HomeView', () => {
-  it('renders the CHPM prototype overview', async () => {
+  it('renders the CHPM connected overview for an admin', async () => {
+    const pinia = createPinia()
     const router = makeRouter()
     router.push('/')
     await router.isReady()
 
     const wrapper = mount(HomeView, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [pinia, router],
       },
     })
 
-    expect(wrapper.text()).toContain('Cahier des charges illustré')
+    const session = useSessionStore()
+    session.user = {
+      id: 'user-1',
+      email: 'admin@chpm.local',
+      displayName: 'Alice Martin',
+      role: 'admin',
+      permissions: ['questionnaire:configure', 'statistics:read', 'architecture:read'],
+      building: null,
+    }
+
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain('Produit connecté')
     expect(wrapper.text()).toContain('Questionnaire adaptatif')
     expect(wrapper.text()).toContain('Administration no-code')
     expect(wrapper.text()).toContain('Pilotage statistique')
-    expect(wrapper.text()).toContain('Utilisateur simulé')
-  })
-
-  it('exposes the main demo navigation links', async () => {
-    const router = makeRouter()
-    router.push('/')
-    await router.isReady()
-
-    const wrapper = mount(HomeView, {
-      global: {
-        plugins: [createPinia(), router],
-      },
-    })
-
-    const html = wrapper.html()
-    expect(html).toContain('href="/admin"')
-    expect(html).toContain('href="/questionnaire"')
-    expect(html).toContain('href="/moderation"')
-    expect(html).toContain('href="/stats"')
+    expect(wrapper.text()).toContain('Session backend')
   })
 })
