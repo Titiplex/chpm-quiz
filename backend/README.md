@@ -1,11 +1,41 @@
-# backend/
+# Backend
 
-Socle backend préparatoire pour la semaine 1. Aucun serveur applicatif n’est encore livré ici : le dossier fixe seulement les conventions attendues pour la suite.
+API centrale NestJS TypeScript pour la semaine 2.
 
-Structure proposée :
+## Stack
 
-- `src/config/` : lecture de configuration et variables d’environnement.
-- `src/http/` : future couche API HTTP.
-- `src/modules/` : modules métier isolés, par exemple invitations, questionnaires, réponses, statistiques et audit.
+- NestJS ;
+- Prisma ;
+- PostgreSQL ;
+- sessions persistées en base ;
+- cookie HTTP-only ;
+- guards `SessionAuthGuard` et `RolesGuard`.
 
-Le front reste une démo autonome cette semaine. La connexion API passera par `VITE_API_BASE_URL` côté frontend et par les types de `shared/`.
+## Démarrage
+
+```sh
+npm install
+cp .env.example .env
+docker compose up -d
+npm run prisma:migrate
+npm run db:seed
+npm run dev
+```
+
+L’API écoute par défaut sur `http://localhost:3000/api`.
+
+## Comptes seedés
+
+- `admin@chpm.local` / `Admin123!`
+- `moderateur@chpm.local` / `Moderator123!`
+- `repondant@chpm.local` / `Respondent123!`
+
+## Sécurité
+
+- mot de passe hashé avec bcrypt ;
+- session opaque stockée en base sous forme de hash SHA-256 ;
+- cookie HTTP-only non lisible par JavaScript ;
+- durée de session configurable par `SESSION_TTL_HOURS` ;
+- CORS limité à `FRONTEND_ORIGIN` ;
+- validation DTO avec `class-validator` ;
+- RBAC appliqué côté serveur.

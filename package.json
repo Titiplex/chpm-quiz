@@ -16,16 +16,30 @@
     "format": "prettier --write --experimental-cli src/",
     "dev:frontend": "vite",
     "validate": "run-s type-check build-only",
-    "check": "run-s lint type-check"
+    "check": "run-s lint type-check",
+    "dev:backend": "npm --prefix backend run dev",
+    "build:backend": "npm --prefix backend run build",
+    "db:up": "docker compose -f backend/docker-compose.yml up -d",
+    "db:seed": "npm --prefix backend run db:seed",
+    "prisma:migrate": "npm --prefix backend run prisma:migrate"
   },
   "dependencies": {
+    "@nestjs/common": "^11.1.26",
+    "@nestjs/config": "^4.0.4",
+    "@nestjs/core": "^11.1.26",
+    "@prisma/client": "^7.8.0",
+    "bcryptjs": "^3.0.3",
     "bootstrap": "^5.3.8",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.2.1",
+    "npm": "^11.17.0",
     "pinia": "^3.0.4",
     "vue": "^3.5.32",
     "vue-router": "^5.0.4"
   },
   "devDependencies": {
     "@tsconfig/node24": "^24.0.4",
+    "@types/express": "^5.0.6",
     "@types/jsdom": "^28.0.1",
     "@types/node": "^24.12.2",
     "@vitejs/plugin-vue": "^6.0.6",
