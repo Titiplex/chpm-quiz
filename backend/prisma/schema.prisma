@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  moderator
+  respondent
+}
+
+enum QuestionType {
+  single_choice
+  likert
+  free_text
+  information
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique
+  passwordHash String
+  displayName  String
+  role         UserRole
+  isActive     Boolean   @default(true)
+  buildingId   String?   @db.Uuid
+  building     Building? @relation(fields: [buildingId], references: [id], onDelete: SetNull)
+  sessions     Session[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([role])
+  @@index([buildingId])
+}
+
+model Session {
+  id         String   @id @default(uuid()) @db.Uuid
+  tokenHash  String   @unique
+  userId     String   @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  userAgent  String?
+  ipAddress  String?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Building {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique
+  label     String
+  city      String
+  country   String
+  timezone  String
+  users     User[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Questionnaire {
+  id          String          @id @default(uuid()) @db.Uuid
+  code        String          @unique
+  title       String
+  version     String
+  language    String          @default("fr")
+  isPublished Boolean         @default(false)
+  groups      QuestionGroup[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([isPublished])
+}
+
+model QuestionGroup {
+  id              String        @id @default(uuid()) @db.Uuid
+  questionnaireId String        @db.Uuid
+  questionnaire   Questionnaire @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
+  title           String
+  description     String?
+  displayOrder    Int
+  randomize       Boolean       @default(false)
+  questions       Question[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([questionnaireId, displayOrder])
+  @@index([questionnaireId])
+}
+
+model Question {
+  id               String        @id @default(uuid()) @db.Uuid
+  groupId          String        @db.Uuid
+  group            QuestionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  code             String
+  title            String
+  type             QuestionType
+  answerScaleLabel String
+  helperText       String?
+  popupTerm        String?
+  popupBody        String?
+  displayOrder     Int
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@unique([groupId, code])
+  @@unique([groupId, displayOrder])
+  @@index([groupId])
+}
