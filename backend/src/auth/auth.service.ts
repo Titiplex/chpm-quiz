@@ -2,7 +2,7 @@ import { randomBytes, createHash } from 'node:crypto'
 
 import { Injectable, UnauthorizedException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
-import bcrypt from 'bcryptjs'
+import bcrypt = require('bcryptjs')
 import type { Request, Response } from 'express'
 
 import { PrismaService } from '../prisma/prisma.service'

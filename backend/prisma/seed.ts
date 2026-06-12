@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client'
-import bcrypt from 'bcryptjs'
+import bcrypt = require('bcryptjs')
 
 type UserRole = 'admin' | 'moderator' | 'respondent'
 type QuestionType = 'single_choice' | 'likert' | 'free_text' | 'information'
