@@ -20,11 +20,12 @@ const fallbackPath = computed(() => {
     <div class="container-fluid px-4 px-xl-5">
       <div class="hero-card p-4 p-lg-5">
         <div class="position-relative z-1">
-          <p class="hero-eyebrow mb-2">Contrôle d’accès simulé</p>
-          <h1 class="h2 fw-bold mb-3">Cette page n’est pas visible pour le rôle courant.</h1>
+          <p class="hero-eyebrow mb-2">Contrôle d’accès serveur</p>
+          <h1 class="h2 fw-bold mb-3">Cette page n’est pas visible pour votre rôle.</h1>
           <p class="hero-text mb-4">
-            Le routage applique déjà une matrice de droits côté front. Changez de rôle dans le bandeau
-            supérieur pour tester la navigation conditionnelle, ou revenez à la page pertinente du rôle actif.
+            Le routeur applique la matrice de droits retournée par la session backend. Les mêmes
+            règles sont également vérifiées par les guards NestJS, donc masquer le menu ne constitue
+            pas la sécurité.
           </p>
           <RoleGateInfo class="mb-4" />
           <RouterLink class="btn btn-primary btn-lg" :to="fallbackPath">

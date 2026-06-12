@@ -14,6 +14,16 @@ declare module 'vue-router' {
 
 const routes: RouteRecordRaw[] = [
   {
+    path: '/login',
+    name: 'login',
+    component: () => import('@/views/LoginView.vue'),
+    meta: {
+      label: 'Connexion',
+      allowedRoles: [...allRoles],
+      requiresAuthenticatedUser: false,
+    },
+  },
+  {
     path: '/',
     name: 'home',
     component: () => import('@/views/HomeView.vue'),
@@ -94,15 +104,35 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const session = useSessionStore()
-  const allowedRoles = to.meta.allowedRoles
+
+  if (!session.isBootstrapped) {
+    await session.restore()
+  }
+
+  if (to.name === 'login') {
+    if (session.isAuthenticated) {
+      return defaultPathByRole[session.currentRole]
+    }
+
+    return true
+  }
+
+  if (to.meta.requiresAuthenticatedUser && !session.isAuthenticated) {
+    return {
+      path: '/login',
+      query: {
+        redirect: to.fullPath,
+      },
+    }
+  }
 
   if (to.name === 'forbidden') {
     return true
   }
 
-  if (!hasRoleAccess(session.currentRole, allowedRoles)) {
+  if (!hasRoleAccess(session.currentRole, to.meta.allowedRoles)) {
     return {
       path: '/403',
       query: {
