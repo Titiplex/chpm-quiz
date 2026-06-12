@@ -1,37 +1,30 @@
 <script setup lang="ts">
+import { computed, onMounted } from 'vue'
+
 import PageHeader from '@/components/common/PageHeader.vue'
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
+import { useCatalogStore } from '@/stores/catalog'
 
-const groups = [
-  { name: 'Accueil', count: 2, mode: 'Ordre fixe', active: true },
-  { name: 'Compréhension clinique', count: 8, mode: 'Mélange aléatoire', active: false },
-  { name: 'Environnement bâtiment', count: 6, mode: 'Par bâtiment', active: false },
-  { name: 'Commentaires libres', count: 3, mode: 'Fin de parcours', active: false },
-]
+const catalog = useCatalogStore()
 
-const questions = [
-  {
-    code: 'Q-001',
-    title: 'Langue de passation souhaitée',
-    type: 'Choix contrôlé',
-    scale: 'FR / EN / ES',
-    helper: 'Détermine automatiquement la langue des questions suivantes.',
-  },
-  {
-    code: 'Q-014',
-    title: 'Le terme “coordination inter-site” est-il clair pour vous ?',
-    type: 'Échelle Likert',
-    scale: '7 points',
-    helper: 'Popup configurable : définition, exemples, contexte métier.',
-  },
-  {
-    code: 'Q-027',
-    title: 'Décrivez les difficultés rencontrées pendant le test.',
-    type: 'Réponse libre',
-    scale: 'Texte long',
-    helper: 'Champ libre avec brouillon sauvegardé avant soumission.',
-  },
-]
+onMounted(() => {
+  void catalog.fetchCatalog()
+})
+
+const selectedQuestionnaire = computed(() => catalog.questionnaires[0] ?? null)
+const groups = computed(
+  () =>
+    selectedQuestionnaire.value?.groups.map((group, index) => ({
+      name: group.title,
+      count: group.questions.length,
+      mode: group.randomize ? 'Mélange aléatoire' : 'Ordre fixe',
+      active: index === 0,
+    })) ?? [],
+)
+const questions = computed(
+  () => selectedQuestionnaire.value?.groups.flatMap((group) => group.questions) ?? [],
+)
+const questionCount = computed(() => selectedQuestionnaire.value?.questionCount ?? 0)
 </script>
 
 <template>
@@ -40,21 +33,36 @@ const questions = [
       <PageHeader
         eyebrow="Administrateur non-informaticien"
         title="Constructeur visuel de questionnaire"
-        description="La maquette présente un outil no-code : l’admin configure structure, réponses, pages, groupes, ordre conditionnel et explications sans manipuler de JSON ni de règles techniques."
+        description="L’administration est maintenant alimentée par l’API : questionnaires, groupes, questions et bâtiments proviennent de PostgreSQL."
       >
         <template #actions>
           <button class="btn btn-outline-primary">Aperçu répondant</button>
-          <button class="btn btn-primary">Publier la version 1.4</button>
+          <button class="btn btn-primary">
+            Publier
+            {{
+              selectedQuestionnaire
+                ? `${selectedQuestionnaire.title} v${selectedQuestionnaire.version}`
+                : 'la version'
+            }}
+          </button>
         </template>
       </PageHeader>
       <RoleGateInfo class="mb-4" />
+
+      <div v-if="catalog.status === 'error'" class="alert alert-danger rounded-4" role="alert">
+        {{ catalog.error }}
+      </div>
+      <div v-else class="alert alert-success rounded-4" role="status">
+        Données PostgreSQL chargées via l’API NestJS : {{ catalog.buildings.length }} bâtiment(s),
+        {{ catalog.questionnaires.length }} questionnaire(s).
+      </div>
 
       <div class="row g-4">
         <div class="col-xl-3">
           <aside class="builder-sidebar p-3 h-100">
             <div class="d-flex align-items-center justify-content-between mb-3">
               <h2 class="h5 fw-bold mb-0">Structure</h2>
-              <span class="badge-soft">19 questions</span>
+              <span class="badge-soft">{{ questionCount }} questions</span>
             </div>
             <div class="d-grid gap-2 mb-4">
               <div
@@ -68,6 +76,14 @@ const questions = [
               </div>
             </div>
 
+            <label class="form-label fw-bold">Questionnaire en base</label>
+            <select class="form-select mb-3" aria-label="Questionnaire en base">
+              <option v-for="questionnaire in catalog.questionnaires" :key="questionnaire.id">
+                {{ questionnaire.title }} · v{{ questionnaire.version }} ·
+                {{ questionnaire.isPublished ? 'publié' : 'brouillon' }}
+              </option>
+            </select>
+
             <label class="form-label fw-bold">Questions par page</label>
             <select class="form-select mb-3" aria-label="Nombre de questions par page">
               <option>1 question par page</option>
@@ -78,11 +94,15 @@ const questions = [
 
             <div class="form-check form-switch mb-2">
               <input id="randomize" class="form-check-input" type="checkbox" checked />
-              <label class="form-check-label fw-semibold" for="randomize">Mélange aléatoire par groupe</label>
+              <label class="form-check-label fw-semibold" for="randomize"
+                >Mélange aléatoire par groupe</label
+              >
             </div>
             <div class="form-check form-switch mb-4">
               <input id="adaptive" class="form-check-input" type="checkbox" checked />
-              <label class="form-check-label fw-semibold" for="adaptive">Parcours adaptatif actif</label>
+              <label class="form-check-label fw-semibold" for="adaptive"
+                >Parcours adaptatif actif</label
+              >
             </div>
 
             <button class="btn btn-outline-primary w-100">+ Ajouter un groupe</button>
@@ -96,35 +116,44 @@ const questions = [
                 <span class="window-dot"></span>
                 <span class="window-dot"></span>
                 <span class="window-dot"></span>
-                <strong class="ms-2 small muted">Éditeur de questions</strong>
+                <strong class="ms-2 small muted">Éditeur de questions connecté</strong>
               </div>
               <div class="p-3 p-lg-4">
                 <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
                   <div>
-                    <p class="section-eyebrow mb-1">Groupe : Compréhension clinique</p>
+                    <p class="section-eyebrow mb-1">
+                      {{
+                        selectedQuestionnaire
+                          ? `${selectedQuestionnaire.code} · v${selectedQuestionnaire.version}`
+                          : 'Chargement'
+                      }}
+                    </p>
                     <h2 class="h4 fw-bold mb-0">Questions configurées</h2>
                   </div>
                   <button class="btn btn-primary">+ Nouvelle question</button>
                 </div>
 
+                <p v-if="catalog.status === 'loading'" class="muted">Chargement des questions…</p>
                 <div v-for="question in questions" :key="question.code" class="question-row">
                   <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
                     <span class="badge-soft">{{ question.code }}</span>
-                    <span class="badge-soft success">{{ question.type }} · {{ question.scale }}</span>
+                    <span class="badge-soft success"
+                      >{{ question.type }} · {{ question.answerScaleLabel }}</span
+                    >
                   </div>
                   <h3 class="h6 fw-bold">{{ question.title }}</h3>
-                  <p class="small muted mb-3">{{ question.helper }}</p>
+                  <p class="small muted mb-3">{{ question.helperText }}</p>
                   <div class="row g-2">
                     <div class="col-md-4">
                       <select class="form-select form-select-sm" aria-label="Type de réponse">
                         <option>{{ question.type }}</option>
-                        <option>Réponse libre</option>
-                        <option>Échelle Likert</option>
+                        <option>free_text</option>
+                        <option>likert</option>
                       </select>
                     </div>
                     <div class="col-md-4">
                       <select class="form-select form-select-sm" aria-label="Points Likert">
-                        <option>{{ question.scale }}</option>
+                        <option>{{ question.answerScaleLabel }}</option>
                         <option>Likert 5 points</option>
                         <option>Likert 7 points</option>
                         <option>Likert 10 points</option>
@@ -143,6 +172,23 @@ const questions = [
         <div class="col-xl-3">
           <div class="d-grid gap-4">
             <div class="demo-card flat">
+              <p class="section-eyebrow mb-2">Bâtiments PostgreSQL</p>
+              <h2 class="h5 fw-bold">Périmètres disponibles</h2>
+              <div class="d-grid gap-2">
+                <div
+                  v-for="building in catalog.buildings"
+                  :key="building.id"
+                  class="architecture-pill"
+                >
+                  {{ building.label }}
+                  <div class="small fw-normal">
+                    {{ building.country }} · {{ building.timezone }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="demo-card flat">
               <p class="section-eyebrow mb-2">Règles adaptatives</p>
               <h2 class="h5 fw-bold">Conditions de parcours</h2>
               <div class="condition-line mb-3">
@@ -160,9 +206,16 @@ const questions = [
               <p class="section-eyebrow mb-2">Popup explicatif</p>
               <h2 class="h5 fw-bold">Contenu configurable</h2>
               <label class="form-label small fw-bold">Terme expliqué</label>
-              <input class="form-control mb-2" value="Coordination inter-site" />
+              <input
+                class="form-control mb-2"
+                :value="questions[0]?.popupTerm ?? 'Coordination inter-site'"
+              />
               <label class="form-label small fw-bold">Explication visible</label>
-              <textarea class="form-control mb-3" rows="4">Capacité des équipes de bâtiments différents à partager les informations nécessaires au bon déroulement du parcours.</textarea>
+              <textarea
+                class="form-control mb-3"
+                rows="4"
+                :value="questions[0]?.popupBody ?? ''"
+              ></textarea>
               <div class="d-flex gap-2">
                 <span class="badge-soft warning">Trace ouverture popup</span>
                 <span class="badge-soft">Versionnée</span>
