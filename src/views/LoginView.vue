@@ -32,11 +32,18 @@ const demoAccounts: Array<{
     description: 'Accès limité : invitations et suivi sur le bâtiment Montréal A.',
   },
   {
-    role: 'respondent',
-    label: 'Répondant',
-    email: 'repondant@chpm.local',
-    password: 'Respondent123!',
-    description: 'Accès questionnaire uniquement, utile pour vérifier les gardes.',
+    role: 'analyst',
+    label: 'Analyste',
+    email: 'analyste@chpm.local',
+    password: 'Analyst123!',
+    description: 'Accès aux statistiques pseudonymisées, sans table email.',
+  },
+  {
+    role: 'dpo',
+    label: 'DPO',
+    email: 'dpo@chpm.local',
+    password: 'Dpo12345!',
+    description: 'Accès conformité, audit et demandes d’accès judiciaire.',
   },
 ]
 
@@ -74,12 +81,10 @@ async function submit(): Promise<void> {
         <div class="col-xl-7">
           <div class="hero-card p-4 p-lg-5 h-100">
             <div class="position-relative z-1">
-              <p class="hero-eyebrow mb-3">Authentification semaine 2</p>
+              <p class="hero-eyebrow mb-3">Authentification interne</p>
               <h1 class="hero-title fw-black mb-4">Connexion réelle à l’API centrale.</h1>
               <p class="hero-text mb-4">
-                La simulation locale de rôle est remplacée par une session serveur. Le backend
-                NestJS vérifie les identifiants, pose un cookie HTTP-only, puis renvoie le profil et
-                les permissions.
+                Les comptes internes utilisent une session serveur HTTP-only. Les répondants, eux, accèdent au questionnaire par lien signé généré dans la modération.
               </p>
 
               <div class="d-grid gap-3">
@@ -142,7 +147,7 @@ async function submit(): Promise<void> {
             <hr class="my-4" />
             <p class="small muted mb-0">
               Le cookie de session n’est pas lisible par JavaScript. Les pages privées interrogent
-              `/auth/me` au chargement, puis le routeur applique les permissions retournées par le
+              `/me` au chargement, puis le routeur applique les permissions retournées par le
               serveur.
             </p>
           </div>

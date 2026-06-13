@@ -18,25 +18,25 @@ const scopeItems: Array<{
     title: 'Questionnaire adaptatif',
     text: 'Pages configurables, embranchements conditionnels, groupes de questions et mélange aléatoire optionnel.',
     to: '/questionnaire',
-    roles: ['admin', 'moderator', 'respondent'],
+    roles: ['admin', 'moderator', 'questionnaire_admin'],
   },
   {
     title: 'Administration no-code',
     text: 'Création visuelle des questions, choix du type de réponse, édition des popups explicatifs et règles de parcours.',
     to: '/admin',
-    roles: ['admin'],
+    roles: ['admin', 'questionnaire_admin'],
   },
   {
     title: 'Modération mondiale',
     text: 'Sélection des répondants par bâtiment, envoi par mail de liens à code unique et suivi des invitations.',
     to: '/moderation',
-    roles: ['admin', 'moderator'],
+    roles: ['admin', 'moderator', 'site_manager'],
   },
   {
     title: 'Pilotage statistique',
     text: 'Temps de réponse, popups ouvertes, difficultés de compréhension, statistiques par site et soumissions anonymes.',
     to: '/stats',
-    roles: ['admin'],
+    roles: ['admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo'],
   },
 ]
 
@@ -44,15 +44,15 @@ const visibleScopeItems = computed(() =>
   scopeItems.filter((item) => hasRoleAccess(session.currentRole, item.roles)),
 )
 
-const canOpenAdmin = computed(() => hasRoleAccess(session.currentRole, ['admin']))
-const canOpenArchitecture = computed(() => hasRoleAccess(session.currentRole, ['admin']))
-const canOpenStats = computed(() => hasRoleAccess(session.currentRole, ['admin']))
+const canOpenAdmin = computed(() => hasRoleAccess(session.currentRole, ['admin', 'questionnaire_admin']))
+const canOpenArchitecture = computed(() => hasRoleAccess(session.currentRole, ['admin', 'questionnaire_admin', 'dpo', 'technical_admin', 'judicial_officer']))
+const canOpenStats = computed(() => hasRoleAccess(session.currentRole, ['admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo']))
 
 const principles = [
   'Serveur central NestJS connecté à PostgreSQL',
   'Cookie HTTP-only comme preuve de session',
   'Contrôle des rôles côté routeur et côté API',
-  'Données bâtiments/questionnaires servies par la base',
+  'Invitations, sessions répondant et statistiques servies par la base',
 ]
 </script>
 
@@ -81,7 +81,10 @@ const principles = [
             >
               Voir l’architecture de données
             </RouterLink>
-            <RouterLink v-if="!canOpenAdmin" class="btn btn-primary btn-lg" to="/moderation">
+            <RouterLink v-if="!canOpenAdmin && canOpenStats" class="btn btn-primary btn-lg" to="/stats">
+              Ouvrir mon espace autorisé
+            </RouterLink>
+            <RouterLink v-else-if="!canOpenAdmin" class="btn btn-primary btn-lg" to="/architecture">
               Ouvrir mon espace autorisé
             </RouterLink>
           </div>

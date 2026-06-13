@@ -25,6 +25,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     headers: {
       Accept: 'application/json',
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      'X-Correlation-ID': crypto.randomUUID?.() ?? `chpm-${Date.now()}`,
       ...options.headers,
     },
     body: options.body ? JSON.stringify(options.body) : undefined,

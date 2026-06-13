@@ -1,6 +1,25 @@
-export type QuestionType = 'single_choice' | 'likert' | 'free_text' | 'information'
-export type SubmissionStatus = 'draft' | 'submitted' | 'locked'
-export type InvitationStatus = 'sent' | 'completed' | 'pending' | 'blocked' | 'expired'
+export type QuestionType =
+  | 'single_choice'
+  | 'multiple_choice'
+  | 'likert'
+  | 'free_text'
+  | 'free_text_short'
+  | 'free_text_long'
+  | 'number'
+  | 'date'
+  | 'information'
+
+export type SubmissionStatus = 'draft' | 'submitted' | 'locked' | 'abandoned'
+export type InvitationStatus =
+  | 'pending'
+  | 'sent'
+  | 'opened'
+  | 'in_progress'
+  | 'draft'
+  | 'submitted'
+  | 'expired'
+  | 'blocked'
+  | 'cancelled'
 export type LanguageCode = 'fr' | 'en' | 'es'
 
 export interface BuildingScope {
@@ -23,25 +42,27 @@ export interface QuestionDefinition {
   code: string
   groupId: string
   title: string
+  label?: string
   type: QuestionType
+  responseType?: QuestionType
   answerScaleLabel: string
-  helperText?: string
-  popupTerm?: string
-  popupBody?: string
+  helperText?: string | null
+  popupTerm?: string | null
+  popupBody?: string | null
 }
 
 export interface InvitationRecord {
   id: string
   questionnaireVersionId: string
   buildingId: string
-  email: string
-  uniqueCode: string
+  maskedEmail?: string | null
+  publicCode: string
   status: InvitationStatus
 }
 
 export interface AnonymousSubmission {
   id: string
-  uniqueCode: string
+  publicCode: string
   questionnaireVersionId: string
   buildingId: string
   status: SubmissionStatus

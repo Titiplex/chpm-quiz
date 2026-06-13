@@ -32,7 +32,7 @@ export const useSessionStore = defineStore('session', () => {
     error.value = null
 
     try {
-      const response = await apiRequest<AuthResponse>('/auth/me')
+      const response = await apiRequest<AuthResponse>('/me')
       user.value = response.user
       status.value = 'authenticated'
     } catch (caught) {

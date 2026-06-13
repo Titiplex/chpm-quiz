@@ -39,7 +39,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/AdminBuilderView.vue'),
     meta: {
       label: 'Administration',
-      allowedRoles: ['admin'],
+      allowedRoles: ['admin', 'questionnaire_admin'],
       requiresAuthenticatedUser: true,
     },
   },
@@ -49,7 +49,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/ModeratorView.vue'),
     meta: {
       label: 'Modération',
-      allowedRoles: ['admin', 'moderator'],
+      allowedRoles: ['admin', 'moderator', 'site_manager'],
       requiresAuthenticatedUser: true,
     },
   },
@@ -59,8 +59,18 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/RespondentView.vue'),
     meta: {
       label: 'Questionnaire',
-      allowedRoles: [...allRoles],
+      allowedRoles: ['admin', 'moderator', 'questionnaire_admin'],
       requiresAuthenticatedUser: true,
+    },
+  },
+  {
+    path: '/r/:token',
+    name: 'respondent-token',
+    component: () => import('@/views/RespondentView.vue'),
+    meta: {
+      label: 'Questionnaire répondant',
+      allowedRoles: [...allRoles],
+      requiresAuthenticatedUser: false,
     },
   },
   {
@@ -69,7 +79,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/StatsView.vue'),
     meta: {
       label: 'Statistiques',
-      allowedRoles: ['admin'],
+      allowedRoles: ['admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo'],
       requiresAuthenticatedUser: true,
     },
   },
@@ -79,7 +89,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/ArchitectureView.vue'),
     meta: {
       label: 'Architecture / sécurité',
-      allowedRoles: ['admin'],
+      allowedRoles: ['admin', 'questionnaire_admin', 'dpo', 'technical_admin', 'judicial_officer'],
       requiresAuthenticatedUser: true,
     },
   },
