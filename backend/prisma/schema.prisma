@@ -10,30 +10,149 @@ datasource db {
 enum UserRole {
   admin
   moderator
+  site_manager
+  questionnaire_admin
+  analyst
+  dpo
+  judicial_officer
+  technical_admin
+  service_account
   respondent
+}
+
+enum QuestionnaireStatus {
+  draft
+  published
+  archived
+}
+
+enum QuestionnaireVersionStatus {
+  draft
+  published
+  archived
 }
 
 enum QuestionType {
   single_choice
+  multiple_choice
   likert
   free_text
+  free_text_short
+  free_text_long
+  number
+  date
   information
 }
 
+enum InvitationStatus {
+  pending
+  sent
+  opened
+  in_progress
+  draft
+  submitted
+  expired
+  blocked
+  cancelled
+}
+
+enum ResponseSessionStatus {
+  draft
+  submitted
+  locked
+  abandoned
+}
+
+enum JudicialAccessStatus {
+  received
+  validated
+  rejected
+  executed
+  closed
+}
+
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sites          Site[]
+  buildings      Building[]
+  users          User[]
+  questionnaires Questionnaire[]
+}
+
+model Site {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String       @unique
+  name           String
+  country        String
+  timezone       String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  buildings   Building[]
+  users       User[]
+  invitations Invitation[]
+
+  @@index([organizationId])
+}
+
+model Building {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  siteId         String       @db.Uuid
+  site           Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  code           String       @unique
+  label          String
+  city           String
+  country        String
+  timezone       String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  users            User[]
+  invitations      Invitation[]
+  responseSessions ResponseSession[]
+  submissions      Submission[]
+
+  @@index([organizationId])
+  @@index([siteId])
+}
+
 model User {
-  id           String    @id @default(uuid()) @db.Uuid
-  email        String    @unique
-  passwordHash String
-  displayName  String
-  role         UserRole
-  isActive     Boolean   @default(true)
-  buildingId   String?   @db.Uuid
-  building     Building? @relation(fields: [buildingId], references: [id], onDelete: SetNull)
-  sessions     Session[]
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String?      @db.Uuid
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  siteId         String?      @db.Uuid
+  site           Site?        @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  buildingId     String?      @db.Uuid
+  building       Building?    @relation(fields: [buildingId], references: [id], onDelete: SetNull)
+  email          String       @unique
+  passwordHash   String
+  displayName    String
+  role           UserRole
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  sessions                  Session[]
+  ownedQuestionnaires       Questionnaire[]       @relation("QuestionnaireOwner")
+  createdInvitations        Invitation[]          @relation("InvitationCreator")
+  notificationSubscriptions NotificationSubscription[]
+  auditLogs                 AuditLog[]            @relation("AuditActor")
+  judicialRequestsDpo       JudicialAccessRequest[] @relation("JudicialDpoValidator")
+  judicialRequestsLegal     JudicialAccessRequest[] @relation("JudicialLegalValidator")
+  judicialRequestsExecuted  JudicialAccessRequest[] @relation("JudicialExecutor")
 
   @@index([role])
+  @@index([organizationId])
+  @@index([siteId])
   @@index([buildingId])
 }
 
@@ -52,64 +171,424 @@ model Session {
   @@index([expiresAt])
 }
 
-model Building {
-  id        String   @id @default(uuid()) @db.Uuid
-  code      String   @unique
-  label     String
-  city      String
-  country   String
-  timezone  String
-  users     User[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model Questionnaire {
+  id             String              @id @default(uuid()) @db.Uuid
+  organizationId String?             @db.Uuid
+  organization   Organization?       @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  ownerUserId    String?             @db.Uuid
+  owner          User?               @relation("QuestionnaireOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  code           String              @unique
+  title          String
+  description    String?
+  defaultLanguage String             @default("fr")
+  finality       String?
+  status         QuestionnaireStatus @default(draft)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  versions QuestionnaireVersion[]
+
+  @@index([organizationId])
+  @@index([ownerUserId])
+  @@index([status])
 }
 
-model Questionnaire {
-  id          String          @id @default(uuid()) @db.Uuid
-  code        String          @unique
-  title       String
-  version     String
-  language    String          @default("fr")
-  isPublished Boolean         @default(false)
-  groups      QuestionGroup[]
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+model QuestionnaireVersion {
+  id                String                     @id @default(uuid()) @db.Uuid
+  questionnaireId   String                     @db.Uuid
+  questionnaire     Questionnaire              @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
+  versionLabel      String
+  language          String                     @default("fr")
+  status            QuestionnaireVersionStatus @default(draft)
+  description       String?
+  finality          String?
+  openFrom          DateTime?
+  openUntil         DateTime?
+  publishedAt       DateTime?
+  immutableAt       DateTime?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
 
-  @@index([isPublished])
+  groups                    QuestionGroup[]
+  conditionalRules          ConditionalRule[]
+  invitations               Invitation[]
+  notificationSubscriptions NotificationSubscription[]
+  submissions               Submission[]
+
+  @@unique([questionnaireId, versionLabel])
+  @@index([questionnaireId])
+  @@index([status])
+  @@index([openFrom, openUntil])
 }
 
 model QuestionGroup {
-  id              String        @id @default(uuid()) @db.Uuid
-  questionnaireId String        @db.Uuid
-  questionnaire   Questionnaire @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
-  title           String
-  description     String?
-  displayOrder    Int
-  randomize       Boolean       @default(false)
-  questions       Question[]
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id                     String               @id @default(uuid()) @db.Uuid
+  questionnaireVersionId String               @db.Uuid
+  questionnaireVersion   QuestionnaireVersion @relation(fields: [questionnaireVersionId], references: [id], onDelete: Cascade)
+  title                  String
+  description            String?
+  displayOrder           Int
+  questionsPerPage       Int                  @default(3)
+  randomize              Boolean              @default(false)
+  conditionExpression    Json?
+  isArchived             Boolean              @default(false)
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
 
-  @@unique([questionnaireId, displayOrder])
-  @@index([questionnaireId])
+  questions Question[]
+
+  @@unique([questionnaireVersionId, displayOrder])
+  @@index([questionnaireVersionId])
+  @@index([isArchived])
 }
 
 model Question {
-  id               String        @id @default(uuid()) @db.Uuid
-  groupId          String        @db.Uuid
-  group            QuestionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  code             String
-  title            String
-  type             QuestionType
-  answerScaleLabel String
-  helperText       String?
-  popupTerm        String?
-  popupBody        String?
-  displayOrder     Int
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  id             String        @id @default(uuid()) @db.Uuid
+  groupId        String        @db.Uuid
+  group          QuestionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  code           String
+  language       String        @default("fr")
+  label          String
+  helperText     String?
+  responseType   QuestionType
+  isRequired     Boolean       @default(false)
+  displayOrder   Int
+  tags           String[]
+  conditionExpression Json?
+  isArchived     Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  likertScale      LikertScale?
+  answerOptions    AnswerOption[]
+  popupDefinitions PopupDefinition[]
+  answers          Answer[]
+  telemetryEvents  TelemetryEvent[]
 
   @@unique([groupId, code])
   @@unique([groupId, displayOrder])
   @@index([groupId])
+  @@index([responseType])
+  @@index([isArchived])
+}
+
+model AnswerOption {
+  id           String   @id @default(uuid()) @db.Uuid
+  questionId   String   @db.Uuid
+  question     Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  value        String
+  label        String
+  displayOrder Int
+  isExclusive  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@unique([questionId, value])
+  @@index([questionId])
+}
+
+model LikertScale {
+  id                 String   @id @default(uuid()) @db.Uuid
+  questionId         String   @unique @db.Uuid
+  question           Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  points             Int
+  leftAnchor         String
+  rightAnchor        String
+  neutralLabel       String?
+  allowNotApplicable Boolean  @default(false)
+  orientation        String   @default("horizontal")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model GlossaryTerm {
+  id        String   @id @default(uuid()) @db.Uuid
+  termKey   String
+  language  String   @default("fr")
+  label     String
+  definition String
+  version   String   @default("1.0")
+  isArchived Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  popupDefinitions PopupDefinition[]
+
+  @@unique([termKey, language, version])
+  @@index([termKey])
+  @@index([language])
+}
+
+model PopupDefinition {
+  id           String       @id @default(uuid()) @db.Uuid
+  questionId   String       @db.Uuid
+  question     Question     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  glossaryTermId String?    @db.Uuid
+  glossaryTerm GlossaryTerm? @relation(fields: [glossaryTermId], references: [id], onDelete: SetNull)
+  termKey      String
+  language     String       @default("fr")
+  title        String
+  body         String
+  version      String       @default("1.0")
+  isRequired   Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  telemetryEvents TelemetryEvent[]
+
+  @@index([questionId])
+  @@index([glossaryTermId])
+  @@index([termKey, language])
+}
+
+model ConditionalRule {
+  id                     String               @id @default(uuid()) @db.Uuid
+  questionnaireVersionId String               @db.Uuid
+  questionnaireVersion   QuestionnaireVersion @relation(fields: [questionnaireVersionId], references: [id], onDelete: Cascade)
+  code                   String
+  trigger                Json
+  effect                 Json
+  priority               Int                  @default(100)
+  isActive               Boolean              @default(true)
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+
+  @@unique([questionnaireVersionId, code])
+  @@index([questionnaireVersionId])
+}
+
+model Invitation {
+  id                     String               @id @default(uuid()) @db.Uuid
+  questionnaireVersionId String               @db.Uuid
+  questionnaireVersion   QuestionnaireVersion @relation(fields: [questionnaireVersionId], references: [id], onDelete: Restrict)
+  siteId                 String?              @db.Uuid
+  site                   Site?                @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  buildingId             String               @db.Uuid
+  building               Building             @relation(fields: [buildingId], references: [id], onDelete: Restrict)
+  createdByUserId        String?              @db.Uuid
+  createdBy              User?                @relation("InvitationCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  publicCode             String               @unique
+  tokenHash              String               @unique
+  status                 InvitationStatus     @default(sent)
+  notifyModerator        Boolean              @default(false)
+  notifyAdmins           Boolean              @default(false)
+  expiresAt              DateTime
+  sentAt                 DateTime?
+  openedAt               DateTime?
+  startedAt              DateTime?
+  submittedAt            DateTime?
+  cancelledAt            DateTime?
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+
+  emailIdentity  EmailIdentity?
+  deliveryEvents EmailDeliveryEvent[]
+  responseSession ResponseSession?
+
+  @@index([questionnaireVersionId])
+  @@index([buildingId])
+  @@index([siteId])
+  @@index([createdByUserId])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+model EmailIdentity {
+  id                     String     @id @default(uuid()) @db.Uuid
+  invitationId           String     @unique @db.Uuid
+  invitation             Invitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+  publicCode             String     @unique
+  emailCiphertext        String
+  emailHash              String
+  questionnaireVersionId String     @db.Uuid
+  buildingId             String     @db.Uuid
+  createdByUserId        String?    @db.Uuid
+  createdAt              DateTime   @default(now())
+  lastEmailSentAt        DateTime?
+  deletionScheduledAt    DateTime?
+  deletedAt              DateTime?
+
+  @@map("identity_email_identities")
+  @@index([emailHash])
+  @@index([publicCode])
+}
+
+model EmailDeliveryEvent {
+  id                String     @id @default(uuid()) @db.Uuid
+  invitationId      String     @db.Uuid
+  invitation        Invitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+  publicCode        String
+  eventType         String
+  providerMessageId String?
+  metadata          Json?
+  occurredAt        DateTime   @default(now())
+
+  @@map("identity_email_delivery_events")
+  @@index([invitationId])
+  @@index([publicCode])
+  @@index([eventType])
+}
+
+model IdentityVaultAuditLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  actorUserId   String?  @db.Uuid
+  action        String
+  publicCode    String?
+  requestId     String?  @db.Uuid
+  ipAddress     String?
+  metadata      Json?
+  occurredAt    DateTime @default(now())
+
+  @@map("identity_vault_audit_logs")
+  @@index([actorUserId])
+  @@index([publicCode])
+  @@index([requestId])
+}
+
+model ResponseSession {
+  id                     String                @id @default(uuid()) @db.Uuid
+  invitationId           String                @unique @db.Uuid
+  invitation             Invitation            @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+  publicCode             String
+  questionnaireVersionId String                @db.Uuid
+  buildingId             String                @db.Uuid
+  building               Building              @relation(fields: [buildingId], references: [id], onDelete: Restrict)
+  status                 ResponseSessionStatus @default(draft)
+  currentPage            Int                   @default(1)
+  randomizationSeed      String
+  pathFingerprint        String?
+  startedAt              DateTime              @default(now())
+  lastSeenAt             DateTime              @default(now())
+  submittedAt            DateTime?
+  lockedAt               DateTime?
+
+  answers         Answer[]
+  telemetryEvents TelemetryEvent[]
+  submission      Submission?
+
+  @@index([publicCode])
+  @@index([questionnaireVersionId])
+  @@index([buildingId])
+  @@index([status])
+}
+
+model Answer {
+  id                    String          @id @default(uuid()) @db.Uuid
+  responseSessionId     String          @db.Uuid
+  responseSession       ResponseSession @relation(fields: [responseSessionId], references: [id], onDelete: Cascade)
+  questionId            String          @db.Uuid
+  question              Question        @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  value                 Json
+  isDraft               Boolean         @default(true)
+  identifiabilityWarning Boolean        @default(false)
+  warningReason         String?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  @@unique([responseSessionId, questionId])
+  @@index([questionId])
+}
+
+model TelemetryEvent {
+  id                String          @id @default(uuid()) @db.Uuid
+  responseSessionId String          @db.Uuid
+  responseSession   ResponseSession @relation(fields: [responseSessionId], references: [id], onDelete: Cascade)
+  questionId        String?         @db.Uuid
+  question          Question?       @relation(fields: [questionId], references: [id], onDelete: SetNull)
+  popupDefinitionId String?         @db.Uuid
+  popupDefinition   PopupDefinition? @relation(fields: [popupDefinitionId], references: [id], onDelete: SetNull)
+  eventType         String
+  eventPayload      Json?
+  durationMs        Int?
+  occurredAt        DateTime        @default(now())
+  createdAt         DateTime        @default(now())
+
+  @@index([responseSessionId])
+  @@index([questionId])
+  @@index([popupDefinitionId])
+  @@index([eventType])
+  @@index([occurredAt])
+}
+
+model Submission {
+  id                     String              @id @default(uuid()) @db.Uuid
+  responseSessionId      String              @unique @db.Uuid
+  responseSession        ResponseSession     @relation(fields: [responseSessionId], references: [id], onDelete: Cascade)
+  publicCode             String
+  questionnaireVersionId String              @db.Uuid
+  questionnaireVersion   QuestionnaireVersion @relation(fields: [questionnaireVersionId], references: [id], onDelete: Restrict)
+  buildingId             String              @db.Uuid
+  building               Building            @relation(fields: [buildingId], references: [id], onDelete: Restrict)
+  submittedAt            DateTime            @default(now())
+  answerCount            Int
+  pathFingerprint        String?
+  status                 String              @default("locked")
+
+  @@index([publicCode])
+  @@index([questionnaireVersionId])
+  @@index([buildingId])
+  @@index([submittedAt])
+}
+
+model NotificationSubscription {
+  id                     String               @id @default(uuid()) @db.Uuid
+  userId                 String               @db.Uuid
+  user                   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionnaireVersionId String?              @db.Uuid
+  questionnaireVersion   QuestionnaireVersion? @relation(fields: [questionnaireVersionId], references: [id], onDelete: Cascade)
+  buildingId             String?              @db.Uuid
+  eventType              String
+  channel                String               @default("email")
+  isEnabled              Boolean              @default(true)
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+
+  @@index([userId])
+  @@index([questionnaireVersionId])
+  @@index([buildingId])
+  @@index([eventType])
+}
+
+model JudicialAccessRequest {
+  id                       String               @id @default(uuid()) @db.Uuid
+  requestReference         String               @unique
+  legalBasisDescription    String
+  courtOrderReference      String?
+  requestedPublicCodes     String[]
+  requestedBy              String
+  receivedAt               DateTime             @default(now())
+  dpoValidationUserId      String?              @db.Uuid
+  dpoValidationUser        User?                @relation("JudicialDpoValidator", fields: [dpoValidationUserId], references: [id], onDelete: SetNull)
+  legalValidationUserId    String?              @db.Uuid
+  legalValidationUser      User?                @relation("JudicialLegalValidator", fields: [legalValidationUserId], references: [id], onDelete: SetNull)
+  executedByUserId         String?              @db.Uuid
+  executedByUser           User?                @relation("JudicialExecutor", fields: [executedByUserId], references: [id], onDelete: SetNull)
+  status                   JudicialAccessStatus @default(received)
+  executedAt               DateTime?
+  exportFingerprint        String?
+  comments                 String?
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+
+  @@index([status])
+  @@index([receivedAt])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  actorUserId String?  @db.Uuid
+  actor       User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  action      String
+  entityType  String
+  entityId    String?
+  publicCode  String?
+  metadata    Json?
+  ipAddress   String?
+  userAgent   String?
+  occurredAt  DateTime @default(now())
+
+  @@index([actorUserId])
+  @@index([action])
+  @@index([entityType])
+  @@index([publicCode])
+  @@index([occurredAt])
 }
