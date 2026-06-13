@@ -16,11 +16,21 @@ export class BuildingsService {
       return this.prisma.building.findMany({
         where: { id: user.buildingId },
         orderBy: [{ country: 'asc' }, { city: 'asc' }, { label: 'asc' }],
+        include: { site: true },
+      })
+    }
+
+    if (user.role === 'site_manager' && user.siteId) {
+      return this.prisma.building.findMany({
+        where: { siteId: user.siteId },
+        orderBy: [{ country: 'asc' }, { city: 'asc' }, { label: 'asc' }],
+        include: { site: true },
       })
     }
 
     return this.prisma.building.findMany({
       orderBy: [{ country: 'asc' }, { city: 'asc' }, { label: 'asc' }],
+      include: { site: true },
     })
   }
 }

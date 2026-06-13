@@ -2,6 +2,7 @@ import { randomBytes, createHash } from 'node:crypto'
 
 import { Injectable, UnauthorizedException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 import bcrypt = require('bcryptjs')
 import type { Request, Response } from 'express'
 
@@ -128,7 +129,7 @@ export class AuthService {
       email: user.email,
       displayName: user.displayName,
       role: user.role,
-      permissions: roleProfiles[user.role].permissions,
+      permissions: roleProfiles[user.role]?.permissions ?? [],
       building: user.building
         ? {
             id: user.building.id,

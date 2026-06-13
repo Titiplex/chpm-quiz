@@ -7,18 +7,22 @@ export interface AuthBuilding {
   city: string
   country: string
   timezone: string
+  siteId: string
+  organizationId: string
   createdAt: Date
   updatedAt: Date
 }
 
 export interface AuthUserRecord {
   id: string
+  organizationId: string | null
+  siteId: string | null
+  buildingId: string | null
   email: string
   passwordHash: string
   displayName: string
   role: UserRole
   isActive: boolean
-  buildingId: string | null
   building: AuthBuilding | null
   createdAt: Date
   updatedAt: Date

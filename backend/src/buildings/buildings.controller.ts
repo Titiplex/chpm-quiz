@@ -13,7 +13,7 @@ export class BuildingsController {
   constructor(private readonly buildingsService: BuildingsService) {}
 
   @Get()
-  @Roles('admin', 'moderator')
+  @Roles('admin', 'moderator', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo')
   async list(@CurrentUser() user: AuthenticatedUser) {
     const buildings = await this.buildingsService.listForUser(user)
     return { buildings }
