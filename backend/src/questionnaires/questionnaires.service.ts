@@ -21,7 +21,8 @@ import type {
 const publishedStatus = 'published'
 const draftStatus = 'draft'
 const defaultDraftVersionLabel = '0.1-draft'
-const editableQuestionTypes = new Set(['free_text', 'free_text_short', 'free_text_long', 'likert'])
+const editableQuestionTypes = new Set(['free_text', 'free_text_short', 'free_text_long', 'likert', 'single_choice', 'multiple_choice', 'number', 'date', 'information'])
+const choiceQuestionTypes = new Set(['single_choice', 'multiple_choice'])
 
 
 @Injectable()
@@ -196,7 +197,7 @@ export class QuestionnairesService {
   async createQuestion(id: string, groupId: string, dto: CreateQuestionDto, user: AuthenticatedUser) {
     await this.assertCanConfigure(id, user)
     const group = await this.getEditableGroup(id, groupId)
-    this.validateQuestionPayload(dto.responseType, dto.likertScale)
+    this.validateQuestionPayload(dto.responseType, dto.likertScale, false, dto.answerOptions)
 
     const displayOrder = dto.displayOrder ?? (await this.nextQuestionOrder(groupId))
     await this.assertQuestionOrderAvailable(groupId, displayOrder)
@@ -227,6 +228,13 @@ export class QuestionnairesService {
               },
             }
           : {}),
+        ...(choiceQuestionTypes.has(dto.responseType) && dto.answerOptions
+          ? {
+              answerOptions: {
+                create: this.toAnswerOptionCreates(dto.answerOptions),
+              },
+            }
+          : {}),
         ...(dto.popupDefinition
           ? {
               popupDefinitions: {
@@ -244,7 +252,7 @@ export class QuestionnairesService {
     await this.assertCanConfigure(id, user)
     const question = await this.getEditableQuestion(id, questionId)
     const responseType = dto.responseType ?? question.responseType
-    this.validateQuestionPayload(responseType, dto.likertScale, question.likertScale !== null)
+    this.validateQuestionPayload(responseType, dto.likertScale, question.likertScale !== null, dto.answerOptions, question.answerOptions?.length > 0)
 
     if (dto.displayOrder !== undefined && dto.displayOrder !== question.displayOrder) {
       await this.assertQuestionOrderAvailable(question.groupId, dto.displayOrder)
@@ -293,6 +301,15 @@ export class QuestionnairesService {
 
       if (responseType !== 'likert' && question.likertScale) {
         await tx.likertScale.delete({ where: { questionId } })
+      }
+
+      if (!choiceQuestionTypes.has(responseType)) {
+        await tx.answerOption.deleteMany({ where: { questionId } })
+      } else if (dto.answerOptions !== undefined) {
+        await tx.answerOption.deleteMany({ where: { questionId } })
+        await tx.answerOption.createMany({
+          data: this.toAnswerOptionCreates(dto.answerOptions).map((option) => ({ ...option, questionId })),
+        })
       }
 
       if (dto.popupDefinition !== undefined) {
@@ -496,6 +513,7 @@ export class QuestionnairesService {
       },
       include: {
         likertScale: true,
+        answerOptions: true,
         group: {
           include: {
             questionnaireVersion: true,
@@ -574,7 +592,13 @@ export class QuestionnairesService {
     }
   }
 
-  private validateQuestionPayload(responseType: string, likertScale?: unknown, hasExistingLikertScale = false) {
+  private validateQuestionPayload(
+    responseType: string,
+    likertScale?: unknown,
+    hasExistingLikertScale = false,
+    answerOptions?: Array<{ value: string; label: string }>,
+    hasExistingAnswerOptions = false,
+  ) {
     if (!editableQuestionTypes.has(responseType)) {
       throw new BadRequestException('Type de question non disponible dans le constructeur admin')
     }
@@ -582,6 +606,28 @@ export class QuestionnairesService {
     if (responseType === 'likert' && !likertScale && !hasExistingLikertScale) {
       throw new BadRequestException('Une question Likert doit définir le nombre de points et les libellés gauche/droite')
     }
+
+    if (choiceQuestionTypes.has(responseType)) {
+      if ((!answerOptions || answerOptions.length < 2) && !hasExistingAnswerOptions) {
+        throw new BadRequestException('Une question à choix doit contenir au moins deux options')
+      }
+
+      if (answerOptions) {
+        const normalizedValues = answerOptions.map((option) => normalizeCode(option.value || option.label))
+        if (new Set(normalizedValues).size !== normalizedValues.length) {
+          throw new BadRequestException('Les valeurs des options doivent être uniques')
+        }
+      }
+    }
+  }
+
+  private toAnswerOptionCreates(options: Array<{ value: string; label: string; displayOrder?: number; isExclusive?: boolean }>) {
+    return options.map((option, index) => ({
+      value: (option.value?.trim() || normalizeCode(option.label)).slice(0, 80),
+      label: option.label.trim(),
+      displayOrder: option.displayOrder ?? index + 1,
+      isExclusive: option.isExclusive ?? false,
+    }))
   }
 
   private toPopupCreates(popup: PopupDefinitionDto, language: string) {

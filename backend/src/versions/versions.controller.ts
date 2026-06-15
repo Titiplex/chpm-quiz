@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common'
 import type { Request } from 'express'
 
 import { AuditService } from '../audit/audit.service'
@@ -7,6 +7,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator'
 import { Roles } from '../common/decorators/roles.decorator'
 import { RolesGuard } from '../common/guards/roles.guard'
 import { SessionAuthGuard } from '../common/guards/session-auth.guard'
+import { CreateConditionalRuleDto, UpdateConditionalRuleDto } from './dto/conditional-rule.dto'
 import { CreateVersionDto } from './dto/create-version.dto'
 import { VersionsService } from './versions.service'
 
@@ -43,6 +44,75 @@ export class VersionsController {
       metadata: { questionnaireId: id, versionLabel: version.versionLabel },
     })
     return { version }
+  }
+
+
+  @Get('versions/:id/rules')
+  @Roles('admin', 'questionnaire_admin')
+  async listRules(@Param('id') id: string) {
+    const rules = await this.versionsService.listRules(id)
+    return { rules }
+  }
+
+  @Post('versions/:id/rules')
+  @Roles('admin', 'questionnaire_admin')
+  async createRule(
+    @Param('id') id: string,
+    @Body() dto: CreateConditionalRuleDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: Request,
+  ) {
+    const rule = await this.versionsService.createRule(id, dto)
+    await this.auditService.log({
+      actor: user,
+      action: 'conditional_rule.create',
+      entityType: 'ConditionalRule',
+      entityId: rule.id,
+      request,
+      metadata: { versionId: id, code: rule.code },
+    })
+    return { rule }
+  }
+
+  @Patch('versions/:id/rules/:ruleId')
+  @Roles('admin', 'questionnaire_admin')
+  async updateRule(
+    @Param('id') id: string,
+    @Param('ruleId') ruleId: string,
+    @Body() dto: UpdateConditionalRuleDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: Request,
+  ) {
+    const rule = await this.versionsService.updateRule(id, ruleId, dto)
+    await this.auditService.log({
+      actor: user,
+      action: 'conditional_rule.update',
+      entityType: 'ConditionalRule',
+      entityId: rule.id,
+      request,
+      metadata: { versionId: id, code: rule.code },
+    })
+    return { rule }
+  }
+
+  @Delete('versions/:id/rules/:ruleId')
+  @Roles('admin', 'questionnaire_admin')
+  async archiveRule(
+    @Param('id') id: string,
+    @Param('ruleId') ruleId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: Request,
+  ) {
+    const rule = await this.versionsService.archiveRule(id, ruleId)
+    await this.auditService.log({
+      actor: user,
+      action: 'conditional_rule.archive',
+      entityType: 'ConditionalRule',
+      entityId: rule.id,
+      request,
+      metadata: { versionId: id, code: rule.code },
+    })
+    return { rule }
   }
 
   @Post('versions/:id/publish')

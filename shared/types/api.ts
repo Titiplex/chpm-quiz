@@ -157,10 +157,11 @@ export interface CreateQuestionRequest {
   code: string
   label: string
   helperText?: string
-  responseType: Extract<QuestionType, 'free_text' | 'free_text_short' | 'free_text_long' | 'likert'>
+  responseType: Extract<QuestionType, 'free_text' | 'free_text_short' | 'free_text_long' | 'likert' | 'single_choice' | 'multiple_choice' | 'number' | 'date' | 'information'>
   isRequired?: boolean
   displayOrder?: number
   likertScale?: LikertScaleRequest
+  answerOptions?: Array<{ value: string; label: string; displayOrder?: number; isExclusive?: boolean }>
   popupDefinition?: PopupDefinitionRequest
 }
 
@@ -168,10 +169,11 @@ export interface UpdateQuestionRequest {
   code?: string
   label?: string
   helperText?: string
-  responseType?: Extract<QuestionType, 'free_text' | 'free_text_short' | 'free_text_long' | 'likert'>
+  responseType?: Extract<QuestionType, 'free_text' | 'free_text_short' | 'free_text_long' | 'likert' | 'single_choice' | 'multiple_choice' | 'number' | 'date' | 'information'>
   isRequired?: boolean
   displayOrder?: number
   likertScale?: LikertScaleRequest
+  answerOptions?: Array<{ value: string; label: string; displayOrder?: number; isExclusive?: boolean }>
   popupDefinition?: PopupDefinitionRequest | null
 }
 
@@ -277,6 +279,7 @@ export interface TelemetryRequest {
   popupDefinitionId?: string
   eventType: string
   eventPayload?: Record<string, unknown>
+  currentPage?: number
   durationMs?: number
   occurredAt?: string
 }
@@ -317,11 +320,11 @@ export interface StatsResponse {
     buildings: Array<{
       buildingId: string
       label: string
-      invited: number
-      started: number
-      submitted: number
+      invited: number | null
+      started: number | null
+      submitted: number | null
       effectifSufficient: boolean
-      completionRate: number
+      completionRate: number | null
       displayValue: string
     }>
     questions: Array<{
@@ -329,9 +332,11 @@ export interface StatsResponse {
       code: string
       label: string
       responseType: QuestionType
-      answerCount: number
-      popupOpens: number
+      answerCount: number | null
+      popupOpens: number | null
+      medianDurationMs?: number | null
       effectifSufficient: boolean
+      displayValue: string
     }>
   }
 }

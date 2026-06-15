@@ -7,7 +7,7 @@ import { useCatalogStore } from '@/stores/catalog'
 import type { ApiQuestion, ApiQuestionGroup } from '@shared/types/api'
 import type { LanguageCode, QuestionType } from '@shared/types/domain'
 
-type BuilderQuestionType = Extract<QuestionType, 'free_text' | 'free_text_short' | 'free_text_long' | 'likert'>
+type BuilderQuestionType = Extract<QuestionType, 'free_text' | 'free_text_short' | 'free_text_long' | 'likert' | 'single_choice' | 'multiple_choice' | 'number' | 'date' | 'information'>
 
 const catalog = useCatalogStore()
 
@@ -61,6 +61,7 @@ const questionForm = reactive({
   popupTitle: '',
   popupBody: '',
   popupTerms: '',
+  answerOptionsText: 'fr|Français\nen|Anglais',
 })
 
 onMounted(async () => {
@@ -258,6 +259,7 @@ function editQuestion(question: ApiQuestion): void {
   questionForm.popupTitle = question.popupDefinitions?.[0]?.title ?? ''
   questionForm.popupBody = question.popupDefinitions?.[0]?.body ?? ''
   questionForm.popupTerms = question.popupDefinitions?.map((popup) => popup.termLabel ?? popup.termKey).join('\n') ?? ''
+  questionForm.answerOptionsText = question.options?.map((option) => `${option.value}|${option.label}`).join('\n') ?? 'oui|Oui\nnon|Non'
 }
 
 function resetQuestionForm(): void {
@@ -275,6 +277,7 @@ function resetQuestionForm(): void {
   questionForm.popupTitle = ''
   questionForm.popupBody = ''
   questionForm.popupTerms = ''
+  questionForm.answerOptionsText = 'oui|Oui\nnon|Non'
 }
 
 function buildQuestionPayload() {
@@ -285,6 +288,9 @@ function buildQuestionPayload() {
     helperText: questionForm.helperText,
     responseType: questionForm.responseType,
     isRequired: questionForm.isRequired,
+    ...(questionForm.responseType === 'single_choice' || questionForm.responseType === 'multiple_choice'
+      ? { answerOptions: answerOptionsFromText(questionForm.answerOptionsText) }
+      : {}),
     ...(questionForm.responseType === 'likert'
       ? {
           likertScale: {
@@ -324,6 +330,29 @@ function buildPopupPayload() {
     body: questionForm.popupBody,
     termsExplained: termsFromText(questionForm.popupTerms),
   }
+}
+
+function answerOptionsFromText(value: string) {
+  const options = value
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line, index) => {
+      const [firstPart = '', ...labelParts] = line.split('|')
+      const rawValue = firstPart.trim()
+      const label = (labelParts.join('|') || rawValue).trim()
+      return {
+        value: rawValue,
+        label,
+        displayOrder: index + 1,
+      }
+    })
+
+  if (options.length < 2) {
+    throw new Error('Une question à choix doit contenir au moins deux options, une par ligne au format valeur|libellé.')
+  }
+
+  return options
 }
 
 function termsFromText(value: string): string[] {
@@ -606,7 +635,12 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                         <option value="free_text_short">Réponse libre courte</option>
                         <option value="free_text">Réponse libre</option>
                         <option value="free_text_long">Réponse libre longue</option>
+                        <option value="single_choice">Choix unique</option>
+                        <option value="multiple_choice">Choix multiple</option>
                         <option value="likert">Échelle Likert</option>
+                        <option value="number">Nombre</option>
+                        <option value="date">Date</option>
+                        <option value="information">Bloc informatif</option>
                       </select>
                     </div>
                     <div class="col-12">
@@ -634,6 +668,20 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                       <div class="col-md-3">
                         <label class="form-label small fw-bold" for="likert-right">Libellé droit</label>
                         <input id="likert-right" v-model="questionForm.likertRightAnchor" class="form-control" />
+                      </div>
+                    </template>
+
+                    <template v-if="questionForm.responseType === 'single_choice' || questionForm.responseType === 'multiple_choice'">
+                      <div class="col-12">
+                        <label class="form-label small fw-bold" for="question-options">Options de réponse</label>
+                        <textarea
+                          id="question-options"
+                          v-model="questionForm.answerOptionsText"
+                          class="form-control"
+                          rows="4"
+                          placeholder="fr|Français\nen|Anglais"
+                        ></textarea>
+                        <p class="form-text mb-0">Une option par ligne : <code>valeur|libellé affiché</code>.</p>
                       </div>
                     </template>
 
@@ -737,6 +785,14 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                       </button>
                     </div>
                   </div>
+                  <div v-else-if="question.responseType === 'single_choice' || question.responseType === 'multiple_choice'" class="d-grid gap-2 mb-3">
+                    <button v-for="option in question.options" :key="option.id" class="btn btn-outline-primary text-start" type="button">
+                      {{ option.label }}
+                    </button>
+                  </div>
+                  <input v-else-if="question.responseType === 'number'" class="form-control mb-3" type="number" placeholder="Nombre" />
+                  <input v-else-if="question.responseType === 'date'" class="form-control mb-3" type="date" />
+                  <div v-else-if="question.responseType === 'information'" class="alert alert-info rounded-4 mb-3">Bloc d’information sans réponse attendue.</div>
                   <textarea v-else class="form-control mb-3" rows="3" placeholder="Réponse du répondant"></textarea>
 
                   <div v-for="popup in question.popupDefinitions ?? []" :key="popup.id" class="question-help mb-2">
@@ -756,7 +812,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
               <div class="d-grid gap-2">
                 <span class="badge-soft success">Création sans code</span>
                 <span class="badge-soft success">Groupes et ordre persistés</span>
-                <span class="badge-soft success">Questions libres et Likert</span>
+                <span class="badge-soft success">Questions libres, choix, nombre, date et Likert</span>
                 <span class="badge-soft success">Popups explicatives persistées</span>
                 <span class="badge-soft success">Erreurs API lisibles</span>
               </div>

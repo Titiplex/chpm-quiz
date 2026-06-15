@@ -14,7 +14,7 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator'
-const supportedBuilderQuestionTypes = ['free_text', 'free_text_short', 'free_text_long', 'likert'] as const
+const supportedBuilderQuestionTypes = ['free_text', 'free_text_short', 'free_text_long', 'likert', 'single_choice', 'multiple_choice', 'number', 'date', 'information'] as const
 type BuilderQuestionType = (typeof supportedBuilderQuestionTypes)[number]
 
 export class UpdateQuestionnaireDto {
@@ -149,6 +149,28 @@ export class PopupDefinitionDto {
   termsExplained?: string[]
 }
 
+export class AnswerOptionDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  value!: string
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  label!: string
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  displayOrder?: number
+
+  @IsOptional()
+  @IsBoolean()
+  isExclusive?: boolean
+}
+
 export class CreateQuestionDto {
   @IsString()
   @MinLength(2)
@@ -166,7 +188,7 @@ export class CreateQuestionDto {
   helperText?: string
 
   @IsIn(supportedBuilderQuestionTypes, {
-    message: 'Le constructeur admin accepte réponse libre ou échelle Likert pour cette étape.',
+    message: 'Type de question non pris en charge par le constructeur administrateur.',
   })
   responseType!: BuilderQuestionType
 
@@ -179,6 +201,13 @@ export class CreateQuestionDto {
   @Min(1)
   @Max(500)
   displayOrder?: number
+
+  @ValidateIf((dto: CreateQuestionDto) => dto.responseType === 'single_choice' || dto.responseType === 'multiple_choice')
+  @IsArray()
+  @ArrayMaxSize(30)
+  @ValidateNested({ each: true })
+  @Type(() => AnswerOptionDto)
+  answerOptions?: AnswerOptionDto[]
 
   @ValidateIf((dto: CreateQuestionDto) => dto.responseType === 'likert')
   @ValidateNested()
@@ -211,7 +240,7 @@ export class UpdateQuestionDto {
 
   @IsOptional()
   @IsIn(supportedBuilderQuestionTypes, {
-    message: 'Le constructeur admin accepte réponse libre ou échelle Likert pour cette étape.',
+    message: 'Type de question non pris en charge par le constructeur administrateur.',
   })
   responseType?: BuilderQuestionType
 
@@ -224,6 +253,13 @@ export class UpdateQuestionDto {
   @Min(1)
   @Max(500)
   displayOrder?: number
+
+  @ValidateIf((dto: UpdateQuestionDto) => dto.responseType === 'single_choice' || dto.responseType === 'multiple_choice' || dto.answerOptions !== undefined)
+  @IsArray()
+  @ArrayMaxSize(30)
+  @ValidateNested({ each: true })
+  @Type(() => AnswerOptionDto)
+  answerOptions?: AnswerOptionDto[]
 
   @ValidateIf((dto: UpdateQuestionDto) => dto.responseType === 'likert' || dto.likertScale !== undefined)
   @ValidateNested()
