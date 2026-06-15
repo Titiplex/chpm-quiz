@@ -291,6 +291,7 @@ model LikertScale {
   questionId         String   @unique @db.Uuid
   question           Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
   points             Int
+  minValue           Int      @default(1)
   leftAnchor         String
   rightAnchor        String
   neutralLabel       String?
