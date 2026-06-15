@@ -21,6 +21,11 @@ export class TelemetryDto {
 
   @IsOptional()
   @IsInt()
+  @Min(1)
+  currentPage?: number
+
+  @IsOptional()
+  @IsInt()
   @Min(0)
   durationMs?: number
 

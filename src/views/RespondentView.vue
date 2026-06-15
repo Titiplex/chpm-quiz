@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
 import KpiCard from '@/components/common/KpiCard.vue'
@@ -14,6 +14,7 @@ const token = computed(() => String(route.params.token ?? ''))
 const hasToken = computed(() => Boolean(token.value))
 const groups = computed(() => respondent.session?.questionnaire.groups ?? [])
 const pageIndex = ref(0)
+const pageStartedAt = ref(Date.now())
 
 type RespondentPage = {
   group: RespondentQuestionGroup
@@ -65,7 +66,12 @@ onMounted(async () => {
         answers[question.id] = question.answer.value
       }
     }
+    await recordPageTelemetry('page_view')
   }
+})
+
+onBeforeUnmount(() => {
+  void recordPageTelemetry('page_leave')
 })
 
 function questionValue(question: RespondentQuestion): unknown {
@@ -77,6 +83,18 @@ async function save(question: RespondentQuestion, value: unknown) {
   await respondent.save(question.id, value)
 }
 
+function isOptionSelected(question: RespondentQuestion, value: string): boolean {
+  const current = questionValue(question)
+  return Array.isArray(current) && current.includes(value)
+}
+
+async function toggleMultipleChoice(question: RespondentQuestion, value: string): Promise<void> {
+  const currentValue = questionValue(question)
+  const current = Array.isArray(currentValue) ? [...currentValue] : []
+  const next = current.includes(value) ? current.filter((item) => item !== value) : [...current, value]
+  await save(question, next)
+}
+
 function likertValues(scale?: { points: number; minValue?: number } | null): number[] {
   if (!scale) return []
 
@@ -84,12 +102,33 @@ function likertValues(scale?: { points: number; minValue?: number } | null): num
   return Array.from({ length: scale.points }, (_, index) => minValue + index)
 }
 
-function previousPage(): void {
+async function previousPage(): Promise<void> {
+  await recordPageTelemetry('page_change')
   pageIndex.value = Math.max(0, pageIndex.value - 1)
+  pageStartedAt.value = Date.now()
+  await recordPageTelemetry('page_view')
 }
 
-function nextPage(): void {
+async function nextPage(): Promise<void> {
+  await recordPageTelemetry('page_change')
   pageIndex.value = Math.min(Math.max(pages.value.length - 1, 0), pageIndex.value + 1)
+  pageStartedAt.value = Date.now()
+  await recordPageTelemetry('page_view')
+}
+
+async function recordPageTelemetry(eventType: string): Promise<void> {
+  if (!currentPage.value || !respondent.session || respondent.isLocked) return
+  await respondent.telemetry({
+    eventType,
+    currentPage: currentPageNumber.value,
+    durationMs: Math.max(0, Date.now() - pageStartedAt.value),
+    eventPayload: {
+      groupId: currentPage.value.group.id,
+      groupTitle: currentPage.value.group.title,
+      questionIds: currentPage.value.questions.map((question) => question.id),
+    },
+    occurredAt: new Date().toISOString(),
+  })
 }
 
 async function openPopup(question: RespondentQuestion) {
@@ -99,9 +138,11 @@ async function openPopup(question: RespondentQuestion) {
     questionId: question.id,
     popupDefinitionId: popup.id,
     eventType: 'popup_open',
+    currentPage: currentPageNumber.value,
     eventPayload: {
       termKey: popup.termKey,
       language: popup.language,
+      page: currentPageNumber.value,
     },
     occurredAt: new Date().toISOString(),
   })
@@ -221,6 +262,42 @@ async function openPopup(question: RespondentQuestion) {
                       >
                         {{ option.label }}
                       </button>
+                    </div>
+
+                    <div v-else-if="question.responseType === 'multiple_choice'" class="d-grid gap-2 mb-3">
+                      <button
+                        v-for="option in question.options"
+                        :key="option.id"
+                        class="btn text-start"
+                        :class="isOptionSelected(question, option.value) ? 'btn-primary' : 'btn-outline-primary'"
+                        type="button"
+                        :disabled="respondent.isLocked"
+                        @click="toggleMultipleChoice(question, option.value)"
+                      >
+                        {{ option.label }}
+                      </button>
+                    </div>
+
+                    <input
+                      v-else-if="question.responseType === 'number'"
+                      class="form-control mb-3"
+                      type="number"
+                      :disabled="respondent.isLocked"
+                      :value="String(questionValue(question) ?? '')"
+                      @change="save(question, Number(($event.target as HTMLInputElement).value))"
+                    />
+
+                    <input
+                      v-else-if="question.responseType === 'date'"
+                      class="form-control mb-3"
+                      type="date"
+                      :disabled="respondent.isLocked"
+                      :value="String(questionValue(question) ?? '')"
+                      @change="save(question, ($event.target as HTMLInputElement).value)"
+                    />
+
+                    <div v-else-if="question.responseType === 'information'" class="alert alert-info rounded-4 mb-3">
+                      Information affichée, aucune réponse attendue.
                     </div>
 
                     <textarea

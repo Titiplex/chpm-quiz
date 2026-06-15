@@ -1,12 +1,17 @@
 import { createHash, randomBytes } from 'node:crypto'
 
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common'
+import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common'
 
 import { AuditService } from '../audit/audit.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { AccessTokenService } from '../security/access-token.service'
 import type { SaveAnswersDto } from './dto/save-answers.dto'
 import type { TelemetryDto } from './dto/telemetry.dto'
+
+interface RenderedQuestionnaire {
+  groups: any[]
+  pathQuestionIds: string[]
+}
 
 @Injectable()
 export class RespondentService {
@@ -25,13 +30,12 @@ export class RespondentService {
     const { invitation, responseSession } = await this.resolveOrCreateSession(dto.token)
     this.assertWritable(responseSession)
 
-    const allowedQuestionIds = new Set(
-      invitation.questionnaireVersion.groups.flatMap((group: any) => group.questions.map((question: any) => question.id)),
-    )
+    const rendered = this.renderVersion(invitation.questionnaireVersion, responseSession)
+    const allowedQuestionIds = new Set(rendered.pathQuestionIds)
 
     for (const answer of dto.answers) {
       if (!allowedQuestionIds.has(answer.questionId)) {
-        throw new BadRequestException('La question ne fait pas partie du questionnaire assigné')
+        throw new BadRequestException('La question ne fait pas partie du chemin répondant actif')
       }
     }
 
@@ -69,6 +73,7 @@ export class RespondentService {
         data: {
           lastSeenAt: new Date(),
           status: 'draft',
+          pathFingerprint: this.pathFingerprint(responseSession.id, rendered.pathQuestionIds),
         },
       })
 
@@ -90,17 +95,44 @@ export class RespondentService {
   }
 
   async recordTelemetry(dto: TelemetryDto) {
-    const { responseSession } = await this.resolveOrCreateSession(dto.token)
-    const event = await this.prisma.telemetryEvent.create({
-      data: {
-        responseSessionId: responseSession.id,
-        questionId: dto.questionId,
-        popupDefinitionId: dto.popupDefinitionId,
-        eventType: dto.eventType,
-        eventPayload: dto.eventPayload ?? undefined,
-        durationMs: dto.durationMs,
-        occurredAt: dto.occurredAt ? new Date(dto.occurredAt) : new Date(),
-      },
+    const { invitation, responseSession } = await this.resolveOrCreateSession(dto.token)
+
+    const event = await this.prisma.$transaction(async (tx: any) => {
+      const created = await tx.telemetryEvent.create({
+        data: {
+          responseSessionId: responseSession.id,
+          questionId: dto.questionId,
+          popupDefinitionId: dto.popupDefinitionId,
+          eventType: dto.eventType,
+          eventPayload: dto.eventPayload ?? undefined,
+          durationMs: dto.durationMs,
+          occurredAt: dto.occurredAt ? new Date(dto.occurredAt) : new Date(),
+        },
+      })
+
+      if (dto.currentPage !== undefined) {
+        await tx.responseSession.update({
+          where: { id: responseSession.id },
+          data: {
+            currentPage: Math.max(1, dto.currentPage),
+            lastSeenAt: new Date(),
+          },
+        })
+      } else {
+        await tx.responseSession.update({
+          where: { id: responseSession.id },
+          data: { lastSeenAt: new Date() },
+        })
+      }
+
+      if (invitation.status === 'opened') {
+        await tx.invitation.update({
+          where: { id: invitation.id },
+          data: { status: 'in_progress', startedAt: invitation.startedAt ?? new Date() },
+        })
+      }
+
+      return created
     })
 
     return { event }
@@ -110,8 +142,17 @@ export class RespondentService {
     const { invitation, responseSession } = await this.resolveOrCreateSession(token)
     this.assertWritable(responseSession)
 
+    const rendered = this.renderVersion(invitation.questionnaireVersion, responseSession)
+    const answerByQuestionId = new Map<string, any>((responseSession.answers ?? []).map((answer: any): [string, any] => [answer.questionId, answer]))
+    const missingRequired = rendered.groups.flatMap((group) => group.questions)
+      .filter((question: any) => question.isRequired && !answerByQuestionId.has(question.id))
+
+    if (missingRequired.length) {
+      throw new BadRequestException(`Soumission impossible : ${missingRequired.length} question(s) obligatoire(s) sans réponse`)
+    }
+
     const answerCount = await this.prisma.answer.count({ where: { responseSessionId: responseSession.id } })
-    const pathFingerprint = this.pathFingerprint(responseSession.id, answerCount)
+    const pathFingerprint = this.pathFingerprint(responseSession.id, rendered.pathQuestionIds)
 
     const submission = await this.prisma.$transaction(async (tx: any) => {
       const created = await tx.submission.create({
@@ -157,7 +198,7 @@ export class RespondentService {
       entityType: 'Submission',
       entityId: submission.id,
       publicCode: responseSession.publicCode,
-      metadata: { answerCount },
+      metadata: { answerCount, pathFingerprint },
     })
 
     return { submission }
@@ -179,6 +220,7 @@ export class RespondentService {
         questionnaireVersion: {
           include: {
             questionnaire: true,
+            conditionalRules: { where: { isActive: true }, orderBy: { priority: 'asc' } },
             groups: {
               where: { isArchived: false },
               orderBy: { displayOrder: 'asc' },
@@ -251,8 +293,9 @@ export class RespondentService {
   }
 
   private toRespondentSession(invitation: any, responseSession: any) {
-    const answerByQuestionId = new Map((responseSession.answers ?? []).map((answer: any) => [answer.questionId, answer]))
+    const answerByQuestionId = new Map<string, any>((responseSession.answers ?? []).map((answer: any): [string, any] => [answer.questionId, answer]))
     const version = invitation.questionnaireVersion
+    const rendered = this.renderVersion(version, responseSession)
 
     return {
       responseSession: {
@@ -278,7 +321,7 @@ export class RespondentService {
         finality: version.finality ?? version.questionnaire.finality,
         versionLabel: version.versionLabel,
         language: version.language,
-        groups: version.groups.map((group: any) => ({
+        groups: rendered.groups.map((group: any) => ({
           id: group.id,
           title: group.title,
           description: group.description,
@@ -302,6 +345,123 @@ export class RespondentService {
     }
   }
 
+  private renderVersion(version: any, responseSession: any): RenderedQuestionnaire {
+    const answerByQuestionId = new Map<string, unknown>((responseSession.answers ?? []).map((answer: any): [string, unknown] => [answer.questionId, answer.value]))
+    const answersByCode = new Map<string, unknown>()
+
+    for (const group of version.groups ?? []) {
+      for (const question of group.questions ?? []) {
+        if (answerByQuestionId.has(question.id)) {
+          answersByCode.set(question.code, answerByQuestionId.get(question.id))
+        }
+      }
+    }
+
+    const context = { answerByQuestionId, answersByCode }
+    const hiddenGroupIds = new Set<string>()
+    const hiddenQuestionIds = new Set<string>()
+    const forcedQuestionIds = new Set<string>()
+    const forcedGroupIds = new Set<string>()
+    let terminated = false
+
+    for (const rule of version.conditionalRules ?? []) {
+      if (!this.evaluateCondition(rule.trigger, context)) continue
+      const effect = rule.effect ?? {}
+      const action = effect.action ?? effect.type
+
+      if (action === 'hide_group' && effect.groupId) hiddenGroupIds.add(effect.groupId)
+      if (action === 'show_group' && effect.groupId) forcedGroupIds.add(effect.groupId)
+      if (action === 'hide_question' && effect.questionId) hiddenQuestionIds.add(effect.questionId)
+      if (action === 'show_question' && effect.questionId) forcedQuestionIds.add(effect.questionId)
+      if (action === 'terminate_questionnaire') terminated = true
+    }
+
+    const groups = []
+    const pathQuestionIds: string[] = []
+
+    for (const group of version.groups ?? []) {
+      if (terminated) break
+      const groupVisible = forcedGroupIds.has(group.id)
+        || (!hiddenGroupIds.has(group.id) && this.evaluateCondition(group.conditionExpression, context))
+
+      if (!groupVisible) continue
+
+      const questions = (group.questions ?? []).filter((question: any) => (
+        forcedQuestionIds.has(question.id)
+        || (!hiddenQuestionIds.has(question.id) && this.evaluateCondition(question.conditionExpression, context))
+      ))
+
+      const orderedQuestions = group.randomize
+        ? this.stableShuffle(questions, `${responseSession.randomizationSeed}:${group.id}`)
+        : questions
+
+      if (orderedQuestions.length) {
+        groups.push({ ...group, questions: orderedQuestions })
+        pathQuestionIds.push(...orderedQuestions.map((question: any) => question.id))
+      }
+    }
+
+    return { groups, pathQuestionIds }
+  }
+
+  private evaluateCondition(expression: unknown, context: { answerByQuestionId: Map<string, unknown>; answersByCode: Map<string, unknown> }): boolean {
+    if (!expression) return true
+    if (typeof expression !== 'object') return true
+
+    const condition = expression as any
+
+    if (Array.isArray(condition.all)) {
+      return condition.all.every((item: unknown) => this.evaluateCondition(item, context))
+    }
+
+    if (Array.isArray(condition.any)) {
+      return condition.any.some((item: unknown) => this.evaluateCondition(item, context))
+    }
+
+    if (condition.not) {
+      return !this.evaluateCondition(condition.not, context)
+    }
+
+    const value = condition.questionId
+      ? context.answerByQuestionId.get(condition.questionId)
+      : condition.questionCode
+        ? context.answersByCode.get(String(condition.questionCode).toUpperCase())
+        : undefined
+
+    const operator = condition.operator ?? (Object.prototype.hasOwnProperty.call(condition, 'equals') ? 'equals' : 'answered')
+    const expected = Object.prototype.hasOwnProperty.call(condition, 'value') ? condition.value : condition.equals
+
+    switch (operator) {
+      case 'answered':
+        return value !== undefined && value !== null && value !== ''
+      case 'not_answered':
+        return value === undefined || value === null || value === ''
+      case 'equals':
+        return value === expected
+      case 'not_equals':
+        return value !== expected
+      case 'contains':
+        return Array.isArray(value) ? value.includes(expected) : String(value ?? '').includes(String(expected))
+      case 'gt':
+        return Number(value) > Number(expected)
+      case 'gte':
+        return Number(value) >= Number(expected)
+      case 'lt':
+        return Number(value) < Number(expected)
+      case 'lte':
+        return Number(value) <= Number(expected)
+      default:
+        return true
+    }
+  }
+
+  private stableShuffle<T extends { id: string }>(items: T[], seed: string): T[] {
+    return [...items]
+      .map((item) => ({ item, score: createHash('sha256').update(`${seed}:${item.id}`).digest('hex') }))
+      .sort((left, right) => left.score.localeCompare(right.score))
+      .map(({ item }) => item)
+  }
+
   private assertWritable(responseSession: any): void {
     if (responseSession.status === 'submitted' || responseSession.status === 'locked' || responseSession.submission) {
       throw new BadRequestException('La soumission est définitive et verrouillée')
@@ -322,7 +482,7 @@ export class RespondentService {
     return null
   }
 
-  private pathFingerprint(sessionId: string, answerCount: number): string {
-    return createHash('sha256').update(`${sessionId}:${answerCount}`).digest('hex')
+  private pathFingerprint(sessionId: string, pathQuestionIds: string[]): string {
+    return createHash('sha256').update(`${sessionId}:${pathQuestionIds.join('|')}`).digest('hex')
   }
 }

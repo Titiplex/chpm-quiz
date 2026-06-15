@@ -1,6 +1,9 @@
+import { randomUUID } from 'node:crypto'
+
 import { BadRequestException, ValidationPipe, type ValidationError } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { NestFactory } from '@nestjs/core'
+import type { NextFunction, Request, Response } from 'express'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import cookieParser = require('cookie-parser')
 
@@ -21,6 +24,14 @@ async function bootstrap() {
     credentials: true,
   })
 
+  app.use((_request: Request, response: Response, next: NextFunction) => {
+    response.setHeader('X-Request-Id', randomUUID())
+    response.setHeader('X-Content-Type-Options', 'nosniff')
+    response.setHeader('Referrer-Policy', 'no-referrer')
+    response.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+    next()
+  })
+
   app.use(cookieParser())
   app.setGlobalPrefix(config.get<string>('API_PREFIX', 'api'))
   app.useGlobalPipes(
@@ -28,7 +39,7 @@ async function bootstrap() {
       transform: true,
       whitelist: true,
       forbidNonWhitelisted: true,
-      exceptionFactory: (errors) =>
+      exceptionFactory: (errors: ValidationError[]) =>
         new BadRequestException({
           message: toFrenchValidationMessages(errors),
           error: 'Validation des données impossible',
@@ -43,7 +54,7 @@ function toFrenchValidationMessages(errors: ValidationError[], parentPath = ''):
   return errors.flatMap((error) => {
     const propertyPath = parentPath ? `${parentPath}.${error.property}` : error.property
     const ownMessages = Object.entries(error.constraints ?? {}).map(
-      ([constraint, message]) => `${propertyPath} ${translateConstraint(constraint, message)}`,
+      ([constraint, message]) => `${propertyPath} ${translateConstraint(constraint, String(message))}`,
     )
     const childMessages = toFrenchValidationMessages(error.children ?? [], propertyPath)
     return [...ownMessages, ...childMessages]
