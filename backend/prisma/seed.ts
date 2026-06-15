@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes } from 'node:crypto'
+import { createCipheriv, createHash, createHmac, randomBytes } from 'node:crypto'
 
 import { PrismaClient } from '@prisma/client'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -6,6 +6,8 @@ import bcrypt = require('bcryptjs')
 
 const prisma = new PrismaClient()
 const respondentTokenSecret = process.env.RESPONDENT_TOKEN_SECRET ?? 'dev-respondent-token-secret-change-me'
+const emailEncryptionSecret = process.env.DEV_EMAIL_ENCRYPTION_SECRET ?? 'development-email-key-change-me'
+const emailHashPepper = process.env.EMAIL_HASH_PEPPER ?? process.env.DEV_EMAIL_HASH_PEPPER ?? 'development-email-pepper-change-me'
 
 type UserRole =
   | 'admin'
@@ -721,8 +723,8 @@ async function createSeedInvitation(
       emailIdentity: {
         create: {
           publicCode,
-          emailCiphertext: Buffer.from(email, 'utf8').toString('base64'),
-          emailHash: sha256(email),
+          emailCiphertext: encryptEmail(email),
+          emailHash: hashEmail(email),
           questionnaireVersionId,
           buildingId,
           createdByUserId: moderatorId,
@@ -782,8 +784,8 @@ async function createDemoInvitations(questionnaireVersionId: string, moderatorId
         emailIdentity: {
           create: {
             publicCode,
-            emailCiphertext: Buffer.from(email, 'utf8').toString('base64'),
-            emailHash: sha256(email),
+            emailCiphertext: encryptEmail(email),
+            emailHash: hashEmail(email),
             questionnaireVersionId,
             buildingId,
             createdByUserId: moderatorId,
@@ -876,8 +878,8 @@ async function createDemoInvitations(questionnaireVersionId: string, moderatorId
       emailIdentity: {
         create: {
           publicCode: pendingCode,
-          emailCiphertext: Buffer.from('pending.demo@example.org', 'utf8').toString('base64'),
-          emailHash: sha256('pending.demo@example.org'),
+          emailCiphertext: encryptEmail('pending.demo@example.org'),
+          emailHash: hashEmail('pending.demo@example.org'),
           questionnaireVersionId,
           buildingId,
           createdByUserId: moderatorId,
@@ -893,6 +895,30 @@ async function createDemoInvitations(questionnaireVersionId: string, moderatorId
       },
     },
   })
+}
+
+function encryptEmail(email: string): string {
+  const normalizedEmail = email.trim().toLowerCase()
+  const version = 'v1'
+  const iv = randomBytes(12)
+  const key = process.env.EMAIL_ENCRYPTION_KEY_B64
+    ? Buffer.from(process.env.EMAIL_ENCRYPTION_KEY_B64, 'base64')
+    : createHash('sha256').update(emailEncryptionSecret).digest()
+
+  if (key.length !== 32) {
+    throw new Error('EMAIL_ENCRYPTION_KEY_B64 doit contenir 32 octets encodés en base64')
+  }
+
+  const cipher = createCipheriv('aes-256-gcm', key, iv, { authTagLength: 16 })
+  cipher.setAAD(Buffer.from(version, 'utf8'))
+  const ciphertext = Buffer.concat([cipher.update(normalizedEmail, 'utf8'), cipher.final()])
+  const tag = cipher.getAuthTag()
+
+  return [version, iv.toString('base64url'), tag.toString('base64url'), ciphertext.toString('base64url')].join('.')
+}
+
+function hashEmail(email: string): string {
+  return createHmac('sha256', emailHashPepper).update(email.trim().toLowerCase()).digest('hex')
 }
 
 function createRespondentToken(publicCode: string): string {

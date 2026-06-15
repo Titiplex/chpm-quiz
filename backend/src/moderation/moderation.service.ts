@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto'
-
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import type { Request } from 'express'
@@ -7,6 +5,7 @@ import type { Request } from 'express'
 import { AuditService } from '../audit/audit.service'
 import type { AuthenticatedUser } from '../auth/auth.types'
 import { AccessTokenService } from '../security/access-token.service'
+import { EmailCryptoService } from '../security/email-crypto.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { CreateInvitationDto } from './dto/create-invitation.dto'
 
@@ -17,6 +16,7 @@ export class ModerationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly accessTokenService: AccessTokenService,
+    private readonly emailCryptoService: EmailCryptoService,
     private readonly auditService: AuditService,
     private readonly config: ConfigService,
   ) {}
@@ -67,8 +67,8 @@ export class ModerationService {
       throw new NotFoundException('Bâtiment introuvable')
     }
 
-    const normalizedEmail = dto.email.trim().toLowerCase()
-    const emailHash = this.hashEmail(normalizedEmail)
+    const normalizedEmail = this.emailCryptoService.normalize(dto.email)
+    const emailHash = this.emailCryptoService.hashEmail(normalizedEmail)
 
     const duplicate = await this.prisma.emailIdentity.findFirst({
       where: {
@@ -106,7 +106,7 @@ export class ModerationService {
           emailIdentity: {
             create: {
               publicCode,
-              emailCiphertext: Buffer.from(normalizedEmail, 'utf8').toString('base64'),
+              emailCiphertext: this.emailCryptoService.encryptEmail(normalizedEmail),
               emailHash,
               questionnaireVersionId: dto.questionnaireVersionId,
               buildingId: dto.buildingId,
@@ -250,7 +250,7 @@ export class ModerationService {
       id: invitation.id,
       publicCode: invitation.publicCode,
       status: invitation.status,
-      maskedEmail: invitation.emailIdentity ? this.maskEmail(this.decodeEmail(invitation.emailIdentity.emailCiphertext)) : null,
+      maskedEmail: invitation.emailIdentity ? this.emailCryptoService.maskEncryptedEmail(invitation.emailIdentity.emailCiphertext) : null,
       questionnaireVersionId: invitation.questionnaireVersionId,
       questionnaireTitle: invitation.questionnaireVersion?.questionnaire?.title ?? null,
       versionLabel: invitation.questionnaireVersion?.versionLabel ?? null,
@@ -274,10 +274,6 @@ export class ModerationService {
     return new Date(Date.now() + Math.max(days, 1) * 24 * 60 * 60 * 1000)
   }
 
-  private hashEmail(email: string): string {
-    return createHash('sha256').update(email).digest('hex')
-  }
-
   private async generateUniquePublicCode(): Promise<string> {
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const code = this.randomPublicCode()
@@ -294,19 +290,5 @@ export class ModerationService {
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
     const chars = Array.from({ length: 8 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('')
     return `${chars.slice(0, 4)}-${chars.slice(4)}`
-  }
-
-  private decodeEmail(ciphertext: string): string {
-    return Buffer.from(ciphertext, 'base64').toString('utf8')
-  }
-
-  private maskEmail(email: string): string {
-    const [local = '', domain] = email.split('@')
-    if (!domain) {
-      return 'email masqué'
-    }
-
-    const visibleLocal = local.length <= 2 ? `${local[0] ?? '*'}*` : `${local.slice(0, 2)}***`
-    return `${visibleLocal}@${domain}`
   }
 }

@@ -1,10 +1,12 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["public", "identity"]
 }
 
 enum UserRole {
@@ -18,18 +20,21 @@ enum UserRole {
   technical_admin
   service_account
   respondent
+  @@schema("public")
 }
 
 enum QuestionnaireStatus {
   draft
   published
   archived
+  @@schema("public")
 }
 
 enum QuestionnaireVersionStatus {
   draft
   published
   archived
+  @@schema("public")
 }
 
 enum QuestionType {
@@ -42,6 +47,7 @@ enum QuestionType {
   number
   date
   information
+  @@schema("public")
 }
 
 enum InvitationStatus {
@@ -54,6 +60,7 @@ enum InvitationStatus {
   expired
   blocked
   cancelled
+  @@schema("public")
 }
 
 enum ResponseSessionStatus {
@@ -61,6 +68,7 @@ enum ResponseSessionStatus {
   submitted
   locked
   abandoned
+  @@schema("public")
 }
 
 enum JudicialAccessStatus {
@@ -69,6 +77,7 @@ enum JudicialAccessStatus {
   rejected
   executed
   closed
+  @@schema("public")
 }
 
 model Organization {
@@ -82,6 +91,7 @@ model Organization {
   buildings      Building[]
   users          User[]
   questionnaires Questionnaire[]
+  @@schema("public")
 }
 
 model Site {
@@ -100,6 +110,7 @@ model Site {
   invitations Invitation[]
 
   @@index([organizationId])
+  @@schema("public")
 }
 
 model Building {
@@ -123,6 +134,7 @@ model Building {
 
   @@index([organizationId])
   @@index([siteId])
+  @@schema("public")
 }
 
 model User {
@@ -154,6 +166,7 @@ model User {
   @@index([organizationId])
   @@index([siteId])
   @@index([buildingId])
+  @@schema("public")
 }
 
 model Session {
@@ -169,6 +182,7 @@ model Session {
 
   @@index([userId])
   @@index([expiresAt])
+  @@schema("public")
 }
 
 model Questionnaire {
@@ -191,6 +205,7 @@ model Questionnaire {
   @@index([organizationId])
   @@index([ownerUserId])
   @@index([status])
+  @@schema("public")
 }
 
 model QuestionnaireVersion {
@@ -219,6 +234,7 @@ model QuestionnaireVersion {
   @@index([questionnaireId])
   @@index([status])
   @@index([openFrom, openUntil])
+  @@schema("public")
 }
 
 model QuestionGroup {
@@ -240,6 +256,7 @@ model QuestionGroup {
   @@unique([questionnaireVersionId, displayOrder])
   @@index([questionnaireVersionId])
   @@index([isArchived])
+  @@schema("public")
 }
 
 model Question {
@@ -270,6 +287,7 @@ model Question {
   @@index([groupId])
   @@index([responseType])
   @@index([isArchived])
+  @@schema("public")
 }
 
 model AnswerOption {
@@ -284,6 +302,7 @@ model AnswerOption {
 
   @@unique([questionId, value])
   @@index([questionId])
+  @@schema("public")
 }
 
 model LikertScale {
@@ -299,6 +318,7 @@ model LikertScale {
   orientation        String   @default("horizontal")
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+  @@schema("public")
 }
 
 model GlossaryTerm {
@@ -317,6 +337,7 @@ model GlossaryTerm {
   @@unique([termKey, language, version])
   @@index([termKey])
   @@index([language])
+  @@schema("public")
 }
 
 model PopupDefinition {
@@ -339,6 +360,7 @@ model PopupDefinition {
   @@index([questionId])
   @@index([glossaryTermId])
   @@index([termKey, language])
+  @@schema("public")
 }
 
 model ConditionalRule {
@@ -355,6 +377,7 @@ model ConditionalRule {
 
   @@unique([questionnaireVersionId, code])
   @@index([questionnaireVersionId])
+  @@schema("public")
 }
 
 model Invitation {
@@ -391,6 +414,7 @@ model Invitation {
   @@index([createdByUserId])
   @@index([status])
   @@index([expiresAt])
+  @@schema("public")
 }
 
 model EmailIdentity {
@@ -408,9 +432,10 @@ model EmailIdentity {
   deletionScheduledAt    DateTime?
   deletedAt              DateTime?
 
-  @@map("identity_email_identities")
+  @@map("email_identities")
   @@index([emailHash])
   @@index([publicCode])
+  @@schema("identity")
 }
 
 model EmailDeliveryEvent {
@@ -423,10 +448,11 @@ model EmailDeliveryEvent {
   metadata          Json?
   occurredAt        DateTime   @default(now())
 
-  @@map("identity_email_delivery_events")
+  @@map("email_delivery_events")
   @@index([invitationId])
   @@index([publicCode])
   @@index([eventType])
+  @@schema("identity")
 }
 
 model IdentityVaultAuditLog {
@@ -439,10 +465,11 @@ model IdentityVaultAuditLog {
   metadata      Json?
   occurredAt    DateTime @default(now())
 
-  @@map("identity_vault_audit_logs")
+  @@map("vault_audit_logs")
   @@index([actorUserId])
   @@index([publicCode])
   @@index([requestId])
+  @@schema("identity")
 }
 
 model ResponseSession {
@@ -470,6 +497,7 @@ model ResponseSession {
   @@index([questionnaireVersionId])
   @@index([buildingId])
   @@index([status])
+  @@schema("public")
 }
 
 model Answer {
@@ -487,6 +515,7 @@ model Answer {
 
   @@unique([responseSessionId, questionId])
   @@index([questionId])
+  @@schema("public")
 }
 
 model TelemetryEvent {
@@ -508,6 +537,7 @@ model TelemetryEvent {
   @@index([popupDefinitionId])
   @@index([eventType])
   @@index([occurredAt])
+  @@schema("public")
 }
 
 model Submission {
@@ -528,6 +558,7 @@ model Submission {
   @@index([questionnaireVersionId])
   @@index([buildingId])
   @@index([submittedAt])
+  @@schema("public")
 }
 
 model NotificationSubscription {
@@ -547,6 +578,7 @@ model NotificationSubscription {
   @@index([questionnaireVersionId])
   @@index([buildingId])
   @@index([eventType])
+  @@schema("public")
 }
 
 model JudicialAccessRequest {
@@ -572,6 +604,7 @@ model JudicialAccessRequest {
 
   @@index([status])
   @@index([receivedAt])
+  @@schema("public")
 }
 
 model AuditLog {
@@ -592,4 +625,5 @@ model AuditLog {
   @@index([entityType])
   @@index([publicCode])
   @@index([occurredAt])
+  @@schema("public")
 }
