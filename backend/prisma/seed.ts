@@ -268,6 +268,8 @@ async function main() {
     },
   })
 
+  const itqVersion = await createItqQuestionnaire(organization.id, admin.id)
+
   const pilot = await prisma.questionnaire.create({
     data: {
       organizationId: organization.id,
@@ -302,6 +304,14 @@ async function main() {
   })
 
   await createDemoInvitations(publishedVersion.id, moderator.id, buildingByCode.get('MTL-A')!.id, buildingByCode.get('MTL-A')!.siteId)
+  const itqDemoToken = await createSeedInvitation(
+    itqVersion.id,
+    moderator.id,
+    buildingByCode.get('MTL-A')!.id,
+    buildingByCode.get('MTL-A')!.siteId,
+    'ITQ-0001',
+    'itq.demo@example.org',
+  )
 
   await prisma.auditLog.create({
     data: {
@@ -317,6 +327,8 @@ async function main() {
     console.log(`- ${user.email} / ${user.password}`)
   }
   console.log('Le répondant utilise désormais un lien /r/<token> généré par la modération, pas un compte interne.')
+  console.log(`Questionnaire ITQ seedé : version publiée, 20 écrans dont 18 items cotés, 1 question par page.`)
+  console.log(`Lien répondant ITQ de démonstration : /r/${itqDemoToken}`)
 }
 
 async function cleanup() {
@@ -363,7 +375,7 @@ function question(
   isRequired: boolean,
   helperText?: string,
   options?: Array<[string, string]>,
-  likertScale?: { points: number; leftAnchor: string; rightAnchor: string; neutralLabel?: string },
+  likertScale?: { points: number; minValue?: number; leftAnchor: string; rightAnchor: string; neutralLabel?: string },
 ) {
   return {
     code,
@@ -389,12 +401,345 @@ function question(
           likertScale: {
             create: {
               ...likertScale,
+              minValue: likertScale.minValue ?? 1,
               allowNotApplicable: false,
             },
           },
         }
       : {}),
   }
+}
+
+
+async function createItqQuestionnaire(organizationId: string, ownerUserId: string) {
+  const itqLikert = {
+    points: 5,
+    minValue: 0,
+    leftAnchor: 'Pas du tout',
+    rightAnchor: 'Extrêmement',
+    neutralLabel: 'Modérément',
+  }
+
+  const itqScaleHelper = 'Échelle ITQ : 0 = Pas du tout, 1 = Un petit peu, 2 = Modérément, 3 = Beaucoup, 4 = Extrêmement.'
+  const ptsdDistressInstruction = `${itqScaleHelper} Indiquez à quel point vous avez été perturbé par ce problème le mois dernier.`
+  const dsoTruthInstruction = `${itqScaleHelper} Répondez à quel point l’énoncé est vrai vous concernant.`
+
+  const questionnaire = await prisma.questionnaire.create({
+    data: {
+      organizationId,
+      ownerUserId,
+      code: 'ITQ-CN2R',
+      title: 'International Trauma Questionnaire (ITQ)',
+      description:
+        'Version française de l’International Trauma Questionnaire : auto-questionnaire adulte lié au TSPT et au TSPT complexe selon la CIM-11. Seed de démonstration, une question par page.',
+      defaultLanguage: 'fr',
+      finality:
+        'Questionnaire d’auto-évaluation. Le seed structure les items et la cotation 0–4 ; il ne remplace pas une interprétation clinique qualifiée.',
+      status: 'published',
+    },
+  })
+
+  return prisma.questionnaireVersion.create({
+    data: {
+      questionnaireId: questionnaire.id,
+      versionLabel: '1.0-cn2r',
+      language: 'fr',
+      status: 'published',
+      description:
+        'ITQ VF Cn2r : 18 items cotés P1–P9 et C1–C9, précédés de deux questions de contexte. Tous les groupes sont configurés à 1 question par page.',
+      finality: questionnaire.finality,
+      openFrom: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      openUntil: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
+      publishedAt: new Date(),
+      immutableAt: new Date(),
+      groups: {
+        create: [
+          {
+            title: 'Contexte de l’expérience',
+            description:
+              'Merci d’indiquer quelle est l’expérience qui vous perturbe le plus et de répondre aux questions par rapport à cette expérience.',
+            displayOrder: 1,
+            questionsPerPage: 1,
+            randomize: false,
+            questions: {
+              create: [
+                question(
+                  'ITQ-EXP-DESC',
+                  1,
+                  'Description de l’expérience',
+                  'free_text_long',
+                  false,
+                  'Champ libre de contexte. Évitez les noms, emails, téléphones ou toute autre information directement identifiante.',
+                ),
+                question(
+                  'ITQ-EXP-DATE',
+                  2,
+                  'Quand l’expérience s’est-elle passée ?',
+                  'single_choice',
+                  true,
+                  'Sélectionnez la période la plus proche.',
+                  [
+                    ['moins_6_mois', 'Il y a moins de 6 mois'],
+                    ['6_12_mois', '6 à 12 mois'],
+                    ['1_5_ans', '1 à 5 ans'],
+                    ['5_10_ans', '5 à 10 ans'],
+                    ['10_20_ans', '10 à 20 ans'],
+                    ['plus_20_ans', 'Il y a plus de 20 ans'],
+                  ],
+                ),
+              ],
+            },
+          },
+          {
+            title: 'TSPT · Symptômes du dernier mois',
+            description:
+              'Merci de lire chaque item attentivement, puis d’indiquer à quel point vous avez été perturbé par ce problème le mois dernier.',
+            displayOrder: 2,
+            questionsPerPage: 1,
+            randomize: false,
+            questions: {
+              create: [
+                question(
+                  'P1',
+                  1,
+                  'Avoir des rêves perturbants où se rejoue une partie de l’expérience ou qui sont clairement en relation avec l’expérience ?',
+                  'likert',
+                  true,
+                  ptsdDistressInstruction,
+                  undefined,
+                  itqLikert,
+                ),
+                question(
+                  'P2',
+                  2,
+                  'Avoir des images ou des souvenirs forts qui viennent à l’esprit comme si l’expérience se rejoue ici et maintenant ?',
+                  'likert',
+                  true,
+                  ptsdDistressInstruction,
+                  undefined,
+                  itqLikert,
+                ),
+                question(
+                  'P3',
+                  3,
+                  'Éviter les ressentis qui rappellent l’expérience, par exemple pensées, sentiments ou sensations physiques ?',
+                  'likert',
+                  true,
+                  ptsdDistressInstruction,
+                  undefined,
+                  itqLikert,
+                ),
+                question(
+                  'P4',
+                  4,
+                  'Éviter les éléments extérieurs qui rappellent l’expérience, par exemple personnes, lieux, conversations, objets, activités ou situations ?',
+                  'likert',
+                  true,
+                  ptsdDistressInstruction,
+                  undefined,
+                  itqLikert,
+                ),
+                question(
+                  'P5',
+                  5,
+                  'Être en état de super-alerte, vigilance ou sur ses gardes ?',
+                  'likert',
+                  true,
+                  ptsdDistressInstruction,
+                  undefined,
+                  itqLikert,
+                ),
+                question(
+                  'P6',
+                  6,
+                  'Réaction exagérée de surprise ou sursaut ?',
+                  'likert',
+                  true,
+                  ptsdDistressInstruction,
+                  undefined,
+                  itqLikert,
+                ),
+              ],
+            },
+          },
+          {
+            title: 'TSPT · Retentissement fonctionnel',
+            description: 'Au cours du dernier mois, les symptômes ci-dessus ont-ils affecté votre fonctionnement ?',
+            displayOrder: 3,
+            questionsPerPage: 1,
+            randomize: false,
+            questions: {
+              create: [
+                question(
+                  'P7',
+                  1,
+                  'Est-ce que cela a affecté vos relations et votre vie sociale ?',
+                  'likert',
+                  true,
+                  ptsdDistressInstruction,
+                  undefined,
+                  itqLikert,
+                ),
+                question(
+                  'P8',
+                  2,
+                  'Est-ce que cela a affecté votre travail ou votre capacité à travailler ?',
+                  'likert',
+                  true,
+                  ptsdDistressInstruction,
+                  undefined,
+                  itqLikert,
+                ),
+                question(
+                  'P9',
+                  3,
+                  'Est-ce que cela a affecté d’autres parties importantes de votre vie telles que la capacité à s’occuper de vos enfants, vos études, ou toutes autres activités importantes ?',
+                  'likert',
+                  true,
+                  ptsdDistressInstruction,
+                  undefined,
+                  itqLikert,
+                ),
+              ],
+            },
+          },
+          {
+            title: 'Perturbations dans l’organisation de soi',
+            description:
+              'Les questions suivantes se rapportent à la manière dont vous vous sentez typiquement, pensez de vous-même typiquement, ou êtes typiquement en relation avec les autres.',
+            displayOrder: 4,
+            questionsPerPage: 1,
+            randomize: false,
+            questions: {
+              create: [
+                question(
+                  'C1',
+                  1,
+                  'Quand je suis contrarié.e, il me faut beaucoup de temps pour me calmer',
+                  'likert',
+                  true,
+                  dsoTruthInstruction,
+                  undefined,
+                  itqLikert,
+                ),
+                question(
+                  'C2',
+                  2,
+                  'Je me sens insensible ou émotionnellement éteint.e',
+                  'likert',
+                  true,
+                  dsoTruthInstruction,
+                  undefined,
+                  itqLikert,
+                ),
+                question('C3', 3, 'Je me sens nul.le', 'likert', true, dsoTruthInstruction, undefined, itqLikert),
+                question('C4', 4, 'Je me sens sans valeur', 'likert', true, dsoTruthInstruction, undefined, itqLikert),
+                question('C5', 5, 'Je me sens distant.e ou coupé.e des autres', 'likert', true, dsoTruthInstruction, undefined, itqLikert),
+                question(
+                  'C6',
+                  6,
+                  'Je trouve qu’il est difficile de rester émotionnellement proche des autres',
+                  'likert',
+                  true,
+                  dsoTruthInstruction,
+                  undefined,
+                  itqLikert,
+                ),
+              ],
+            },
+          },
+          {
+            title: 'Perturbations dans l’organisation de soi · Retentissement fonctionnel',
+            description:
+              'Au cours du dernier mois, les problèmes ci-dessus relatifs à vos émotions, aux croyances sur vous-même et dans vos relations ont-ils eu un retentissement ?',
+            displayOrder: 5,
+            questionsPerPage: 1,
+            randomize: false,
+            questions: {
+              create: [
+                question(
+                  'C7',
+                  1,
+                  'Créé de l’inquiétude ou de la détresse concernant vos relations ou votre vie sociale ?',
+                  'likert',
+                  true,
+                  dsoTruthInstruction,
+                  undefined,
+                  itqLikert,
+                ),
+                question(
+                  'C8',
+                  2,
+                  'Affecté votre travail ou capacité à travailler ?',
+                  'likert',
+                  true,
+                  dsoTruthInstruction,
+                  undefined,
+                  itqLikert,
+                ),
+                question(
+                  'C9',
+                  3,
+                  'Affecté d’autres parties importantes de votre vie telles que la capacité à s’occuper de vos enfants, vos études, ou toutes autres activités importantes ?',
+                  'likert',
+                  true,
+                  dsoTruthInstruction,
+                  undefined,
+                  itqLikert,
+                ),
+              ],
+            },
+          },
+        ],
+      },
+    },
+  })
+}
+
+async function createSeedInvitation(
+  questionnaireVersionId: string,
+  moderatorId: string,
+  buildingId: string,
+  siteId: string,
+  publicCode: string,
+  email: string,
+) {
+  const token = createRespondentToken(publicCode)
+
+  await prisma.invitation.create({
+    data: {
+      questionnaireVersionId,
+      buildingId,
+      siteId,
+      createdByUserId: moderatorId,
+      publicCode,
+      tokenHash: sha256(token),
+      status: 'sent',
+      notifyModerator: true,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      sentAt: new Date(),
+      emailIdentity: {
+        create: {
+          publicCode,
+          emailCiphertext: Buffer.from(email, 'utf8').toString('base64'),
+          emailHash: sha256(email),
+          questionnaireVersionId,
+          buildingId,
+          createdByUserId: moderatorId,
+          lastEmailSentAt: new Date(),
+        },
+      },
+      deliveryEvents: {
+        create: {
+          publicCode,
+          eventType: 'dev_link_created',
+          metadata: { seeded: true, accessLink: `/r/${token}` },
+        },
+      },
+    },
+  })
+
+  return token
 }
 
 async function createDemoInvitations(questionnaireVersionId: string, moderatorId: string, buildingId: string, siteId: string) {
