@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module'
 import { BuildingsModule } from './buildings/buildings.module'
 import { JudicialModule } from './judicial/judicial.module'
 import { ModerationModule } from './moderation/moderation.module'
+import { NotificationsModule } from './notifications/notifications.module'
 import { PrismaModule } from './prisma/prisma.module'
 import { QuestionnairesModule } from './questionnaires/questionnaires.module'
 import { RespondentModule } from './respondent/respondent.module'
@@ -27,6 +28,7 @@ import { VersionsModule } from './versions/versions.module'
     QuestionnairesModule,
     VersionsModule,
     ModerationModule,
+    NotificationsModule,
     RespondentModule,
     StatsModule,
     JudicialModule,
