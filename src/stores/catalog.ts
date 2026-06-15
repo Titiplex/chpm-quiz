@@ -6,10 +6,17 @@ import type {
   ApiBuilding,
   ApiQuestionnaire,
   BuildingsResponse,
+  CreateQuestionGroupRequest,
+  CreateQuestionnaireRequest,
+  CreateQuestionRequest,
+  QuestionnaireResponse,
   QuestionnairesResponse,
+  UpdateQuestionGroupRequest,
+  UpdateQuestionnaireRequest,
+  UpdateQuestionRequest,
 } from '@shared/types/api'
 
-type CatalogStatus = 'idle' | 'loading' | 'ready' | 'error'
+type CatalogStatus = 'idle' | 'loading' | 'ready' | 'saving' | 'error'
 
 export const useCatalogStore = defineStore('catalog', () => {
   const buildings = ref<ApiBuilding[]>([])
@@ -40,6 +47,123 @@ export const useCatalogStore = defineStore('catalog', () => {
     }
   }
 
+  async function createQuestionnaire(payload: CreateQuestionnaireRequest): Promise<ApiQuestionnaire> {
+    return saveMutation(() =>
+      apiRequest<QuestionnaireResponse>('/questionnaires', {
+        method: 'POST',
+        body: payload,
+      }),
+    )
+  }
+
+  async function updateQuestionnaire(
+    questionnaireId: string,
+    payload: UpdateQuestionnaireRequest,
+  ): Promise<ApiQuestionnaire> {
+    return saveMutation(() =>
+      apiRequest<QuestionnaireResponse>(`/questionnaires/${questionnaireId}`, {
+        method: 'PATCH',
+        body: payload,
+      }),
+    )
+  }
+
+  async function createGroup(
+    questionnaireId: string,
+    payload: CreateQuestionGroupRequest,
+  ): Promise<ApiQuestionnaire> {
+    return saveMutation(() =>
+      apiRequest<QuestionnaireResponse>(`/questionnaires/${questionnaireId}/groups`, {
+        method: 'POST',
+        body: payload,
+      }),
+    )
+  }
+
+  async function updateGroup(
+    questionnaireId: string,
+    groupId: string,
+    payload: UpdateQuestionGroupRequest,
+  ): Promise<ApiQuestionnaire> {
+    return saveMutation(() =>
+      apiRequest<QuestionnaireResponse>(`/questionnaires/${questionnaireId}/groups/${groupId}`, {
+        method: 'PATCH',
+        body: payload,
+      }),
+    )
+  }
+
+  async function archiveGroup(questionnaireId: string, groupId: string): Promise<ApiQuestionnaire> {
+    return saveMutation(() =>
+      apiRequest<QuestionnaireResponse>(`/questionnaires/${questionnaireId}/groups/${groupId}`, {
+        method: 'DELETE',
+      }),
+    )
+  }
+
+  async function createQuestion(
+    questionnaireId: string,
+    groupId: string,
+    payload: CreateQuestionRequest,
+  ): Promise<ApiQuestionnaire> {
+    return saveMutation(() =>
+      apiRequest<QuestionnaireResponse>(`/questionnaires/${questionnaireId}/groups/${groupId}/questions`, {
+        method: 'POST',
+        body: payload,
+      }),
+    )
+  }
+
+  async function updateQuestion(
+    questionnaireId: string,
+    questionId: string,
+    payload: UpdateQuestionRequest,
+  ): Promise<ApiQuestionnaire> {
+    return saveMutation(() =>
+      apiRequest<QuestionnaireResponse>(`/questionnaires/${questionnaireId}/questions/${questionId}`, {
+        method: 'PATCH',
+        body: payload,
+      }),
+    )
+  }
+
+  async function archiveQuestion(questionnaireId: string, questionId: string): Promise<ApiQuestionnaire> {
+    return saveMutation(() =>
+      apiRequest<QuestionnaireResponse>(`/questionnaires/${questionnaireId}/questions/${questionId}`, {
+        method: 'DELETE',
+      }),
+    )
+  }
+
+  async function saveMutation(
+    request: () => Promise<QuestionnaireResponse>,
+  ): Promise<ApiQuestionnaire> {
+    status.value = 'saving'
+    error.value = null
+
+    try {
+      const response = await request()
+      upsertQuestionnaire(response.questionnaire)
+      status.value = 'ready'
+      return response.questionnaire
+    } catch (caught) {
+      status.value = 'error'
+      error.value = caught instanceof Error ? caught.message : 'Sauvegarde impossible.'
+      throw caught
+    }
+  }
+
+  function upsertQuestionnaire(questionnaire: ApiQuestionnaire): void {
+    const index = questionnaires.value.findIndex((candidate) => candidate.id === questionnaire.id)
+
+    if (index >= 0) {
+      questionnaires.value.splice(index, 1, questionnaire)
+      return
+    }
+
+    questionnaires.value.unshift(questionnaire)
+  }
+
   return {
     buildings,
     questionnaires,
@@ -47,5 +171,13 @@ export const useCatalogStore = defineStore('catalog', () => {
     status,
     error,
     fetchCatalog,
+    createQuestionnaire,
+    updateQuestionnaire,
+    createGroup,
+    updateGroup,
+    archiveGroup,
+    createQuestion,
+    updateQuestion,
+    archiveQuestion,
   }
 })

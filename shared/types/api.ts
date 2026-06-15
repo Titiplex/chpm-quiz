@@ -50,6 +50,7 @@ export interface ApiPopupDefinition {
   title: string
   body: string
   version: string
+  termLabel?: string
 }
 
 export interface ApiQuestion extends Omit<QuestionDefinition, 'groupId'> {
@@ -78,6 +79,7 @@ export interface ApiQuestionnaire {
   code: string
   title: string
   description?: string | null
+  defaultLanguage: LanguageCode
   versionId: string
   version: string
   versionLabel: string
@@ -98,6 +100,77 @@ export interface BuildingsResponse {
 
 export interface QuestionnairesResponse {
   questionnaires: ApiQuestionnaire[]
+}
+
+export interface QuestionnaireResponse {
+  questionnaire: ApiQuestionnaire
+}
+
+export interface CreateQuestionnaireRequest {
+  code: string
+  title: string
+  description?: string
+  defaultLanguage?: LanguageCode
+  finality?: string
+}
+
+export interface UpdateQuestionnaireRequest {
+  title?: string
+  description?: string
+  defaultLanguage?: LanguageCode
+  finality?: string
+}
+
+export interface CreateQuestionGroupRequest {
+  title: string
+  description?: string
+  displayOrder?: number
+  questionsPerPage?: number
+  randomize?: boolean
+}
+
+export interface UpdateQuestionGroupRequest {
+  title?: string
+  description?: string
+  displayOrder?: number
+  questionsPerPage?: number
+  randomize?: boolean
+}
+
+export interface LikertScaleRequest {
+  points: number
+  leftAnchor: string
+  rightAnchor: string
+  neutralLabel?: string
+  allowNotApplicable?: boolean
+}
+
+export interface PopupDefinitionRequest {
+  title: string
+  body: string
+  termsExplained?: string[]
+}
+
+export interface CreateQuestionRequest {
+  code: string
+  label: string
+  helperText?: string
+  responseType: Extract<QuestionType, 'free_text' | 'free_text_short' | 'free_text_long' | 'likert'>
+  isRequired?: boolean
+  displayOrder?: number
+  likertScale?: LikertScaleRequest
+  popupDefinition?: PopupDefinitionRequest
+}
+
+export interface UpdateQuestionRequest {
+  code?: string
+  label?: string
+  helperText?: string
+  responseType?: Extract<QuestionType, 'free_text' | 'free_text_short' | 'free_text_long' | 'likert'>
+  isRequired?: boolean
+  displayOrder?: number
+  likertScale?: LikertScaleRequest
+  popupDefinition?: PopupDefinitionRequest | null
 }
 
 export interface ApiInvitation {
