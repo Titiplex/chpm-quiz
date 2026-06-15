@@ -54,6 +54,7 @@ const questionForm = reactive({
   responseType: 'free_text_short' as BuilderQuestionType,
   isRequired: false,
   likertPoints: 5,
+  likertMinValue: 1,
   likertLeftAnchor: 'Pas du tout d’accord',
   likertRightAnchor: 'Tout à fait d’accord',
   likertNeutralLabel: 'Neutre',
@@ -250,6 +251,7 @@ function editQuestion(question: ApiQuestion): void {
   questionForm.responseType = (question.responseType ?? question.type) as BuilderQuestionType
   questionForm.isRequired = Boolean(question.isRequired)
   questionForm.likertPoints = question.likertScale?.points ?? 5
+  questionForm.likertMinValue = question.likertScale?.minValue ?? 1
   questionForm.likertLeftAnchor = question.likertScale?.leftAnchor ?? 'Pas du tout d’accord'
   questionForm.likertRightAnchor = question.likertScale?.rightAnchor ?? 'Tout à fait d’accord'
   questionForm.likertNeutralLabel = question.likertScale?.neutralLabel ?? 'Neutre'
@@ -266,6 +268,7 @@ function resetQuestionForm(): void {
   questionForm.responseType = 'free_text' as BuilderQuestionType
   questionForm.isRequired = false
   questionForm.likertPoints = 5
+  questionForm.likertMinValue = 1
   questionForm.likertLeftAnchor = 'Pas du tout d’accord'
   questionForm.likertRightAnchor = 'Tout à fait d’accord'
   questionForm.likertNeutralLabel = 'Neutre'
@@ -286,6 +289,7 @@ function buildQuestionPayload() {
       ? {
           likertScale: {
             points: Number(questionForm.likertPoints),
+            minValue: Number(questionForm.likertMinValue),
             leftAnchor: questionForm.likertLeftAnchor,
             rightAnchor: questionForm.likertRightAnchor,
             neutralLabel: questionForm.likertNeutralLabel,
@@ -332,6 +336,13 @@ function termsFromText(value: string): string[] {
 function nextQuestionCode(): string {
   const count = selectedGroup.value?.questions.length ?? allQuestions.value.length
   return `Q-${String(count + 1).padStart(3, '0')}`
+}
+
+function likertValues(scale?: { points: number; minValue?: number } | null): number[] {
+  if (!scale) return []
+
+  const minValue = scale.minValue ?? 1
+  return Array.from({ length: scale.points }, (_, index) => minValue + index)
 }
 
 function questionTypeLabel(type?: QuestionType): string {
@@ -608,15 +619,19 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                     </div>
 
                     <template v-if="questionForm.responseType === 'likert'">
-                      <div class="col-md-4">
+                      <div class="col-md-3">
                         <label class="form-label small fw-bold" for="likert-points">Points</label>
                         <input id="likert-points" v-model.number="questionForm.likertPoints" class="form-control" min="3" max="10" type="number" />
                       </div>
-                      <div class="col-md-4">
+                      <div class="col-md-3">
+                        <label class="form-label small fw-bold" for="likert-min-value">Première valeur</label>
+                        <input id="likert-min-value" v-model.number="questionForm.likertMinValue" class="form-control" min="0" max="10" type="number" />
+                      </div>
+                      <div class="col-md-3">
                         <label class="form-label small fw-bold" for="likert-left">Libellé gauche</label>
                         <input id="likert-left" v-model="questionForm.likertLeftAnchor" class="form-control" />
                       </div>
-                      <div class="col-md-4">
+                      <div class="col-md-3">
                         <label class="form-label small fw-bold" for="likert-right">Libellé droit</label>
                         <input id="likert-right" v-model="questionForm.likertRightAnchor" class="form-control" />
                       </div>
@@ -717,8 +732,8 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                       {{ question.likertScale.leftAnchor }} · {{ question.likertScale.rightAnchor }}
                     </p>
                     <div class="likert-scale" role="group" :aria-label="`Échelle Likert ${question.likertScale.points} points`">
-                      <button v-for="n in question.likertScale.points" :key="n" class="likert-dot border-0" type="button">
-                        {{ n }}
+                      <button v-for="value in likertValues(question.likertScale)" :key="value" class="likert-dot border-0" type="button">
+                        {{ value }}
                       </button>
                     </div>
                   </div>

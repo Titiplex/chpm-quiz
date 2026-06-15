@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
 import KpiCard from '@/components/common/KpiCard.vue'
 import { useRespondentSessionStore } from '@/stores/respondentSession'
-import type { RespondentQuestion } from '@shared/types/api'
+import type { RespondentQuestion, RespondentQuestionGroup } from '@shared/types/api'
 
 const route = useRoute()
 const respondent = useRespondentSessionStore()
@@ -13,10 +13,53 @@ const answers = reactive<Record<string, unknown>>({})
 const token = computed(() => String(route.params.token ?? ''))
 const hasToken = computed(() => Boolean(token.value))
 const groups = computed(() => respondent.session?.questionnaire.groups ?? [])
+const pageIndex = ref(0)
+
+type RespondentPage = {
+  group: RespondentQuestionGroup
+  questions: RespondentQuestion[]
+}
+
+const pages = computed<RespondentPage[]>(() =>
+  groups.value.flatMap((group) => {
+    const questionsPerPage = Math.max(1, group.questionsPerPage || group.questions.length || 1)
+    const chunks: RespondentPage[] = []
+
+    for (let index = 0; index < group.questions.length; index += questionsPerPage) {
+      chunks.push({
+        group,
+        questions: group.questions.slice(index, index + questionsPerPage),
+      })
+    }
+
+    return chunks
+  }),
+)
+
+const currentPage = computed(() => pages.value[Math.min(pageIndex.value, Math.max(pages.value.length - 1, 0))] ?? null)
+const currentPageNumber = computed(() => (pages.value.length ? pageIndex.value + 1 : 0))
+const isFirstPage = computed(() => pageIndex.value <= 0)
+const isLastPage = computed(() => pageIndex.value >= pages.value.length - 1)
+
+watch(
+  pages,
+  (availablePages) => {
+    if (!availablePages.length) {
+      pageIndex.value = 0
+      return
+    }
+
+    if (pageIndex.value > availablePages.length - 1) {
+      pageIndex.value = availablePages.length - 1
+    }
+  },
+  { immediate: true },
+)
 
 onMounted(async () => {
   if (hasToken.value) {
     await respondent.load(token.value)
+    pageIndex.value = Math.max(0, (respondent.session?.responseSession.currentPage ?? 1) - 1)
     for (const question of respondent.questions) {
       if (question.answer) {
         answers[question.id] = question.answer.value
@@ -32,6 +75,21 @@ function questionValue(question: RespondentQuestion): unknown {
 async function save(question: RespondentQuestion, value: unknown) {
   answers[question.id] = value
   await respondent.save(question.id, value)
+}
+
+function likertValues(scale?: { points: number; minValue?: number } | null): number[] {
+  if (!scale) return []
+
+  const minValue = scale.minValue ?? 1
+  return Array.from({ length: scale.points }, (_, index) => minValue + index)
+}
+
+function previousPage(): void {
+  pageIndex.value = Math.max(0, pageIndex.value - 1)
+}
+
+function nextPage(): void {
+  pageIndex.value = Math.min(Math.max(pages.value.length - 1, 0), pageIndex.value + 1)
 }
 
 async function openPopup(question: RespondentQuestion) {
@@ -96,13 +154,28 @@ async function openPopup(question: RespondentQuestion) {
                   </div>
                 </div>
 
-                <div v-for="group in groups" :key="group.id" class="mb-4">
-                  <div class="d-flex justify-content-between align-items-center mb-3">
-                    <span class="badge-soft">{{ group.title }} · {{ group.questionsPerPage }} question(s)/page</span>
-                    <span v-if="group.randomize" class="badge-soft warning">ordre randomisé stable</span>
+                <div v-if="currentPage" class="mb-4">
+                  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <div>
+                      <span class="badge-soft">
+                        Page {{ currentPageNumber }} / {{ pages.length }} ·
+                        {{ currentPage.group.title }} ·
+                        {{ currentPage.group.questionsPerPage }} question(s)/page
+                      </span>
+                      <span v-if="currentPage.group.randomize" class="badge-soft warning ms-2">ordre randomisé stable</span>
+                    </div>
+                    <div class="d-flex gap-2">
+                      <button class="btn btn-sm btn-outline-primary" type="button" :disabled="isFirstPage" @click="previousPage">
+                        Précédent
+                      </button>
+                      <button class="btn btn-sm btn-outline-primary" type="button" :disabled="isLastPage" @click="nextPage">
+                        Suivant
+                      </button>
+                    </div>
                   </div>
+                  <p v-if="currentPage.group.description" class="muted mb-3">{{ currentPage.group.description }}</p>
 
-                  <div v-for="question in group.questions" :key="question.id" class="question-row mb-3">
+                  <div v-for="question in currentPage.questions" :key="question.id" class="question-row mb-3">
                     <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
                       <span class="badge-soft">{{ question.code }} · {{ question.responseType }}</span>
                       <button
@@ -123,15 +196,15 @@ async function openPopup(question: RespondentQuestion) {
                       </p>
                       <div class="likert-scale" role="group" :aria-label="`Échelle Likert ${question.likertScale.points} points`">
                         <button
-                          v-for="n in question.likertScale.points"
-                          :key="n"
+                          v-for="value in likertValues(question.likertScale)"
+                          :key="value"
                           class="likert-dot border-0"
-                          :class="{ active: Number(questionValue(question)) === n }"
+                          :class="{ active: Number(questionValue(question)) === value }"
                           type="button"
                           :disabled="respondent.isLocked"
-                          @click="save(question, n)"
+                          @click="save(question, value)"
                         >
-                          {{ n }}
+                          {{ value }}
                         </button>
                       </div>
                     </div>
@@ -167,20 +240,29 @@ async function openPopup(question: RespondentQuestion) {
                       <p class="small muted mb-0 mt-2">{{ question.popupDefinitions[0].body }}</p>
                     </div>
                   </div>
+
+                  <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
+                    <button class="btn btn-outline-primary" type="button" :disabled="isFirstPage" @click="previousPage">
+                      Précédent
+                    </button>
+                    <button v-if="!isLastPage" class="btn btn-primary" type="button" @click="nextPage">
+                      Question suivante
+                    </button>
+                    <button
+                      v-else
+                      class="btn btn-primary"
+                      type="button"
+                      :disabled="respondent.isLocked || respondent.status === 'saving'"
+                      @click="respondent.submit"
+                    >
+                      Confirmer la soumission finale et verrouiller
+                    </button>
+                  </div>
                 </div>
 
                 <div v-if="respondent.warnings.length" class="alert alert-warning rounded-4">
                   Une réponse libre semble contenir une donnée directement identifiante. Elle est sauvegardée mais signalée pour information.
                 </div>
-
-                <button
-                  class="btn btn-primary btn-lg w-100"
-                  type="button"
-                  :disabled="respondent.isLocked || respondent.status === 'saving'"
-                  @click="respondent.submit"
-                >
-                  Confirmer la soumission finale et verrouiller
-                </button>
               </div>
             </div>
 
