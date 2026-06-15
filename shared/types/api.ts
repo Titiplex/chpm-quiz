@@ -29,6 +29,7 @@ export interface AuthResponse {
 export interface ApiLikertScale {
   id: string
   points: number
+  minValue?: number
   leftAnchor: string
   rightAnchor: string
   neutralLabel: string | null
@@ -139,6 +140,7 @@ export interface UpdateQuestionGroupRequest {
 
 export interface LikertScaleRequest {
   points: number
+  minValue?: number
   leftAnchor: string
   rightAnchor: string
   neutralLabel?: string

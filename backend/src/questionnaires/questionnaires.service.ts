@@ -218,6 +218,7 @@ export class QuestionnairesService {
               likertScale: {
                 create: {
                   points: dto.likertScale.points,
+                  minValue: dto.likertScale.minValue ?? 1,
                   leftAnchor: dto.likertScale.leftAnchor.trim(),
                   rightAnchor: dto.likertScale.rightAnchor.trim(),
                   neutralLabel: cleanOptionalText(dto.likertScale.neutralLabel),
@@ -272,6 +273,7 @@ export class QuestionnairesService {
           where: { questionId },
           update: {
             points: dto.likertScale.points,
+            minValue: dto.likertScale.minValue ?? 1,
             leftAnchor: dto.likertScale.leftAnchor.trim(),
             rightAnchor: dto.likertScale.rightAnchor.trim(),
             neutralLabel: cleanOptionalText(dto.likertScale.neutralLabel),
@@ -280,6 +282,7 @@ export class QuestionnairesService {
           create: {
             questionId,
             points: dto.likertScale.points,
+            minValue: dto.likertScale.minValue ?? 1,
             leftAnchor: dto.likertScale.leftAnchor.trim(),
             rightAnchor: dto.likertScale.rightAnchor.trim(),
             neutralLabel: cleanOptionalText(dto.likertScale.neutralLabel),
@@ -340,7 +343,7 @@ export class QuestionnairesService {
         label: question.label,
         type: question.responseType,
         responseType: question.responseType,
-        answerScaleLabel: question.likertScale ? `${question.likertScale.points} points` : this.responseTypeLabel(question.responseType),
+        answerScaleLabel: question.likertScale ? this.likertScaleLabel(question.likertScale) : this.responseTypeLabel(question.responseType),
         helperText: question.helperText,
         popupTerm: question.popupDefinitions[0]?.title ?? null,
         popupBody: question.popupDefinitions[0]?.body ?? null,
@@ -615,6 +618,13 @@ export class QuestionnairesService {
         },
       },
     }
+  }
+
+  private likertScaleLabel(likertScale: { points: number; minValue?: number | null }): string {
+    const minValue = likertScale.minValue ?? 1
+    const maxValue = minValue + likertScale.points - 1
+
+    return `${likertScale.points} points (${minValue}–${maxValue})`
   }
 
   private responseTypeLabel(responseType: string): string {

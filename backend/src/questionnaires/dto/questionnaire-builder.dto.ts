@@ -104,6 +104,12 @@ export class LikertScaleDto {
   @Max(10)
   points!: number
 
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  minValue?: number
+
   @IsString()
   @MinLength(2)
   @MaxLength(80)
