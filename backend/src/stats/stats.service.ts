@@ -18,7 +18,7 @@ export class StatsService {
         versions: {
           orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
           include: {
-            submissions: true,
+            submissions: { include: { building: true } },
             invitations: {
               include: {
                 building: true,
@@ -53,7 +53,7 @@ export class StatsService {
     const scopedVersions = questionnaire.versions.map((version: any) => ({
       ...version,
       invitations: version.invitations.filter((invitation: any) => this.isInvitationVisible(invitation, user)),
-      submissions: version.submissions.filter((submission: any) => this.isBuildingVisible(submission.buildingId, user)),
+      submissions: version.submissions.filter((submission: any) => this.isSubmissionVisible(submission, user)),
     }))
 
     const totalInvited = scopedVersions.reduce((total: number, version: any) => total + version.invitations.length, 0)
@@ -115,7 +115,7 @@ export class StatsService {
       },
     })
 
-    if (!submission || !this.isBuildingVisible(submission.buildingId, user)) {
+    if (!submission || !this.isSubmissionVisible(submission, user)) {
       throw new NotFoundException('Soumission introuvable dans votre périmètre')
     }
 
@@ -169,16 +169,20 @@ export class StatsService {
       byBuilding.set(invitation.buildingId, row)
     }
 
-    return Array.from(byBuilding.entries()).map(([buildingId, row]) => ({
-      buildingId,
-      label: row.label,
-      invited: row.invited,
-      started: row.started,
-      submitted: row.submitted,
-      effectifSufficient: row.submitted >= this.threshold(),
-      completionRate: row.invited === 0 ? 0 : Math.round((row.submitted / row.invited) * 100),
-      displayValue: row.submitted >= this.threshold() ? `${row.submitted} soumis` : 'effectif insuffisant',
-    }))
+    return Array.from(byBuilding.entries()).map(([buildingId, row]) => {
+      const effectifSufficient = row.submitted >= this.threshold()
+
+      return {
+        buildingId,
+        label: row.label,
+        invited: effectifSufficient ? row.invited : null,
+        started: effectifSufficient ? row.started : null,
+        submitted: effectifSufficient ? row.submitted : null,
+        effectifSufficient,
+        completionRate: effectifSufficient && row.invited > 0 ? Math.round((row.submitted / row.invited) * 100) : null,
+        displayValue: effectifSufficient ? `${row.submitted} soumis` : 'effectif insuffisant',
+      }
+    })
   }
 
   private questionBreakdown(versions: any[]) {
@@ -191,29 +195,64 @@ export class StatsService {
         0,
       )
 
+      const effectifSufficient = submittedAnswers.length >= this.threshold()
+      const questionTimes = question.telemetryEvents
+        .filter((event: any) => event.eventType === 'question_time' || event.eventType === 'page_change')
+        .map((event: any) => event.durationMs)
+        .filter((duration: unknown): duration is number => typeof duration === 'number')
+
       return {
         id: question.id,
         code: question.code,
         label: question.label,
         responseType: question.responseType,
-        answerCount: submittedAnswers.length,
-        popupOpens,
-        effectifSufficient: submittedAnswers.length >= this.threshold(),
+        answerCount: effectifSufficient ? submittedAnswers.length : null,
+        popupOpens: effectifSufficient ? popupOpens : null,
+        medianDurationMs: effectifSufficient ? this.median(questionTimes) : null,
+        effectifSufficient,
+        displayValue: effectifSufficient ? `${submittedAnswers.length} réponse(s)` : 'effectif insuffisant',
       }
     })
   }
 
+  private median(values: number[]): number | null {
+    if (!values.length) return null
+    const sorted = [...values].sort((left, right) => left - right)
+    const middle = Math.floor(sorted.length / 2)
+    if (sorted.length % 2 === 0) {
+      return Math.round(((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2)
+    }
+
+    return sorted[middle] ?? null
+  }
+
   private isInvitationVisible(invitation: any, user: AuthenticatedUser): boolean {
-    return this.isBuildingVisible(invitation.buildingId, user)
+    if (user.role === 'moderator') {
+      return user.buildingId === invitation.buildingId
+    }
+
+    if (user.role === 'site_manager') {
+      return user.siteId === invitation.building?.siteId
+    }
+
+    return true
+  }
+
+  private isSubmissionVisible(submission: any, user: AuthenticatedUser): boolean {
+    if (user.role === 'moderator') {
+      return user.buildingId === submission.buildingId
+    }
+
+    if (user.role === 'site_manager') {
+      return user.siteId === submission.building?.siteId
+    }
+
+    return true
   }
 
   private isBuildingVisible(buildingId: string, user: AuthenticatedUser): boolean {
     if (user.role === 'moderator') {
       return user.buildingId === buildingId
-    }
-
-    if (user.role === 'site_manager') {
-      return true
     }
 
     return true

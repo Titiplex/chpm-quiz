@@ -1,5 +1,7 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common'
+import { Controller, Get, Param, Req, UseGuards } from '@nestjs/common'
+import type { Request } from 'express'
 
+import { AuditService } from '../audit/audit.service'
 import type { AuthenticatedUser } from '../auth/auth.types'
 import { CurrentUser } from '../common/decorators/current-user.decorator'
 import { Roles } from '../common/decorators/roles.decorator'
@@ -10,7 +12,10 @@ import { StatsService } from './stats.service'
 @UseGuards(SessionAuthGuard, RolesGuard)
 @Controller('stats')
 export class StatsController {
-  constructor(private readonly statsService: StatsService) {}
+  constructor(
+    private readonly statsService: StatsService,
+    private readonly auditService: AuditService,
+  ) {}
 
   @Get('questionnaires/:id')
   @Roles('admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo')
@@ -21,8 +26,20 @@ export class StatsController {
 
   @Get('submissions/:publicCode')
   @Roles('admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo')
-  async submission(@Param('publicCode') publicCode: string, @CurrentUser() user: AuthenticatedUser) {
+  async submission(
+    @Param('publicCode') publicCode: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: Request,
+  ) {
     const submission = await this.statsService.submission(publicCode, user)
+    await this.auditService.log({
+      actor: user,
+      action: 'stats.submission_pseudonymized.read',
+      entityType: 'Submission',
+      publicCode,
+      request,
+      metadata: { questionnaire: submission.questionnaire, answerCount: submission.answerCount },
+    })
     return { submission }
   }
 }

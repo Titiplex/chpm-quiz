@@ -106,8 +106,8 @@ watch(selectedQuestionnaireId, async (id) => {
                   <tbody>
                     <tr v-for="building in statsStore.stats.buildings" :key="building.buildingId">
                       <td class="fw-semibold">{{ building.label }}</td>
-                      <td>{{ building.invited }}</td>
-                      <td>{{ building.submitted }}</td>
+                      <td>{{ building.invited ?? "—" }}</td>
+                      <td>{{ building.submitted ?? "—" }}</td>
                       <td>
                         <span class="badge-soft" :class="{ success: building.effectifSufficient, warning: !building.effectifSufficient }">
                           {{ building.displayValue }}
@@ -147,11 +147,11 @@ watch(selectedQuestionnaireId, async (id) => {
                         <div class="small muted">{{ question.label }}</div>
                       </td>
                       <td>{{ question.responseType }}</td>
-                      <td>{{ question.answerCount }}</td>
-                      <td>{{ question.popupOpens }}</td>
+                      <td>{{ question.answerCount ?? "—" }}</td>
+                      <td>{{ question.popupOpens ?? "—" }}</td>
                       <td>
                         <span class="badge-soft" :class="{ success: question.effectifSufficient, warning: !question.effectifSufficient }">
-                          {{ question.effectifSufficient ? 'affichable' : 'effectif insuffisant' }}
+                          {{ question.displayValue }}
                         </span>
                       </td>
                     </tr>
