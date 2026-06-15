@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common'
 import type { Request } from 'express'
 
 import type { AuthenticatedUser } from '../auth/auth.types'
@@ -7,6 +7,7 @@ import { Roles } from '../common/decorators/roles.decorator'
 import { RolesGuard } from '../common/guards/roles.guard'
 import { SessionAuthGuard } from '../common/guards/session-auth.guard'
 import { CreateJudicialRequestDto } from './dto/create-judicial-request.dto'
+import { JudicialWorkflowCommentDto, RejectJudicialRequestDto } from './dto/judicial-workflow.dto'
 import { JudicialService } from './judicial.service'
 
 @UseGuards(SessionAuthGuard, RolesGuard)
@@ -29,6 +30,64 @@ export class JudicialController {
     @Req() request: Request,
   ) {
     const judicialRequest = await this.judicialService.create(dto, user, request)
+    return { judicialRequest }
+  }
+
+  @Post(':id/validate-dpo')
+  @Roles('admin', 'dpo')
+  async validateDpo(
+    @Param('id') id: string,
+    @Body() dto: JudicialWorkflowCommentDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: Request,
+  ) {
+    const judicialRequest = await this.judicialService.validateDpo(id, user, dto, request)
+    return { judicialRequest }
+  }
+
+  @Post(':id/validate-legal')
+  @Roles('admin', 'judicial_officer')
+  async validateLegal(
+    @Param('id') id: string,
+    @Body() dto: JudicialWorkflowCommentDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: Request,
+  ) {
+    const judicialRequest = await this.judicialService.validateLegal(id, user, dto, request)
+    return { judicialRequest }
+  }
+
+  @Post(':id/reject')
+  @Roles('admin', 'dpo', 'judicial_officer')
+  async reject(
+    @Param('id') id: string,
+    @Body() dto: RejectJudicialRequestDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: Request,
+  ) {
+    const judicialRequest = await this.judicialService.reject(id, user, dto, request)
+    return { judicialRequest }
+  }
+
+  @Post(':id/execute')
+  @Roles('admin', 'judicial_officer')
+  async execute(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: Request,
+  ) {
+    return this.judicialService.execute(id, user, request)
+  }
+
+  @Post(':id/close')
+  @Roles('admin', 'dpo', 'judicial_officer')
+  async close(
+    @Param('id') id: string,
+    @Body() dto: JudicialWorkflowCommentDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: Request,
+  ) {
+    const judicialRequest = await this.judicialService.close(id, user, dto, request)
     return { judicialRequest }
   }
 }
