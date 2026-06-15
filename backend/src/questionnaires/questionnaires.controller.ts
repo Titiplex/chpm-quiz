@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common'
 import type { Request } from 'express'
 
 import { AuditService } from '../audit/audit.service'
@@ -8,6 +8,13 @@ import { Roles } from '../common/decorators/roles.decorator'
 import { RolesGuard } from '../common/guards/roles.guard'
 import { SessionAuthGuard } from '../common/guards/session-auth.guard'
 import { CreateQuestionnaireDto } from './dto/create-questionnaire.dto'
+import {
+  CreateQuestionDto,
+  CreateQuestionGroupDto,
+  UpdateQuestionDto,
+  UpdateQuestionGroupDto,
+  UpdateQuestionnaireDto,
+} from './dto/questionnaire-builder.dto'
 import { QuestionnairesService } from './questionnaires.service'
 
 @UseGuards(SessionAuthGuard, RolesGuard)
@@ -32,6 +39,13 @@ export class QuestionnairesController {
     return { questionnaire }
   }
 
+  @Get(':id/preview')
+  @Roles('admin', 'moderator', 'questionnaire_admin')
+  async preview(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    const questionnaire = await this.questionnairesService.getOneForUser(id, user)
+    return { questionnaire }
+  }
+
   @Post()
   @Roles('admin', 'questionnaire_admin')
   async create(
@@ -46,7 +60,150 @@ export class QuestionnairesController {
       entityType: 'Questionnaire',
       entityId: questionnaire.id,
       request,
-      metadata: { code: questionnaire.code },
+      metadata: { code: questionnaire.code, versionId: questionnaire.versionId },
+    })
+    return { questionnaire }
+  }
+
+  @Patch(':id')
+  @Roles('admin', 'questionnaire_admin')
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateQuestionnaireDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: Request,
+  ) {
+    const questionnaire = await this.questionnairesService.updateQuestionnaire(id, dto, user)
+    await this.auditService.log({
+      actor: user,
+      action: 'questionnaire.updateDraftMetadata',
+      entityType: 'Questionnaire',
+      entityId: questionnaire.id,
+      request,
+      metadata: { code: questionnaire.code, versionId: questionnaire.versionId },
+    })
+    return { questionnaire }
+  }
+
+  @Post(':id/groups')
+  @Roles('admin', 'questionnaire_admin')
+  async createGroup(
+    @Param('id') id: string,
+    @Body() dto: CreateQuestionGroupDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: Request,
+  ) {
+    const questionnaire = await this.questionnairesService.createGroup(id, dto, user)
+    await this.auditService.log({
+      actor: user,
+      action: 'questionnaire.group.create',
+      entityType: 'Questionnaire',
+      entityId: questionnaire.id,
+      request,
+      metadata: { versionId: questionnaire.versionId, groupTitle: dto.title },
+    })
+    return { questionnaire }
+  }
+
+  @Patch(':id/groups/:groupId')
+  @Roles('admin', 'questionnaire_admin')
+  async updateGroup(
+    @Param('id') id: string,
+    @Param('groupId') groupId: string,
+    @Body() dto: UpdateQuestionGroupDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: Request,
+  ) {
+    const questionnaire = await this.questionnairesService.updateGroup(id, groupId, dto, user)
+    await this.auditService.log({
+      actor: user,
+      action: 'questionnaire.group.update',
+      entityType: 'QuestionGroup',
+      entityId: groupId,
+      request,
+      metadata: { questionnaireId: id, versionId: questionnaire.versionId },
+    })
+    return { questionnaire }
+  }
+
+  @Delete(':id/groups/:groupId')
+  @Roles('admin', 'questionnaire_admin')
+  async archiveGroup(
+    @Param('id') id: string,
+    @Param('groupId') groupId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: Request,
+  ) {
+    const questionnaire = await this.questionnairesService.archiveGroup(id, groupId, user)
+    await this.auditService.log({
+      actor: user,
+      action: 'questionnaire.group.archive',
+      entityType: 'QuestionGroup',
+      entityId: groupId,
+      request,
+      metadata: { questionnaireId: id, versionId: questionnaire.versionId },
+    })
+    return { questionnaire }
+  }
+
+  @Post(':id/groups/:groupId/questions')
+  @Roles('admin', 'questionnaire_admin')
+  async createQuestion(
+    @Param('id') id: string,
+    @Param('groupId') groupId: string,
+    @Body() dto: CreateQuestionDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: Request,
+  ) {
+    const questionnaire = await this.questionnairesService.createQuestion(id, groupId, dto, user)
+    await this.auditService.log({
+      actor: user,
+      action: 'questionnaire.question.create',
+      entityType: 'Questionnaire',
+      entityId: questionnaire.id,
+      request,
+      metadata: { versionId: questionnaire.versionId, groupId, code: dto.code },
+    })
+    return { questionnaire }
+  }
+
+  @Patch(':id/questions/:questionId')
+  @Roles('admin', 'questionnaire_admin')
+  async updateQuestion(
+    @Param('id') id: string,
+    @Param('questionId') questionId: string,
+    @Body() dto: UpdateQuestionDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: Request,
+  ) {
+    const questionnaire = await this.questionnairesService.updateQuestion(id, questionId, dto, user)
+    await this.auditService.log({
+      actor: user,
+      action: 'questionnaire.question.update',
+      entityType: 'Question',
+      entityId: questionId,
+      request,
+      metadata: { questionnaireId: id, versionId: questionnaire.versionId },
+    })
+    return { questionnaire }
+  }
+
+  @Delete(':id/questions/:questionId')
+  @Roles('admin', 'questionnaire_admin')
+  async archiveQuestion(
+    @Param('id') id: string,
+    @Param('questionId') questionId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: Request,
+  ) {
+    const questionnaire = await this.questionnairesService.archiveQuestion(id, questionId, user)
+    await this.auditService.log({
+      actor: user,
+      action: 'questionnaire.question.archive',
+      entityType: 'Question',
+      entityId: questionId,
+      request,
+      metadata: { questionnaireId: id, versionId: questionnaire.versionId },
     })
     return { questionnaire }
   }
