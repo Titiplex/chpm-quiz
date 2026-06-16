@@ -795,10 +795,17 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                   <div v-else-if="question.responseType === 'information'" class="alert alert-info rounded-4 mb-3">Bloc d’information sans réponse attendue.</div>
                   <textarea v-else class="form-control mb-3" rows="3" placeholder="Réponse du répondant"></textarea>
 
+                  <div v-if="question.popupDefinitions?.length" class="info-bubble-list mb-3">
+                    <span v-for="popup in question.popupDefinitions ?? []" :key="popup.id" class="info-bubble">
+                      <span class="info-bubble-icon" aria-hidden="true">i</span>
+                      {{ popup.title }}
+                    </span>
+                  </div>
+
                   <div v-for="popup in question.popupDefinitions ?? []" :key="popup.id" class="question-help mb-2">
                     <div class="d-flex justify-content-between gap-3">
                       <strong>{{ popup.title }}</strong>
-                      <span class="badge-soft warning">popup persistée</span>
+                      <span class="badge-soft warning">bulle persistée</span>
                     </div>
                     <p class="small muted mb-0 mt-2">{{ popup.body }}</p>
                   </div>

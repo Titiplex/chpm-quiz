@@ -19,7 +19,7 @@ type UserRole =
   | 'judicial_officer'
   | 'technical_admin'
 
-type QuestionType = 'single_choice' | 'multiple_choice' | 'likert' | 'free_text' | 'free_text_long' | 'information'
+type QuestionType = 'single_choice' | 'multiple_choice' | 'likert' | 'free_text' | 'free_text_short' | 'free_text_long' | 'number' | 'date' | 'information'
 
 const userSeeds: Array<{
   email: string
@@ -329,7 +329,7 @@ async function main() {
     console.log(`- ${user.email} / ${user.password}`)
   }
   console.log('Le répondant utilise désormais un lien /r/<token> généré par la modération, pas un compte interne.')
-  console.log(`Questionnaire ITQ seedé : version publiée, 20 écrans dont 18 items cotés, 1 question par page.`)
+  console.log(`Questionnaire ITQ seedé : version publiée, 20 écrans dont 18 items cotés, 1 question par page, bulles d’information activées.`)
   console.log(`Lien répondant ITQ de démonstration : /r/${itqDemoToken}`)
 }
 
@@ -441,7 +441,7 @@ async function createItqQuestionnaire(organizationId: string, ownerUserId: strin
     },
   })
 
-  return prisma.questionnaireVersion.create({
+  const version = await prisma.questionnaireVersion.create({
     data: {
       questionnaireId: questionnaire.id,
       versionLabel: '1.0-cn2r',
@@ -696,6 +696,220 @@ async function createItqQuestionnaire(organizationId: string, ownerUserId: strin
       },
     },
   })
+
+  await attachItqPopups(version.id)
+
+  return version
+}
+
+async function attachItqPopups(questionnaireVersionId: string) {
+  const popupsByQuestionCode: Record<string, Array<{ termKey: string; title: string; body: string }>> = {
+    'ITQ-EXP-DESC': [
+      {
+        termKey: 'experience_perturbante',
+        title: 'Expérience qui perturbe le plus',
+        body:
+          'Dans l’ITQ, les réponses doivent être données par rapport à l’expérience stressante ou traumatique qui vous perturbe le plus. Évitez d’indiquer des noms, emails, téléphones ou détails directement identifiants.',
+      },
+    ],
+    'ITQ-EXP-DATE': [
+      {
+        termKey: 'periode_experience',
+        title: 'Période de l’expérience',
+        body:
+          'Cette question situe approximativement l’ancienneté de l’expérience. Choisissez la période la plus proche, sans ajouter de date précise si elle permettrait de vous identifier.',
+      },
+    ],
+    'P1': [
+      {
+        termKey: 'reves_perturbants_revivre_experience',
+        title: 'Rêves perturbants · Revivre l’expérience',
+        body:
+          'Cet item fait partie de la dimension “Revivre l’expérience” de l’ITQ. Il concerne les rêves perturbants où une partie de l’expérience se rejoue ou qui sont clairement en relation avec elle.',
+      },
+    ],
+    'P2': [
+      {
+        termKey: 'images_souvenirs_revivre_experience',
+        title: 'Images ou souvenirs forts · Revivre l’expérience',
+        body:
+          'Cet item fait partie de la dimension “Revivre l’expérience”. Il vise les images ou souvenirs intenses qui surviennent comme si l’expérience se rejouait ici et maintenant.',
+      },
+    ],
+    'P3': [
+      {
+        termKey: 'evitement_ressentis',
+        title: 'Éviter les ressentis · Évitement',
+        body:
+          'Cet item fait partie de la dimension “Évitement”. Il concerne l’évitement de rappels internes de l’expérience, par exemple pensées, sentiments ou sensations physiques.',
+      },
+    ],
+    'P4': [
+      {
+        termKey: 'evitement_elements_exterieurs',
+        title: 'Éléments extérieurs · Évitement',
+        body:
+          'Cet item fait partie de la dimension “Évitement”. Il concerne l’évitement de rappels extérieurs, par exemple personnes, lieux, conversations, objets, activités ou situations.',
+      },
+    ],
+    'P5': [
+      {
+        termKey: 'super_alerte_vigilance_menace',
+        title: 'Super-alerte / vigilance · Sentiment de menace',
+        body:
+          'Cet item fait partie de la dimension “Sentiments de menace”. Il correspond au fait de rester en hypervigilance, sur ses gardes ou en état de super-alerte.',
+      },
+    ],
+    'P6': [
+      {
+        termKey: 'sursaut_menace',
+        title: 'Sursaut · Sentiment de menace',
+        body:
+          'Cet item fait partie de la dimension “Sentiments de menace”. Il concerne les réactions de surprise ou de sursaut exagérées.',
+      },
+    ],
+    'P7': [
+      {
+        termKey: 'alteration_fonctionnelle_relations_tspt',
+        title: 'Relations et vie sociale · Retentissement',
+        body:
+          'Cet item évalue l’altération fonctionnelle associée aux symptômes de TSPT : impact sur les relations et la vie sociale au cours du dernier mois.',
+      },
+    ],
+    'P8': [
+      {
+        termKey: 'alteration_fonctionnelle_travail_tspt',
+        title: 'Travail ou capacité à travailler · Retentissement',
+        body:
+          'Cet item évalue l’altération fonctionnelle associée aux symptômes de TSPT : impact sur le travail ou la capacité à travailler au cours du dernier mois.',
+      },
+    ],
+    'P9': [
+      {
+        termKey: 'alteration_fonctionnelle_activites_tspt',
+        title: 'Autres activités importantes · Retentissement',
+        body:
+          'Cet item évalue l’altération fonctionnelle associée aux symptômes de TSPT : impact sur les enfants, les études ou d’autres activités importantes.',
+      },
+    ],
+    'C1': [
+      {
+        termKey: 'regulation_emotionnelle_calme',
+        title: 'Régulation émotionnelle',
+        body:
+          'Cet item fait partie de la dimension “Régulation émotionnelle” des perturbations dans l’organisation de soi. Il concerne la difficulté à retrouver son calme lorsqu’on est contrarié.',
+      },
+    ],
+    'C2': [
+      {
+        termKey: 'regulation_emotionnelle_insensibilite',
+        title: 'Insensibilité émotionnelle · Régulation émotionnelle',
+        body:
+          'Cet item fait partie de la dimension “Régulation émotionnelle”. Il concerne le fait de se sentir insensible ou émotionnellement éteint.',
+      },
+    ],
+    'C3': [
+      {
+        termKey: 'perception_soi_negative_nul',
+        title: 'Perception de soi négative',
+        body:
+          'Cet item fait partie de la dimension “Perception de soi négative” des perturbations dans l’organisation de soi. Il concerne le fait de se sentir nul.le.',
+      },
+    ],
+    'C4': [
+      {
+        termKey: 'perception_soi_negative_sans_valeur',
+        title: 'Sans valeur · Perception de soi négative',
+        body:
+          'Cet item fait partie de la dimension “Perception de soi négative”. Il concerne le fait de se sentir sans valeur.',
+      },
+    ],
+    'C5': [
+      {
+        termKey: 'relations_distance_coupure',
+        title: 'Distance avec les autres · Relations',
+        body:
+          'Cet item fait partie de la dimension “Déficit dans les relations”. Il concerne le sentiment d’être distant.e ou coupé.e des autres.',
+      },
+    ],
+    'C6': [
+      {
+        termKey: 'relations_proximite_emotionnelle',
+        title: 'Proximité émotionnelle · Relations',
+        body:
+          'Cet item fait partie de la dimension “Déficit dans les relations”. Il concerne la difficulté à rester émotionnellement proche des autres.',
+      },
+    ],
+    'C7': [
+      {
+        termKey: 'alteration_fonctionnelle_relations_pos',
+        title: 'Retentissement relationnel · POS',
+        body:
+          'Cet item évalue l’altération fonctionnelle liée aux perturbations dans l’organisation de soi : inquiétude ou détresse concernant les relations ou la vie sociale.',
+      },
+    ],
+    'C8': [
+      {
+        termKey: 'alteration_fonctionnelle_travail_pos',
+        title: 'Retentissement professionnel · POS',
+        body:
+          'Cet item évalue l’altération fonctionnelle liée aux perturbations dans l’organisation de soi : impact sur le travail ou la capacité à travailler.',
+      },
+    ],
+    'C9': [
+      {
+        termKey: 'alteration_fonctionnelle_activites_pos',
+        title: 'Retentissement sur les activités · POS',
+        body:
+          'Cet item évalue l’altération fonctionnelle liée aux perturbations dans l’organisation de soi : impact sur les enfants, les études ou d’autres activités importantes.',
+      },
+    ],
+  }
+
+  const questions = await prisma.question.findMany({
+    where: { group: { questionnaireVersionId } },
+    select: { id: true, code: true },
+  })
+
+  for (const question of questions) {
+    const popups = popupsByQuestionCode[question.code] ?? []
+
+    for (const popup of popups) {
+      const glossaryTerm = await prisma.glossaryTerm.upsert({
+        where: {
+          termKey_language_version: {
+            termKey: popup.termKey,
+            language: 'fr',
+            version: '1.0',
+          },
+        },
+        update: {
+          label: popup.title,
+          definition: popup.body,
+          isArchived: false,
+        },
+        create: {
+          termKey: popup.termKey,
+          language: 'fr',
+          label: popup.title,
+          definition: popup.body,
+          version: '1.0',
+        },
+      })
+
+      await prisma.popupDefinition.create({
+        data: {
+          questionId: question.id,
+          glossaryTermId: glossaryTerm.id,
+          termKey: popup.termKey,
+          language: 'fr',
+          title: popup.title,
+          body: popup.body,
+          version: '1.0',
+        },
+      })
+    }
+  }
 }
 
 async function createSeedInvitation(

@@ -4,7 +4,7 @@ import { RouterLink, useRoute } from 'vue-router'
 
 import KpiCard from '@/components/common/KpiCard.vue'
 import { useRespondentSessionStore } from '@/stores/respondentSession'
-import type { RespondentQuestion, RespondentQuestionGroup } from '@shared/types/api'
+import type { ApiPopupDefinition, RespondentQuestion, RespondentQuestionGroup } from '@shared/types/api'
 
 const route = useRoute()
 const respondent = useRespondentSessionStore()
@@ -15,6 +15,7 @@ const hasToken = computed(() => Boolean(token.value))
 const groups = computed(() => respondent.session?.questionnaire.groups ?? [])
 const pageIndex = ref(0)
 const pageStartedAt = ref(Date.now())
+const activePopup = ref<{ questionId: string; popupDefinitionId: string; termKey: string; language: string; openedAt: number } | null>(null)
 
 type RespondentPage = {
   group: RespondentQuestionGroup
@@ -71,6 +72,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  void closeActivePopup('popup_close')
   void recordPageTelemetry('page_leave')
 })
 
@@ -103,6 +105,7 @@ function likertValues(scale?: { points: number; minValue?: number } | null): num
 }
 
 async function previousPage(): Promise<void> {
+  await closeActivePopup('popup_close')
   await recordPageTelemetry('page_change')
   pageIndex.value = Math.max(0, pageIndex.value - 1)
   pageStartedAt.value = Date.now()
@@ -110,6 +113,7 @@ async function previousPage(): Promise<void> {
 }
 
 async function nextPage(): Promise<void> {
+  await closeActivePopup('popup_close')
   await recordPageTelemetry('page_change')
   pageIndex.value = Math.min(Math.max(pages.value.length - 1, 0), pageIndex.value + 1)
   pageStartedAt.value = Date.now()
@@ -131,14 +135,56 @@ async function recordPageTelemetry(eventType: string): Promise<void> {
   })
 }
 
-async function openPopup(question: RespondentQuestion) {
-  const popup = question.popupDefinitions?.[0]
-  if (!popup) return
+function popupDomId(popup: ApiPopupDefinition): string {
+  return `popup-${popup.id}`
+}
+
+function isPopupActive(popup: ApiPopupDefinition): boolean {
+  return activePopup.value?.popupDefinitionId === popup.id
+}
+
+async function togglePopup(question: RespondentQuestion, popup: ApiPopupDefinition): Promise<void> {
+  if (isPopupActive(popup)) {
+    await closeActivePopup('popup_close')
+    return
+  }
+
+  await closeActivePopup('popup_switch')
+  activePopup.value = {
+    questionId: question.id,
+    popupDefinitionId: popup.id,
+    termKey: popup.termKey,
+    language: popup.language,
+    openedAt: Date.now(),
+  }
+
   await respondent.telemetry({
     questionId: question.id,
     popupDefinitionId: popup.id,
     eventType: 'popup_open',
     currentPage: currentPageNumber.value,
+    eventPayload: {
+      termKey: popup.termKey,
+      title: popup.title,
+      language: popup.language,
+      page: currentPageNumber.value,
+    },
+    occurredAt: new Date().toISOString(),
+  })
+}
+
+async function closeActivePopup(eventType: 'popup_close' | 'popup_switch'): Promise<void> {
+  if (!activePopup.value) return
+
+  const popup = activePopup.value
+  activePopup.value = null
+
+  await respondent.telemetry({
+    questionId: popup.questionId,
+    popupDefinitionId: popup.popupDefinitionId,
+    eventType,
+    currentPage: currentPageNumber.value,
+    durationMs: Math.max(0, Date.now() - popup.openedAt),
     eventPayload: {
       termKey: popup.termKey,
       language: popup.language,
@@ -219,17 +265,43 @@ async function openPopup(question: RespondentQuestion) {
                   <div v-for="question in currentPage.questions" :key="question.id" class="question-row mb-3">
                     <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
                       <span class="badge-soft">{{ question.code }} · {{ question.responseType }}</span>
-                      <button
-                        v-if="question.popupDefinitions?.length"
-                        class="btn btn-sm btn-outline-primary"
-                        type="button"
-                        @click="openPopup(question)"
-                      >
-                        ? Explication
-                      </button>
+                      <span v-if="question.popupDefinitions?.length" class="badge-soft warning">
+                        {{ question.popupDefinitions.length }} terme(s) expliqué(s)
+                      </span>
                     </div>
                     <h2 class="h5 fw-bold">{{ question.label }}</h2>
                     <p v-if="question.helperText" class="muted">{{ question.helperText }}</p>
+
+                    <div v-if="question.popupDefinitions?.length" class="info-bubble-list mb-3" aria-label="Termes expliqués pour cette question">
+                      <button
+                        v-for="popup in question.popupDefinitions"
+                        :key="popup.id"
+                        class="info-bubble"
+                        :class="{ active: isPopupActive(popup) }"
+                        type="button"
+                        :aria-expanded="isPopupActive(popup)"
+                        :aria-controls="popupDomId(popup)"
+                        @click="togglePopup(question, popup)"
+                      >
+                        <span class="info-bubble-icon" aria-hidden="true">i</span>
+                        {{ popup.title }}
+                      </button>
+                    </div>
+
+                    <div
+                      v-for="popup in question.popupDefinitions ?? []"
+                      v-show="isPopupActive(popup)"
+                      :id="popupDomId(popup)"
+                      :key="popup.id"
+                      class="question-help mb-3"
+                      role="note"
+                    >
+                      <div class="d-flex flex-wrap justify-content-between gap-3">
+                        <strong>{{ popup.title }}</strong>
+                        <span class="badge-soft warning">ouverture tracée</span>
+                      </div>
+                      <p class="small muted mb-0 mt-2">{{ popup.body }}</p>
+                    </div>
 
                     <div v-if="question.responseType === 'likert' && question.likertScale" class="mb-3">
                       <p class="small muted mb-2">
@@ -309,13 +381,6 @@ async function openPopup(question: RespondentQuestion) {
                       @change="save(question, ($event.target as HTMLTextAreaElement).value)"
                     ></textarea>
 
-                    <div v-if="question.popupDefinitions?.[0]" class="question-help">
-                      <div class="d-flex justify-content-between gap-3">
-                        <strong>{{ question.popupDefinitions[0].title }}</strong>
-                        <span class="badge-soft warning">ouverture tracée</span>
-                      </div>
-                      <p class="small muted mb-0 mt-2">{{ question.popupDefinitions[0].body }}</p>
-                    </div>
                   </div>
 
                   <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">

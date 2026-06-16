@@ -68,6 +68,14 @@ describe('RespondentView functional flow', () => {
     const pageViewCall = calls.find((call) => call.url.endsWith('/respondent/telemetry'))
     expect(pageViewCall?.body).toMatchObject({ token: 'token-demo', eventType: 'page_view', currentPage: 1 })
 
+    const infoButton = wrapper.findAll('button').find((button) => button.text().includes('Rêves perturbants'))
+    expect(infoButton).toBeTruthy()
+    await infoButton?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Rêves en lien clair avec l’expérience.')
+    expect(calls.some((call) => call.url.endsWith('/respondent/telemetry') && (call.body as any)?.eventType === 'popup_open')).toBe(true)
+
     const zeroButton = wrapper.findAll('button').find((button) => button.text().trim() === '0')
     expect(zeroButton).toBeTruthy()
     await zeroButton?.trigger('click')
