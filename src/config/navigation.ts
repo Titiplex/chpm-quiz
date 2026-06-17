@@ -39,6 +39,13 @@ export const navigationItems: NavigationItem[] = [
     roles: ['admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo'],
     description: 'Analyse pseudonymisée, seuils anti-réidentification, temps et popups.',
   },
+
+  {
+    label: 'Coffre email',
+    to: '/coffre-email',
+    roles: ['dpo', 'judicial_officer'],
+    description: 'Workflow judiciaire, double validation et audit du coffre identité.',
+  },
   {
     label: 'Architecture / sécurité',
     to: '/architecture',
@@ -53,8 +60,8 @@ export const defaultPathByRole: Record<UserRole, string> = {
   site_manager: '/stats',
   questionnaire_admin: '/admin',
   analyst: '/stats',
-  dpo: '/architecture',
-  judicial_officer: '/architecture',
+  dpo: '/coffre-email',
+  judicial_officer: '/coffre-email',
   technical_admin: '/architecture',
   service_account: '/',
   respondent: '/questionnaire',

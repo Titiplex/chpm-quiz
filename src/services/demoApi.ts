@@ -13,10 +13,15 @@ import type {
   BuildingsResponse,
   CreateInvitationRequest,
   CreateInvitationResponse,
+  CreateJudicialAccessRequest,
   CreateQuestionGroupRequest,
   CreateQuestionnaireRequest,
   CreateQuestionRequest,
+  IdentityVaultStatusResponse,
   InvitationsResponse,
+  JudicialAccessRequestRecord,
+  JudicialAccessRequestResponse,
+  JudicialAccessRequestsResponse,
   QuestionnaireResponse,
   QuestionnairesResponse,
   RespondentAnswer,
@@ -25,6 +30,7 @@ import type {
   SaveAnswersRequest,
   SaveAnswersResponse,
   StatsResponse,
+  SubmissionDetailsResponse,
   SubmitResponse,
   UpdateQuestionGroupRequest,
   UpdateQuestionnaireRequest,
@@ -39,6 +45,7 @@ const SESSION_EMAIL_STORAGE_KEY = 'chpm_demo_session_email'
 const QUESTIONNAIRES_STORAGE_KEY = 'chpm_demo_questionnaires'
 const INVITATIONS_STORAGE_KEY = 'chpm_demo_invitations'
 const RESPONDENT_SESSIONS_STORAGE_KEY = 'chpm_demo_respondent_sessions'
+const JUDICIAL_REQUESTS_STORAGE_KEY = 'chpm_demo_judicial_requests'
 
 interface DemoUserSeed {
   email: string
@@ -116,6 +123,12 @@ const demoUsers: DemoUserSeed[] = [
     password: 'Dpo12345!',
     displayName: 'Claire DPO',
     role: 'dpo',
+  },
+  {
+    email: 'judiciaire@chpm.local',
+    password: 'Judiciaire123!',
+    displayName: 'Julie Accès judiciaire',
+    role: 'judicial_officer',
   },
 ]
 
@@ -214,6 +227,32 @@ export async function demoApiRequest<T>(path: string, options: DemoRequestOption
   const statsMatch = route.match(/^\/stats\/questionnaires\/([^/]+)$/)
   if (statsMatch?.[1] && method === 'GET') {
     return asResponse<T>({ stats: createStats(statsMatch[1]) } satisfies StatsResponse)
+  }
+
+  const submissionMatch = route.match(/^\/stats\/submissions\/([^/]+)$/)
+  if (submissionMatch?.[1] && method === 'GET') {
+    return asResponse<T>(getSubmissionDetails(decodeURIComponent(submissionMatch[1])))
+  }
+
+  if (method === 'GET' && route === '/identity-vault/status') {
+    return asResponse<T>(getIdentityVaultStatus())
+  }
+
+  if (method === 'POST' && route === '/identity-vault/access-attempt') {
+    return asResponse<T>(recordIdentityVaultAccessAttempt(options.body as { publicCode?: string; justification?: string }))
+  }
+
+  if (method === 'GET' && route === '/judicial-access/requests') {
+    return asResponse<T>({ requests: getJudicialRequests() } satisfies JudicialAccessRequestsResponse)
+  }
+
+  if (method === 'POST' && route === '/judicial-access/requests') {
+    return asResponse<T>(createJudicialRequest(options.body as CreateJudicialAccessRequest))
+  }
+
+  const judicialWorkflowMatch = route.match(/^\/judicial-access\/requests\/([^/]+)\/(validate-dpo|validate-legal|execute|close|reject)$/)
+  if (judicialWorkflowMatch?.[1] && judicialWorkflowMatch[2] && method === 'POST') {
+    return asResponse<T>(updateJudicialRequest(judicialWorkflowMatch[1], judicialWorkflowMatch[2]))
   }
 
   throw new Error(`Route de démonstration non simulée : ${method} ${route}`)
@@ -1046,23 +1085,30 @@ function createStats(questionnaireId: string): StatsResponse['stats'] {
   }
 
   const questions = questionnaire.groups.flatMap((group) => group.questions)
+  const submissions = createDemoSubmissions(questionnaire)
+  const isItq = questionnaire.code === 'ITQ-CN2R'
 
   return {
     questionnaire: { id: questionnaire.id, code: questionnaire.code, title: questionnaire.title },
     threshold: 5,
     totals: {
       invited: 8,
+      opened: 7,
       started: 7,
       submitted: 6,
-      abandoned: 0,
+      abandoned: 1,
       expired: 0,
+      openingRate: 88,
+      startRate: 88,
+      submissionRate: 75,
       completionRate: 75,
-      telemetryEvents: 30,
-      popupOpens: questionnaire.code === 'ITQ-CN2R' ? 42 : 9,
+      abandonmentRate: 14,
+      telemetryEvents: isItq ? 96 : 30,
+      popupOpens: isItq ? 42 : 9,
       answerChanges: 7,
       backtracks: 3,
       resumes: 3,
-      medianTotalDurationMs: questionnaire.code === 'ITQ-CN2R' ? 9 * 60 * 1000 : 4 * 60 * 1000,
+      medianTotalDurationMs: isItq ? 9 * 60 * 1000 : 4 * 60 * 1000,
     },
     versions: [
       {
@@ -1070,9 +1116,15 @@ function createStats(questionnaireId: string): StatsResponse['stats'] {
         versionLabel: questionnaire.versionLabel,
         status: questionnaire.status,
         invited: 8,
+        opened: 7,
         started: 7,
         submitted: 6,
+        abandoned: 1,
+        openingRate: 88,
+        startRate: 88,
+        submissionRate: 75,
         completionRate: 75,
+        abandonmentRate: 14,
         effectifSufficient: true,
       },
     ],
@@ -1081,41 +1133,298 @@ function createStats(questionnaireId: string): StatsResponse['stats'] {
         buildingId: 'demo-building-mtl-a',
         label: 'Montréal · Bâtiment A',
         invited: 8,
+        opened: 7,
         started: 7,
         submitted: 6,
         effectifSufficient: true,
+        openingRate: 88,
+        startRate: 88,
+        submissionRate: 75,
         completionRate: 75,
-        displayValue: '75 %',
+        displayValue: '6 soumis',
       },
       {
         buildingId: 'demo-building-par-c',
         label: 'Paris · Bâtiment C',
         invited: null,
+        opened: null,
         started: null,
         submitted: null,
         effectifSufficient: false,
+        openingRate: null,
+        startRate: null,
+        submissionRate: null,
         completionRate: null,
         displayValue: 'effectif insuffisant',
       },
     ],
-    questions: questions.slice(0, 12).map((questionItem, index) => ({
-      id: questionItem.id,
-      code: questionItem.code,
-      label: questionItem.label ?? questionItem.title,
-      responseType: questionItem.responseType ?? questionItem.type,
-      answerCount: index < 10 ? 6 : null,
-      popupOpens: questionItem.popupDefinitions?.length ? 6 + index : index % 3 === 0 ? 2 : null,
-      popupOpenRate: questionItem.popupDefinitions?.length ? 86 : null,
-      responseChanges: index % 2 === 0 ? 1 : null,
-      backtracks: index % 5 === 0 ? 1 : null,
-      medianDurationMs: 35_000 + index * 4_000,
-      highMedianDuration: index % 4 === 0,
-      popupOftenOpened: Boolean(questionItem.popupDefinitions?.length),
-      difficultQuestion: index % 4 === 0 || Boolean(questionItem.popupDefinitions?.length),
-      difficultyLabels: questionItem.popupDefinitions?.length ? ['popup fréquente'] : index % 4 === 0 ? ['temps élevé'] : [],
-      effectifSufficient: index < 10,
-      displayValue: index < 10 ? 'affiché' : 'effectif insuffisant',
+    groups: questionnaire.groups.map((group, index) => ({
+      id: group.id,
+      title: group.title,
+      versionId: questionnaire.versionId,
+      versionLabel: questionnaire.versionLabel,
+      questionCount: group.questions.length,
+      answerCount: index < 5 ? group.questions.length * 6 : null,
+      respondentCount: index < 5 ? 6 : null,
+      popupOpens: index < 5 ? Math.max(0, group.questions.length * 2 - index) : null,
+      medianDurationMs: index < 5 ? 65_000 + index * 20_000 : null,
+      effectifSufficient: index < 5,
+      displayValue: index < 5 ? '6 répondant(s)' : 'effectif insuffisant',
     })),
+    questions: questions.slice(0, isItq ? 18 : 12).map((questionItem, index) => {
+      const responseType = questionItem.responseType ?? questionItem.type
+      const effectifSufficient = index < 16
+      const hasPopup = Boolean(questionItem.popupDefinitions?.length)
+      const isLikert = responseType === 'likert'
+      const isFreeText = responseType === 'free_text' || responseType === 'free_text_short' || responseType === 'free_text_long'
+      const highMedianDuration = effectifSufficient && (index % 4 === 0 || hasPopup)
+      const popupOftenOpened = effectifSufficient && hasPopup
+      const difficultyLabels = [
+        ...(highMedianDuration ? ['temps médian élevé'] : []),
+        ...(popupOftenOpened ? ['popup souvent ouverte'] : []),
+      ]
+
+      return {
+        id: questionItem.id,
+        code: questionItem.code,
+        label: questionItem.label ?? questionItem.title,
+        responseType,
+        answerCount: effectifSufficient ? 6 : null,
+        popupOpens: effectifSufficient ? (hasPopup ? 6 + index : index % 3 === 0 ? 2 : 0) : null,
+        popupOpenRate: effectifSufficient ? (hasPopup ? 86 : index % 3 === 0 ? 33 : 0) : null,
+        responseChanges: effectifSufficient ? (index % 2 === 0 ? 1 : 0) : null,
+        backtracks: effectifSufficient ? (index % 5 === 0 ? 1 : 0) : null,
+        medianDurationMs: effectifSufficient ? 35_000 + index * 4_000 : null,
+        likertDistribution: isLikert && effectifSufficient ? createDemoLikertDistribution(questionItem) : null,
+        freeTextResponses: isFreeText && effectifSufficient ? [
+          { publicCode: submissions[0]?.publicCode ?? '8F4K-29QX', value: 'Formulation globalement claire, mais certains termes méritent une bulle plus visible.', warning: null },
+          { publicCode: submissions[1]?.publicCode ?? 'DEMO-0002', value: 'Aucune difficulté majeure pendant le test.', warning: null },
+        ] : [],
+        freeTextAccess: isFreeText ? 'granted' : 'not_applicable',
+        highMedianDuration,
+        popupOftenOpened,
+        difficultQuestion: difficultyLabels.length > 0,
+        difficultyLabels: effectifSufficient ? difficultyLabels : [],
+        effectifSufficient,
+        displayValue: effectifSufficient ? '6 réponse(s)' : 'effectif insuffisant',
+      }
+    }),
+    submissions,
+  }
+}
+
+function createDemoSubmissions(questionnaire: ApiQuestionnaire): StatsResponse['stats']['submissions'] {
+  return Array.from({ length: 6 }, (_, index) => ({
+    publicCode: index === 0 ? '8F4K-29QX' : `DEMO-${String(index + 1).padStart(4, '0')}`,
+    building: 'Montréal · Bâtiment A',
+    status: 'locked',
+    startedAt: addDaysIso(-(8 - index)),
+    submittedAt: addDaysIso(-(6 - index)),
+    answerCount: questionnaire.code === 'ITQ-CN2R' ? 20 : 6,
+    totalDurationMs: (questionnaire.code === 'ITQ-CN2R' ? 8 * 60_000 : 4 * 60_000) + index * 25_000,
+    telemetryEvents: questionnaire.code === 'ITQ-CN2R' ? 16 + index : 5 + index,
+    versionLabel: questionnaire.versionLabel,
+  }))
+}
+
+function createDemoLikertDistribution(questionItem: ApiQuestion): Array<{ value: number; label: string; count: number; rate: number }> {
+  const scale = questionItem.likertScale
+  const minValue = scale?.minValue ?? 1
+  const points = scale?.points ?? 5
+  return Array.from({ length: points }, (_, index) => {
+    const value = minValue + index
+    const count = index === points - 1 ? 2 : index === points - 2 ? 2 : index === Math.floor(points / 2) ? 1 : index === 0 ? 1 : 0
+    return {
+      value,
+      label: value === minValue
+        ? scale?.leftAnchor ?? String(value)
+        : value === minValue + points - 1
+          ? scale?.rightAnchor ?? String(value)
+          : scale?.neutralLabel && index === Math.floor(points / 2)
+            ? scale.neutralLabel
+            : String(value),
+      count,
+      rate: Math.round((count / 6) * 100),
+    }
+  })
+}
+
+function getSubmissionDetails(publicCode: string): SubmissionDetailsResponse {
+  const questionnaire = getQuestionnaires()[0]
+
+  if (!questionnaire) {
+    throw new Error('Questionnaire introuvable pour la soumission de démonstration.')
+  }
+
+  const submission = createDemoSubmissions(questionnaire)[0]
+
+  if (!submission) {
+    throw new Error('Soumission de démonstration introuvable.')
+  }
+
+  const answers = questionnaire.groups.flatMap((group) => group.questions).slice(0, 6).map((questionItem, index) => ({
+    questionCode: questionItem.code,
+    questionLabel: questionItem.label ?? questionItem.title,
+    responseType: questionItem.responseType ?? questionItem.type,
+    value: questionItem.responseType === 'likert' ? (index % 2 === 0 ? 6 : 5) : index === 0 ? 'fr' : index === 1 ? 'yes' : 'Aucune difficulté majeure pendant le test.',
+    warning: null,
+  }))
+
+  return {
+    submission: {
+      publicCode,
+      status: submission.status,
+      submittedAt: submission.submittedAt,
+      startedAt: submission.startedAt,
+      totalDurationMs: submission.totalDurationMs,
+      answerCount: submission.answerCount,
+      building: submission.building,
+      questionnaire: questionnaire.title,
+      versionLabel: questionnaire.versionLabel,
+      answers,
+      telemetry: {
+        totalEvents: submission.telemetryEvents,
+        popupOpens: 3,
+        answerChanges: 1,
+        backtracks: 1,
+        resumes: 0,
+      },
+    },
+  }
+}
+
+function getJudicialRequests(): JudicialAccessRequestRecord[] {
+  return readStorage(JUDICIAL_REQUESTS_STORAGE_KEY, createInitialJudicialRequests)
+}
+
+function saveJudicialRequests(requests: JudicialAccessRequestRecord[]): void {
+  window.localStorage.setItem(JUDICIAL_REQUESTS_STORAGE_KEY, JSON.stringify(requests))
+}
+
+function createInitialJudicialRequests(): JudicialAccessRequestRecord[] {
+  return [
+    {
+      id: 'demo-jar-001',
+      requestReference: 'REQ-JUD-2026-001',
+      legalBasisDescription: 'Réquisition fictive de démonstration : contrôle du workflow, sans données réelles.',
+      courtOrderReference: 'ORD-DEMO-001',
+      requestedPublicCodes: ['8F4K-29QX'],
+      requestedBy: 'Service juridique · démonstration',
+      receivedAt: addDaysIso(-1),
+      dpoValidationUserId: null,
+      legalValidationUserId: null,
+      executedByUserId: null,
+      status: 'received',
+      executedAt: null,
+      exportFingerprint: null,
+      comments: 'Demande créée pour montrer la séparation coffre email / données métier.',
+    },
+  ]
+}
+
+function createJudicialRequest(payload: CreateJudicialAccessRequest): JudicialAccessRequestResponse {
+  const requests = getJudicialRequests()
+  const created: JudicialAccessRequestRecord = {
+    id: createId('judicial-request'),
+    requestReference: payload.requestReference || `REQ-JUD-${Date.now()}`,
+    legalBasisDescription: payload.legalBasisDescription || 'Base légale à renseigner.',
+    courtOrderReference: payload.courtOrderReference ?? null,
+    requestedPublicCodes: payload.requestedPublicCodes.map((code) => code.trim().toUpperCase()).filter(Boolean),
+    requestedBy: payload.requestedBy || 'Demandeur non renseigné',
+    receivedAt: nowIso(),
+    dpoValidationUserId: null,
+    legalValidationUserId: null,
+    executedByUserId: null,
+    status: 'received',
+    executedAt: null,
+    exportFingerprint: null,
+    comments: payload.comments ?? null,
+  }
+  requests.unshift(created)
+  saveJudicialRequests(requests)
+  return { judicialRequest: created }
+}
+
+function updateJudicialRequest(id: string, action: string): JudicialAccessRequestResponse {
+  const requests = getJudicialRequests()
+  const request = requests.find((candidate) => candidate.id === id)
+  const currentUser = safeCurrentUser()
+
+  if (!request) {
+    throw new Error('Demande judiciaire introuvable.')
+  }
+
+  if (action === 'validate-dpo') {
+    request.dpoValidationUserId = `demo-user-${currentUser?.role ?? 'dpo'}`
+    request.status = request.legalValidationUserId ? 'validated' : 'received'
+  }
+
+  if (action === 'validate-legal') {
+    request.legalValidationUserId = `demo-user-${currentUser?.role ?? 'judicial_officer'}`
+    request.status = request.dpoValidationUserId ? 'validated' : 'received'
+  }
+
+  if (action === 'reject') {
+    request.status = 'rejected'
+  }
+
+  if (action === 'execute') {
+    if (request.status !== 'validated') throw new Error('Double validation requise avant exécution.')
+    request.status = 'executed'
+    request.executedAt = nowIso()
+    request.executedByUserId = `demo-user-${currentUser?.role ?? 'judicial_officer'}`
+    request.exportFingerprint = `demo-sha256-${Math.random().toString(16).slice(2).padEnd(16, '0')}`
+  }
+
+  if (action === 'close') {
+    request.status = 'closed'
+  }
+
+  saveJudicialRequests(requests)
+
+  return {
+    judicialRequest: request,
+    ...(action === 'execute' ? {
+      encryptedExport: {
+        algorithm: 'aes-256-gcm',
+        keyRef: 'demo:JUDICIAL_EXPORT_KEY_B64',
+        iv: 'demo-iv',
+        authTag: 'demo-auth-tag',
+        ciphertext: 'demo-export-chiffre-sans-email-en-clair-dans-interface',
+        fingerprint: request.exportFingerprint ?? 'demo-fingerprint',
+        expiresInMinutes: 15,
+        warning: 'Export fictif chiffré : aucun email en clair n’est affiché dans l’interface de démonstration.',
+      },
+    } : {}),
+  }
+}
+
+function getIdentityVaultStatus(): IdentityVaultStatusResponse {
+  const currentUser = safeCurrentUser()
+  return {
+    status: {
+      operationalSchema: 'public',
+      identitySchema: 'identity',
+      identityTable: 'identity.email_identities',
+      model: 'IdentityVaultEntry',
+      directEmailVisibleInAdmin: false,
+      currentRole: currentUser?.role ?? 'respondent',
+      currentRoleCanExecuteEmailAccess: currentUser?.role === 'judicial_officer',
+      accessMode: 'workflow judiciaire uniquement, double validation DPO + juridique',
+      audit: ['AuditLog', 'IdentityVaultAuditLog'],
+    },
+  }
+}
+
+function recordIdentityVaultAccessAttempt(payload: { publicCode?: string; justification?: string }): { accepted: boolean; message: string } {
+  const currentUser = safeCurrentUser()
+  if (currentUser?.role !== 'judicial_officer') {
+    throw new Error(`Accès coffre refusé et journalisé pour le rôle ${currentUser?.role ?? 'inconnu'} sur ${payload.publicCode ?? 'code non fourni'}.`)
+  }
+
+  return {
+    accepted: true,
+    message: 'Tentative routée vers le workflow JudicialAccessRequest. Aucun email direct n’est renvoyé.',
   }
 }
 

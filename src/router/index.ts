@@ -83,6 +83,17 @@ const routes: RouteRecordRaw[] = [
       requiresAuthenticatedUser: true,
     },
   },
+
+  {
+    path: '/coffre-email',
+    name: 'identity-vault',
+    component: () => import('@/views/IdentityVaultView.vue'),
+    meta: {
+      label: 'Coffre email',
+      allowedRoles: ['dpo', 'judicial_officer'],
+      requiresAuthenticatedUser: true,
+    },
+  },
   {
     path: '/architecture',
     name: 'architecture',
