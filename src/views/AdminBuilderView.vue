@@ -4,7 +4,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
 import { useCatalogStore } from '@/stores/catalog'
-import type { ApiQuestion, ApiQuestionGroup } from '@shared/types/api'
+import type { ApiQuestion, ApiQuestionGroup, ConditionExpression } from '@shared/types/api'
 import type { LanguageCode, QuestionType } from '@shared/types/domain'
 
 type BuilderQuestionType = Extract<QuestionType, 'free_text' | 'free_text_short' | 'free_text_long' | 'likert' | 'single_choice' | 'multiple_choice' | 'number' | 'date' | 'information'>
@@ -17,6 +17,7 @@ const editingQuestionId = ref<string | null>(null)
 const showPreview = ref(true)
 const localMessage = ref<string | null>(null)
 const localError = ref<string | null>(null)
+const previewAnswers = reactive<Record<string, string>>({ 'Q-001': 'fr' })
 
 const createQuestionnaireForm = reactive({
   code: 'CHPM-S3',
@@ -38,6 +39,8 @@ const groupForm = reactive({
   description: 'Questions de contexte placées au début du questionnaire.',
   questionsPerPage: 2,
   randomize: false,
+  conditionQuestionCode: '',
+  conditionValue: '',
 })
 
 const groupEditForm = reactive({
@@ -45,6 +48,8 @@ const groupEditForm = reactive({
   description: '',
   questionsPerPage: 3,
   randomize: false,
+  conditionQuestionCode: '',
+  conditionValue: '',
 })
 
 const questionForm = reactive({
@@ -62,6 +67,8 @@ const questionForm = reactive({
   popupBody: '',
   popupTerms: '',
   answerOptionsText: 'fr|Français\nen|Anglais',
+  conditionQuestionCode: '',
+  conditionValue: '',
 })
 
 onMounted(async () => {
@@ -95,7 +102,9 @@ const allQuestions = computed(() =>
 
 const canCreateQuestion = computed(() => Boolean(selectedQuestionnaire.value && selectedGroup.value))
 const isSaving = computed(() => catalog.status === 'saving')
-const previewGroups = computed(() => selectedQuestionnaire.value?.groups ?? [])
+const previewResult = computed(() => renderPreviewPath(selectedQuestionnaire.value?.groups ?? []))
+const previewGroups = computed(() => previewResult.value.visibleGroups)
+const hiddenPreviewGroups = computed(() => previewResult.value.hiddenGroups)
 
 watch(
   selectedQuestionnaire,
@@ -133,6 +142,9 @@ watch(
     groupEditForm.description = group.description ?? ''
     groupEditForm.questionsPerPage = group.questionsPerPage ?? 3
     groupEditForm.randomize = group.randomize
+    const condition = conditionToFields(group.conditionExpression)
+    groupEditForm.conditionQuestionCode = condition.questionCode
+    groupEditForm.conditionValue = condition.value
   },
   { immediate: true },
 )
@@ -169,6 +181,7 @@ async function createGroup(): Promise<void> {
       description: groupForm.description,
       questionsPerPage: groupForm.questionsPerPage,
       randomize: groupForm.randomize,
+      conditionExpression: conditionFromFields(groupForm.conditionQuestionCode, groupForm.conditionValue),
     })
     const createdGroup = [...questionnaire.groups].sort((left, right) => right.displayOrder - left.displayOrder)[0]
     selectedGroupId.value = createdGroup?.id ?? ''
@@ -176,6 +189,8 @@ async function createGroup(): Promise<void> {
     groupForm.description = ''
     groupForm.questionsPerPage = 3
     groupForm.randomize = false
+    groupForm.conditionQuestionCode = ''
+    groupForm.conditionValue = ''
     return 'Groupe ajouté et persisté en base.'
   })
 }
@@ -189,6 +204,7 @@ async function saveSelectedGroup(): Promise<void> {
       description: groupEditForm.description,
       questionsPerPage: groupEditForm.questionsPerPage,
       randomize: groupEditForm.randomize,
+      conditionExpression: conditionFromFields(groupEditForm.conditionQuestionCode, groupEditForm.conditionValue),
     })
     return 'Paramètres du groupe sauvegardés.'
   })
@@ -260,6 +276,9 @@ function editQuestion(question: ApiQuestion): void {
   questionForm.popupBody = question.popupDefinitions?.[0]?.body ?? ''
   questionForm.popupTerms = question.popupDefinitions?.map((popup) => popup.termLabel ?? popup.termKey).join('\n') ?? ''
   questionForm.answerOptionsText = question.options?.map((option) => `${option.value}|${option.label}`).join('\n') ?? 'oui|Oui\nnon|Non'
+  const condition = conditionToFields(question.conditionExpression)
+  questionForm.conditionQuestionCode = condition.questionCode
+  questionForm.conditionValue = condition.value
 }
 
 function resetQuestionForm(): void {
@@ -278,6 +297,8 @@ function resetQuestionForm(): void {
   questionForm.popupBody = ''
   questionForm.popupTerms = ''
   questionForm.answerOptionsText = 'oui|Oui\nnon|Non'
+  questionForm.conditionQuestionCode = ''
+  questionForm.conditionValue = ''
 }
 
 function buildQuestionPayload() {
@@ -288,6 +309,7 @@ function buildQuestionPayload() {
     helperText: questionForm.helperText,
     responseType: questionForm.responseType,
     isRequired: questionForm.isRequired,
+    conditionExpression: conditionFromFields(questionForm.conditionQuestionCode, questionForm.conditionValue),
     ...(questionForm.responseType === 'single_choice' || questionForm.responseType === 'multiple_choice'
       ? { answerOptions: answerOptionsFromText(questionForm.answerOptionsText) }
       : {}),
@@ -365,6 +387,124 @@ function termsFromText(value: string): string[] {
 function nextQuestionCode(): string {
   const count = selectedGroup.value?.questions.length ?? allQuestions.value.length
   return `Q-${String(count + 1).padStart(3, '0')}`
+}
+
+function conditionFromFields(questionCode: string, value: string): ConditionExpression | null {
+  const normalizedQuestionCode = normalizeQuestionCode(questionCode)
+  const normalizedValue = value.trim()
+
+  if (!normalizedQuestionCode || !normalizedValue) {
+    return null
+  }
+
+  return {
+    questionCode: normalizedQuestionCode,
+    operator: 'equals',
+    value: normalizedValue,
+  }
+}
+
+function conditionToFields(expression?: ConditionExpression | null): { questionCode: string; value: string } {
+  if (!expression || Array.isArray(expression.all) || Array.isArray(expression.any) || expression.not) {
+    return { questionCode: '', value: '' }
+  }
+
+  const rawValue = expression.value ?? expression.equals
+  return {
+    questionCode: expression.questionCode ? normalizeQuestionCode(expression.questionCode) : '',
+    value: rawValue === undefined || rawValue === null ? '' : String(rawValue),
+  }
+}
+
+function normalizeQuestionCode(value: string): string {
+  return value.trim().toUpperCase().replace(/\s+/g, '-')
+}
+
+function conditionLabel(expression?: ConditionExpression | null): string {
+  if (!expression) return 'Toujours affiché'
+  if (Array.isArray(expression.all)) return expression.all.map(conditionLabel).join(' ET ')
+  if (Array.isArray(expression.any)) return expression.any.map(conditionLabel).join(' OU ')
+  if (expression.not) return `NON (${conditionLabel(expression.not)})`
+
+  const expected = expression.value ?? expression.equals ?? 'renseigné'
+  const operator = expression.operator ?? (Object.prototype.hasOwnProperty.call(expression, 'equals') ? 'equals' : 'answered')
+  const questionCode = expression.questionCode ?? expression.questionId ?? 'question'
+
+  if (operator === 'answered') return `${questionCode} renseignée`
+  if (operator === 'not_answered') return `${questionCode} non renseignée`
+  return `${questionCode} ${operator} ${String(expected)}`
+}
+
+function renderPreviewPath(sourceGroups: ApiQuestionGroup[]): { visibleGroups: ApiQuestionGroup[]; hiddenGroups: ApiQuestionGroup[] } {
+  const visibleGroups: ApiQuestionGroup[] = []
+  const hiddenGroups: ApiQuestionGroup[] = []
+
+  for (const group of sourceGroups) {
+    const groupVisible = evaluateCondition(group.conditionExpression)
+    if (!groupVisible) {
+      hiddenGroups.push(group)
+      continue
+    }
+
+    const visibleQuestions = group.questions.filter((question) => evaluateCondition(question.conditionExpression))
+    const questions = group.randomize ? stableShuffle(visibleQuestions, `admin-preview:${group.id}`) : visibleQuestions
+
+    if (questions.length) {
+      visibleGroups.push({ ...group, questions })
+    }
+  }
+
+  return { visibleGroups, hiddenGroups }
+}
+
+function evaluateCondition(expression?: ConditionExpression | null): boolean {
+  if (!expression) return true
+  if (Array.isArray(expression.all)) return expression.all.every(evaluateCondition)
+  if (Array.isArray(expression.any)) return expression.any.some(evaluateCondition)
+  if (expression.not) return !evaluateCondition(expression.not)
+
+  const value = expression.questionCode ? previewAnswers[normalizeQuestionCode(expression.questionCode)] : undefined
+  const operator = expression.operator ?? (Object.prototype.hasOwnProperty.call(expression, 'equals') ? 'equals' : 'answered')
+  const expected = expression.value ?? expression.equals
+
+  switch (operator) {
+    case 'answered':
+      return value !== undefined && value !== null && value !== ''
+    case 'not_answered':
+      return value === undefined || value === null || value === ''
+    case 'equals':
+      return value === String(expected)
+    case 'not_equals':
+      return value !== String(expected)
+    case 'contains':
+      return String(value ?? '').includes(String(expected))
+    case 'gt':
+      return Number(value) > Number(expected)
+    case 'gte':
+      return Number(value) >= Number(expected)
+    case 'lt':
+      return Number(value) < Number(expected)
+    case 'lte':
+      return Number(value) <= Number(expected)
+    default:
+      return true
+  }
+}
+
+function stableShuffle<T extends { id: string }>(items: T[], seed: string): T[] {
+  return [...items]
+    .map((item) => ({ item, score: seededScore(`${seed}:${item.id}`) }))
+    .sort((left, right) => left.score - right.score)
+    .map(({ item }) => item)
+}
+
+function seededScore(value: string): number {
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return hash >>> 0
 }
 
 function likertValues(scale?: { points: number; minValue?: number } | null): number[] {
@@ -514,6 +654,14 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                 <input id="group-randomize" v-model="groupForm.randomize" class="form-check-input" type="checkbox" />
                 <label class="form-check-label fw-semibold" for="group-randomize">Randomiser ce groupe</label>
               </div>
+              <div class="condition-line mb-3">
+                <p class="section-eyebrow mb-2">Condition simple</p>
+                <label class="form-label small fw-bold" for="group-condition-code">Code question déclencheuse</label>
+                <input id="group-condition-code" v-model="groupForm.conditionQuestionCode" class="form-control mb-2" placeholder="Q-001" />
+                <label class="form-label small fw-bold" for="group-condition-value">Valeur attendue</label>
+                <input id="group-condition-value" v-model="groupForm.conditionValue" class="form-control" placeholder="fr ou en" />
+                <p class="form-text mb-0">Laisser vide pour toujours afficher le groupe.</p>
+              </div>
               <button
                 class="btn btn-outline-primary w-100"
                 type="button"
@@ -603,6 +751,17 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                         <input id="edit-group-randomize" v-model="groupEditForm.randomize" class="form-check-input" type="checkbox" />
                         <label class="form-check-label fw-semibold" for="edit-group-randomize">Randomisation par groupe</label>
                       </div>
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label small fw-bold" for="edit-group-condition-code">Condition · question</label>
+                      <input id="edit-group-condition-code" v-model="groupEditForm.conditionQuestionCode" class="form-control" placeholder="Q-001" />
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label small fw-bold" for="edit-group-condition-value">Condition · valeur</label>
+                      <input id="edit-group-condition-value" v-model="groupEditForm.conditionValue" class="form-control" placeholder="fr" />
+                    </div>
+                    <div class="col-12 d-flex flex-wrap gap-2 align-items-center justify-content-end">
+                      <span class="badge-soft">{{ conditionLabel(selectedGroup.conditionExpression) }}</span>
                       <button class="btn btn-outline-danger" type="button" :disabled="isSaving" @click="archiveSelectedGroup">
                         Archiver
                       </button>
@@ -685,6 +844,15 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                       </div>
                     </template>
 
+                    <div class="col-md-6">
+                      <label class="form-label small fw-bold" for="question-condition-code">Condition question</label>
+                      <input id="question-condition-code" v-model="questionForm.conditionQuestionCode" class="form-control" placeholder="Q-001" />
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label small fw-bold" for="question-condition-value">Valeur attendue</label>
+                      <input id="question-condition-value" v-model="questionForm.conditionValue" class="form-control" placeholder="fr" />
+                    </div>
+
                     <div class="col-12">
                       <div class="form-check form-switch">
                         <input id="question-required" v-model="questionForm.isRequired" class="form-check-input" type="checkbox" />
@@ -760,10 +928,44 @@ async function performAction(action: () => Promise<string>): Promise<void> {
               </div>
               <p class="muted">{{ selectedQuestionnaire?.description }}</p>
 
+              <div class="question-help mb-3">
+                <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+                  <div>
+                    <p class="section-eyebrow mb-1">Prévisualisation conditionnelle</p>
+                    <strong>Valeurs factices du parcours</strong>
+                  </div>
+                  <span class="badge-soft warning">randomisation reproductible</span>
+                </div>
+                <div class="row g-2 align-items-end">
+                  <div class="col-md-6">
+                    <label class="form-label small fw-bold" for="preview-lang">Q-001 · langue</label>
+                    <select id="preview-lang" v-model="previewAnswers['Q-001']" class="form-select form-select-sm">
+                      <option value="">Non répondu</option>
+                      <option value="fr">Français</option>
+                      <option value="en">English</option>
+                    </select>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label small fw-bold" for="preview-q002">Q-002 · confirmation</label>
+                    <select id="preview-q002" v-model="previewAnswers['Q-002']" class="form-select form-select-sm">
+                      <option value="">Non répondu</option>
+                      <option value="yes">Oui / Yes</option>
+                      <option value="no">Non / No</option>
+                    </select>
+                  </div>
+                </div>
+                <div v-if="hiddenPreviewGroups.length" class="mt-3 d-flex flex-wrap gap-2">
+                  <span v-for="group in hiddenPreviewGroups" :key="group.id" class="badge-soft danger">
+                    Masqué : {{ group.title }} · {{ conditionLabel(group.conditionExpression) }}
+                  </span>
+                </div>
+              </div>
+
               <div v-for="group in previewGroups" :key="group.id" class="question-row mb-3">
                 <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
                   <span class="badge-soft">{{ group.title }} · {{ group.questionsPerPage }} question(s)/page</span>
                   <span v-if="group.randomize" class="badge-soft warning">ordre randomisé</span>
+                  <span v-if="group.conditionExpression" class="badge-soft">{{ conditionLabel(group.conditionExpression) }}</span>
                 </div>
                 <p v-if="group.description" class="small muted">{{ group.description }}</p>
 
@@ -771,6 +973,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                   <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
                     <span class="badge-soft">{{ question.code }}</span>
                     <span class="badge-soft">{{ questionTypeLabel(question.responseType ?? question.type) }}</span>
+                    <span v-if="question.conditionExpression" class="badge-soft warning">{{ conditionLabel(question.conditionExpression) }}</span>
                   </div>
                   <h3 class="h6 fw-bold">{{ question.label ?? question.title }}</h3>
                   <p v-if="question.helperText" class="small muted">{{ question.helperText }}</p>
@@ -815,13 +1018,13 @@ async function performAction(action: () => Promise<string>): Promise<void> {
 
             <div class="demo-card flat">
               <p class="section-eyebrow mb-2">Critères d’acceptation</p>
-              <h2 class="h5 fw-bold">Couverture semaine 3</h2>
+              <h2 class="h5 fw-bold">Couverture semaine 5</h2>
               <div class="d-grid gap-2">
                 <span class="badge-soft success">Création sans code</span>
-                <span class="badge-soft success">Groupes et ordre persistés</span>
-                <span class="badge-soft success">Questions libres, choix, nombre, date et Likert</span>
-                <span class="badge-soft success">Popups explicatives persistées</span>
-                <span class="badge-soft success">Erreurs API lisibles</span>
+                <span class="badge-soft success">Conditions simples question/groupe</span>
+                <span class="badge-soft success">Langue Q-001 : parcours FR/EN</span>
+                <span class="badge-soft success">Randomisation stable prévisualisée</span>
+                <span class="badge-soft success">Popups explicatives versionnées</span>
               </div>
             </div>
 
@@ -830,9 +1033,9 @@ async function performAction(action: () => Promise<string>): Promise<void> {
               <ol class="muted mb-0 ps-3">
                 <li>Créer un questionnaire ou sélectionner un brouillon.</li>
                 <li>Ajouter “Informations générales”.</li>
-                <li>Créer “Langue souhaitée” en réponse libre courte.</li>
-                <li>Créer une question Likert avec popup explicative.</li>
-                <li>Contrôler la vue répondant à droite.</li>
+                <li>Créer “Q-001 Langue” en choix unique : fr/en.</li>
+                <li>Configurer deux groupes conditionnels : Q-001 = fr puis Q-001 = en.</li>
+                <li>Activer la randomisation d’un groupe et vérifier l’ordre stable dans l’aperçu.</li>
               </ol>
             </div>
           </div>
