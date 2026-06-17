@@ -35,9 +35,15 @@ const scopeItems: Array<{
   },
   {
     title: 'Pilotage statistique',
-    text: 'Temps de réponse, popups ouvertes, difficultés de compréhension, statistiques par site et soumissions anonymes.',
+    text: 'Temps de réponse, popups ouvertes, difficultés de compréhension, statistiques par site et soumissions pseudonymisées.',
     to: '/stats',
     roles: ['admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo'],
+  },
+  {
+    title: 'Coffre email',
+    text: 'Workflow judiciaire séparé, double validation et export minimal chiffré des correspondances code-email.',
+    to: '/coffre-email',
+    roles: ['dpo', 'judicial_officer'],
   },
 ]
 
@@ -46,6 +52,7 @@ const visibleScopeItems = computed(() =>
 )
 
 const canOpenAdmin = computed(() => hasRoleAccess(session.currentRole, ['admin', 'questionnaire_admin']))
+const canOpenVault = computed(() => hasRoleAccess(session.currentRole, ['dpo', 'judicial_officer']))
 const canOpenArchitecture = computed(() => hasRoleAccess(session.currentRole, ['admin', 'questionnaire_admin', 'dpo', 'technical_admin', 'judicial_officer']))
 const canOpenStats = computed(() => hasRoleAccess(session.currentRole, ['admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo']))
 
@@ -64,7 +71,7 @@ const principles = [
         <div class="position-relative z-1">
           <p class="hero-eyebrow mb-3">{{ appConfig.demoMode ? 'Démo statique' : 'Produit connecté' }}</p>
           <h1 class="hero-title fw-black mb-4">
-            Plateforme de questionnaires adaptatifs, anonymisés et pilotables à grande échelle.
+            Plateforme de questionnaires adaptatifs, pseudonymisés et pilotables à grande échelle.
           </h1>
           <p class="hero-text mb-4">
             {{ appConfig.demoMode
@@ -75,6 +82,9 @@ const principles = [
           <div class="d-flex flex-wrap gap-2">
             <RouterLink v-if="canOpenAdmin" class="btn btn-primary btn-lg" to="/admin">
               Explorer l’administration connectée
+            </RouterLink>
+            <RouterLink v-if="canOpenVault" class="btn btn-outline-primary btn-lg" to="/coffre-email">
+              Ouvrir le coffre email
             </RouterLink>
             <RouterLink
               v-if="canOpenArchitecture"
@@ -148,7 +158,7 @@ const principles = [
                   <span class="step-number">4</span>
                   <h3 class="h6 fw-bold">Analyser</h3>
                   <p class="small muted mb-0">
-                    Les admins consultent stats, temps, popups et soumissions anonymes.
+                    Les admins consultent stats, temps, popups et soumissions pseudonymisées.
                   </p>
                 </div>
               </div>

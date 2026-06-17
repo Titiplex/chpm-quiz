@@ -11,7 +11,7 @@ import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
           <h1 class="h2 fw-bold mb-3">Serveur central, accès mondial, séparation stricte email ↔ réponses</h1>
           <p class="hero-text mb-4">
             Cette page ne décrit pas une implémentation backend complète ; elle rend visibles les
-            contraintes à intégrer au cahier des charges technique : centralisation, anonymisation,
+            contraintes à intégrer au cahier des charges technique : centralisation, pseudonymisation,
             traçabilité, droits par rôle et accès exceptionnel aux emails sur décision judiciaire.
           </p>
           <RoleGateInfo />
@@ -59,7 +59,7 @@ import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
                   <h3 class="h5 fw-bold">BDD questionnaires</h3>
                   <ul class="small muted mb-0">
                     <li>code_unique</li>
-                    <li>réponses anonymes</li>
+                    <li>réponses pseudonymisées par code unique</li>
                     <li>temps question / questionnaire</li>
                     <li>popups ouvertes</li>
                     <li>bâtiment, groupe, langue, version</li>
@@ -71,11 +71,12 @@ import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
                   <span class="badge-soft danger mb-3">Accès juridiquement restreint</span>
                   <h3 class="h5 fw-bold">BDD emails séparée</h3>
                   <ul class="small muted mb-0">
-                    <li>code_unique</li>
-                    <li>email</li>
+                    <li>uniqueCode</li>
+                    <li>encryptedEmail</li>
+                    <li>emailHash</li>
                     <li>historique d’envoi</li>
                     <li>accès uniquement sur ordre d’un juge</li>
-                    <li>journalisation des accès exceptionnels</li>
+                    <li>journalisation IdentityVaultAuditLog + AuditLog</li>
                   </ul>
                 </div>
               </div>

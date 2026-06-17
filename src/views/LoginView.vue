@@ -46,6 +46,13 @@ const demoAccounts: Array<{
     password: 'Dpo12345!',
     description: 'Accès conformité, audit et demandes d’accès judiciaire.',
   },
+  {
+    role: 'judicial_officer',
+    label: 'Responsable accès judiciaire',
+    email: 'judiciaire@chpm.local',
+    password: 'Judiciaire123!',
+    description: 'Validation juridique et exécution du workflow coffre email.',
+  },
 ]
 
 const form = reactive({
