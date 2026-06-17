@@ -96,6 +96,7 @@ export class RespondentService {
 
   async recordTelemetry(dto: TelemetryDto) {
     const { invitation, responseSession } = await this.resolveOrCreateSession(dto.token)
+    this.assertWritable(responseSession)
 
     const event = await this.prisma.$transaction(async (tx: any) => {
       const created = await tx.telemetryEvent.create({
@@ -145,38 +146,57 @@ export class RespondentService {
     const rendered = this.renderVersion(invitation.questionnaireVersion, responseSession)
     const answerByQuestionId = new Map<string, any>((responseSession.answers ?? []).map((answer: any): [string, any] => [answer.questionId, answer]))
     const missingRequired = rendered.groups.flatMap((group) => group.questions)
-      .filter((question: any) => question.isRequired && !answerByQuestionId.has(question.id))
+      .filter((question: any) => question.isRequired && !this.hasUsableAnswer(question, answerByQuestionId.get(question.id)))
 
     if (missingRequired.length) {
-      throw new BadRequestException(`Soumission impossible : ${missingRequired.length} question(s) obligatoire(s) sans réponse`)
+      throw new BadRequestException(`Soumission impossible : ${missingRequired.length} question(s) obligatoire(s) sans réponse exploitable`)
     }
 
     const answerCount = await this.prisma.answer.count({ where: { responseSessionId: responseSession.id } })
     const pathFingerprint = this.pathFingerprint(responseSession.id, rendered.pathQuestionIds)
+    const submittedAt = new Date()
 
     const submission = await this.prisma.$transaction(async (tx: any) => {
-      const created = await tx.submission.create({
+      const existingSubmission = await tx.submission.findUnique({
+        where: { responseSessionId: responseSession.id },
+      })
+
+      if (existingSubmission) {
+        throw new BadRequestException('La soumission est déjà verrouillée')
+      }
+
+      const lockResult = await tx.responseSession.updateMany({
+        where: {
+          id: responseSession.id,
+          status: { in: ['draft', 'abandoned'] },
+          submittedAt: null,
+          lockedAt: null,
+        },
         data: {
-          responseSessionId: responseSession.id,
-          publicCode: responseSession.publicCode,
-          questionnaireVersionId: responseSession.questionnaireVersionId,
-          buildingId: responseSession.buildingId,
-          answerCount,
+          status: 'locked',
+          submittedAt,
+          lockedAt: submittedAt,
           pathFingerprint,
         },
       })
+
+      if (lockResult.count !== 1) {
+        throw new BadRequestException('La soumission est définitive et verrouillée')
+      }
 
       await tx.answer.updateMany({
         where: { responseSessionId: responseSession.id },
         data: { isDraft: false },
       })
 
-      await tx.responseSession.update({
-        where: { id: responseSession.id },
+      const created = await tx.submission.create({
         data: {
-          status: 'locked',
-          submittedAt: new Date(),
-          lockedAt: new Date(),
+          responseSessionId: responseSession.id,
+          publicCode: responseSession.publicCode,
+          questionnaireVersionId: responseSession.questionnaireVersionId,
+          buildingId: responseSession.buildingId,
+          submittedAt,
+          answerCount,
           pathFingerprint,
         },
       })
@@ -185,7 +205,7 @@ export class RespondentService {
         where: { id: invitation.id },
         data: {
           status: 'submitted',
-          submittedAt: new Date(),
+          submittedAt,
         },
       })
 
@@ -466,6 +486,22 @@ export class RespondentService {
     if (responseSession.status === 'submitted' || responseSession.status === 'locked' || responseSession.submission) {
       throw new BadRequestException('La soumission est définitive et verrouillée')
     }
+  }
+
+  private hasUsableAnswer(question: any, answer: any): boolean {
+    if (!answer) return false
+
+    const value = answer.value
+
+    if (value === null || value === undefined) return false
+
+    if (typeof value === 'string') return value.trim().length > 0
+
+    if (Array.isArray(value)) return value.length > 0
+
+    if (question.responseType === 'number') return Number.isFinite(Number(value))
+
+    return true
   }
 
   private detectIdentifyingData(value: unknown): string | null {

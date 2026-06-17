@@ -9,6 +9,8 @@ import type { ApiPopupDefinition, RespondentQuestion, RespondentQuestionGroup } 
 const route = useRoute()
 const respondent = useRespondentSessionStore()
 const answers = reactive<Record<string, unknown>>({})
+const textAutosaveTimers = new Map<string, number>()
+const pendingTextQuestionIds = new Set<string>()
 
 const token = computed(() => String(route.params.token ?? ''))
 const hasToken = computed(() => Boolean(token.value))
@@ -16,6 +18,11 @@ const groups = computed(() => respondent.session?.questionnaire.groups ?? [])
 const pageIndex = ref(0)
 const pageStartedAt = ref(Date.now())
 const activePopup = ref<{ questionId: string; popupDefinitionId: string; termKey: string; language: string; openedAt: number } | null>(null)
+const showSubmitConfirmation = ref(false)
+const isSubmitting = ref(false)
+const submitError = ref<string | null>(null)
+
+const textAutosaveDelayMs = 650
 
 type RespondentPage = {
   group: RespondentQuestionGroup
@@ -42,6 +49,10 @@ const currentPage = computed(() => pages.value[Math.min(pageIndex.value, Math.ma
 const currentPageNumber = computed(() => (pages.value.length ? pageIndex.value + 1 : 0))
 const isFirstPage = computed(() => pageIndex.value <= 0)
 const isLastPage = computed(() => pageIndex.value >= pages.value.length - 1)
+const unansweredRequiredQuestions = computed(() =>
+  respondent.questions.filter((question) => question.isRequired && !hasAnswerValue(questionValue(question))),
+)
+const canSubmit = computed(() => !respondent.isLocked && unansweredRequiredQuestions.value.length === 0 && respondent.status !== 'saving')
 
 watch(
   pages,
@@ -62,27 +73,85 @@ onMounted(async () => {
   if (hasToken.value) {
     await respondent.load(token.value)
     pageIndex.value = Math.max(0, (respondent.session?.responseSession.currentPage ?? 1) - 1)
-    for (const question of respondent.questions) {
-      if (question.answer) {
-        answers[question.id] = question.answer.value
-      }
-    }
+    hydrateLocalAnswers()
     await recordPageTelemetry('page_view')
   }
 })
 
 onBeforeUnmount(() => {
+  void flushPendingAutosaves()
   void closeActivePopup('popup_close')
   void recordPageTelemetry('page_leave')
+  clearAutosaveTimers()
 })
+
+function hydrateLocalAnswers(): void {
+  for (const question of respondent.questions) {
+    if (question.answer) {
+      answers[question.id] = question.answer.value
+    }
+  }
+}
 
 function questionValue(question: RespondentQuestion): unknown {
   return answers[question.id] ?? question.answer?.value ?? null
 }
 
+function hasAnswerValue(value: unknown): boolean {
+  if (value === null || value === undefined) return false
+  if (typeof value === 'string') return value.trim().length > 0
+  if (Array.isArray(value)) return value.length > 0
+  return true
+}
+
 async function save(question: RespondentQuestion, value: unknown) {
   answers[question.id] = value
   await respondent.save(question.id, value)
+  hydrateLocalAnswers()
+}
+
+function queueTextAutosave(question: RespondentQuestion, value: string): void {
+  answers[question.id] = value
+  pendingTextQuestionIds.add(question.id)
+
+  const existingTimer = textAutosaveTimers.get(question.id)
+  if (existingTimer) {
+    window.clearTimeout(existingTimer)
+  }
+
+  const timer = window.setTimeout(() => {
+    void flushQuestionAutosave(question)
+  }, textAutosaveDelayMs)
+
+  textAutosaveTimers.set(question.id, timer)
+}
+
+async function flushQuestionAutosave(question: RespondentQuestion): Promise<void> {
+  const timer = textAutosaveTimers.get(question.id)
+  if (timer) {
+    window.clearTimeout(timer)
+    textAutosaveTimers.delete(question.id)
+  }
+
+  if (!pendingTextQuestionIds.has(question.id) || respondent.isLocked) return
+
+  pendingTextQuestionIds.delete(question.id)
+  await respondent.save(question.id, answers[question.id] ?? '')
+  hydrateLocalAnswers()
+}
+
+async function flushPendingAutosaves(): Promise<void> {
+  const pendingQuestions = respondent.questions.filter((question) => pendingTextQuestionIds.has(question.id))
+  for (const question of pendingQuestions) {
+    await flushQuestionAutosave(question)
+  }
+}
+
+function clearAutosaveTimers(): void {
+  for (const timer of textAutosaveTimers.values()) {
+    window.clearTimeout(timer)
+  }
+  textAutosaveTimers.clear()
 }
 
 function isOptionSelected(question: RespondentQuestion, value: string): boolean {
@@ -105,6 +174,7 @@ function likertValues(scale?: { points: number; minValue?: number } | null): num
 }
 
 async function previousPage(): Promise<void> {
+  await flushPendingAutosaves()
   await closeActivePopup('popup_close')
   await recordPageTelemetry('page_change')
   pageIndex.value = Math.max(0, pageIndex.value - 1)
@@ -113,6 +183,7 @@ async function previousPage(): Promise<void> {
 }
 
 async function nextPage(): Promise<void> {
+  await flushPendingAutosaves()
   await closeActivePopup('popup_close')
   await recordPageTelemetry('page_change')
   pageIndex.value = Math.min(Math.max(pages.value.length - 1, 0), pageIndex.value + 1)
@@ -193,6 +264,29 @@ async function closeActivePopup(eventType: 'popup_close' | 'popup_switch'): Prom
     occurredAt: new Date().toISOString(),
   })
 }
+
+async function openSubmitConfirmation(): Promise<void> {
+  submitError.value = null
+  await flushPendingAutosaves()
+  showSubmitConfirmation.value = true
+}
+
+async function confirmSubmit(): Promise<void> {
+  if (!canSubmit.value) return
+
+  isSubmitting.value = true
+  submitError.value = null
+
+  try {
+    await flushPendingAutosaves()
+    await respondent.submit()
+    showSubmitConfirmation.value = false
+  } catch (caught) {
+    submitError.value = caught instanceof Error ? caught.message : 'Soumission impossible.'
+  } finally {
+    isSubmitting.value = false
+  }
+}
 </script>
 
 <template>
@@ -231,6 +325,16 @@ async function closeActivePopup(eventType: 'popup_close' | 'popup_switch'): Prom
                   <span class="badge-soft success align-self-start">Code : {{ respondent.session.responseSession.publicCode }}</span>
                 </div>
 
+                <div class="question-help mb-4" role="note">
+                  <strong>Notice d’information avant démarrage</strong>
+                  <ul class="small muted mb-0 mt-2 ps-3">
+                    <li>Finalité : compréhension du questionnaire et amélioration des formulations métier.</li>
+                    <li>Durée estimée : quelques minutes, avec reprise possible depuis le même lien tant que la soumission finale n’est pas faite.</li>
+                    <li>Confidentialité : les réponses sont rattachées au code public ; l’email est conservé séparément dans la base identité.</li>
+                    <li>Droits et contact : contactez le responsable de traitement ou le DPO indiqué par l’organisation pour toute demande RGPD.</li>
+                  </ul>
+                </div>
+
                 <div v-if="respondent.isLocked" class="alert alert-success rounded-4">
                   Soumission finale reçue et verrouillée. Une deuxième soumission est impossible.
                 </div>
@@ -265,6 +369,7 @@ async function closeActivePopup(eventType: 'popup_close' | 'popup_switch'): Prom
                   <div v-for="question in currentPage.questions" :key="question.id" class="question-row mb-3">
                     <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
                       <span class="badge-soft">{{ question.code }} · {{ question.responseType }}</span>
+                      <span v-if="question.isRequired" class="badge-soft warning">obligatoire</span>
                       <span v-if="question.popupDefinitions?.length" class="badge-soft warning">
                         {{ question.popupDefinitions.length }} terme(s) expliqué(s)
                       </span>
@@ -319,6 +424,16 @@ async function closeActivePopup(eventType: 'popup_close' | 'popup_switch'): Prom
                         >
                           {{ value }}
                         </button>
+                        <button
+                          v-if="question.likertScale.allowNotApplicable"
+                          class="btn btn-sm"
+                          :class="questionValue(question) === 'not_applicable' ? 'btn-primary' : 'btn-outline-primary'"
+                          type="button"
+                          :disabled="respondent.isLocked"
+                          @click="save(question, 'not_applicable')"
+                        >
+                          Non applicable
+                        </button>
                       </div>
                     </div>
 
@@ -372,15 +487,31 @@ async function closeActivePopup(eventType: 'popup_close' | 'popup_switch'): Prom
                       Information affichée, aucune réponse attendue.
                     </div>
 
-                    <textarea
-                      v-else-if="question.responseType === 'free_text' || question.responseType === 'free_text_long' || question.responseType === 'free_text_short'"
-                      class="form-control mb-3"
-                      rows="4"
-                      :disabled="respondent.isLocked"
-                      :value="String(questionValue(question) ?? '')"
-                      @change="save(question, ($event.target as HTMLTextAreaElement).value)"
-                    ></textarea>
+                    <div v-else-if="question.responseType === 'free_text' || question.responseType === 'free_text_long' || question.responseType === 'free_text_short'">
+                      <textarea
+                        class="form-control mb-2"
+                        rows="4"
+                        :disabled="respondent.isLocked"
+                        :value="String(questionValue(question) ?? '')"
+                        @input="queueTextAutosave(question, ($event.target as HTMLTextAreaElement).value)"
+                        @blur="flushQuestionAutosave(question)"
+                      ></textarea>
+                      <p class="small muted mb-3">
+                        Sauvegarde automatique après saisie. Évitez les noms, emails, téléphones et détails directement identifiants.
+                      </p>
+                    </div>
+                  </div>
 
+                  <div v-if="unansweredRequiredQuestions.length" class="alert alert-warning rounded-4">
+                    {{ unansweredRequiredQuestions.length }} question(s) obligatoire(s) doivent encore recevoir une réponse avant soumission finale.
+                  </div>
+
+                  <div v-if="respondent.warnings.length" class="alert alert-warning rounded-4">
+                    Une réponse libre semble contenir une donnée directement identifiante. Elle est sauvegardée mais signalée pour information.
+                  </div>
+
+                  <div v-if="submitError" class="alert alert-danger rounded-4" role="alert">
+                    {{ submitError }}
                   </div>
 
                   <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
@@ -394,16 +525,27 @@ async function closeActivePopup(eventType: 'popup_close' | 'popup_switch'): Prom
                       v-else
                       class="btn btn-primary"
                       type="button"
-                      :disabled="respondent.isLocked || respondent.status === 'saving'"
-                      @click="respondent.submit"
+                      :disabled="!canSubmit"
+                      @click="openSubmitConfirmation"
                     >
-                      Confirmer la soumission finale et verrouiller
+                      Préparer la soumission finale
                     </button>
                   </div>
-                </div>
 
-                <div v-if="respondent.warnings.length" class="alert alert-warning rounded-4">
-                  Une réponse libre semble contenir une donnée directement identifiante. Elle est sauvegardée mais signalée pour information.
+                  <div v-if="showSubmitConfirmation" class="question-help mt-4" role="alertdialog" aria-modal="false" aria-labelledby="submit-confirm-title">
+                    <h2 id="submit-confirm-title" class="h5 fw-bold">Confirmer la soumission définitive</h2>
+                    <p class="muted">
+                      Après confirmation, la session sera verrouillée : tu pourras consulter l’accusé de réception, mais tu ne pourras plus modifier ni soumettre une deuxième fois.
+                    </p>
+                    <div class="d-flex flex-wrap gap-2">
+                      <button class="btn btn-primary" type="button" :disabled="isSubmitting" @click="confirmSubmit">
+                        {{ isSubmitting ? 'Soumission…' : 'Je confirme et je verrouille mes réponses' }}
+                      </button>
+                      <button class="btn btn-outline-primary" type="button" :disabled="isSubmitting" @click="showSubmitConfirmation = false">
+                        Revenir au questionnaire
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

@@ -66,22 +66,37 @@ export const useRespondentSessionStore = defineStore('respondentSession', () => 
   }
 
   async function telemetry(payload: Omit<TelemetryRequest, 'token'>): Promise<void> {
-    if (!token.value) return
-    await apiRequest('/respondent/telemetry', {
-      method: 'POST',
-      body: { ...payload, token: token.value },
-    })
+    if (!token.value || isLocked.value) return
+
+    try {
+      await apiRequest('/respondent/telemetry', {
+        method: 'POST',
+        body: { ...payload, token: token.value },
+      })
+    } catch {
+      // La télémétrie ne doit jamais casser le parcours répondant.
+    }
   }
 
   async function submit(): Promise<void> {
     if (!token.value) return
-    const response = await apiRequest<SubmitResponse>('/respondent/submit', {
-      method: 'POST',
-      body: { token: token.value },
-    })
-    await load(token.value)
-    status.value = 'submitted'
-    return void response
+
+    status.value = 'saving'
+    error.value = null
+
+    try {
+      const response = await apiRequest<SubmitResponse>('/respondent/submit', {
+        method: 'POST',
+        body: { token: token.value },
+      })
+      await load(token.value)
+      status.value = 'submitted'
+      return void response
+    } catch (caught) {
+      status.value = 'error'
+      error.value = caught instanceof Error ? caught.message : 'Soumission impossible.'
+      throw caught
+    }
   }
 
   return {
