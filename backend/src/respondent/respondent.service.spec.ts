@@ -59,10 +59,13 @@ describe('RespondentService unit rules', () => {
     expect(firstRender.pathQuestionIds.sort()).toEqual(['q1', 'q2'])
   })
 
-  it('locks submitted sessions and detects directly identifying free-text content', () => {
+  it('locks submitted sessions, validates required answers and detects directly identifying free-text content', () => {
     const service = makeService()
 
     expect(() => service.assertWritable({ status: 'locked' })).toThrow(BadRequestException)
+    expect(service.hasUsableAnswer({ responseType: 'free_text_long' }, { value: '  ' })).toBe(false)
+    expect(service.hasUsableAnswer({ responseType: 'multiple_choice' }, { value: [] })).toBe(false)
+    expect(service.hasUsableAnswer({ responseType: 'number' }, { value: 4 })).toBe(true)
     expect(service.detectIdentifyingData('Contactez moi à john@example.org')).toBe('Adresse email détectée dans une réponse libre')
     expect(service.detectIdentifyingData('Téléphone +33 6 12 34 56 78')).toBe('Numéro de téléphone potentiel détecté dans une réponse libre')
     expect(service.detectIdentifyingData('Réponse clinique sans identifiant')).toBeNull()

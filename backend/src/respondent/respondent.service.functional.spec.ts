@@ -95,6 +95,7 @@ function makeService(invitation: any) {
     responseSession: {
       create: vi.fn(async ({ data }) => ({ id: 'session-created', ...data, answers: [], submission: null, currentPage: 1 })),
       update: vi.fn(async ({ data }) => ({ ...data })),
+      updateMany: vi.fn(async () => ({ count: 1 })),
     },
     invitation: {
       update: vi.fn(async ({ data }) => ({ ...invitation, ...data })),
@@ -103,6 +104,7 @@ function makeService(invitation: any) {
       create: vi.fn(async ({ data }) => ({ id: 'telemetry-1', ...data })),
     },
     submission: {
+      findUnique: vi.fn(async () => null),
       create: vi.fn(async ({ data }) => ({ id: 'submission-1', submittedAt: new Date(), ...data })),
     },
   }
@@ -189,6 +191,50 @@ describe('RespondentService functional flow', () => {
       where: { id: 'session-1' },
       data: expect.objectContaining({ status: 'draft', pathFingerprint: expect.any(String) }),
     }))
+  })
+
+
+
+  it('refuses final submission when a required visible answer is empty', async () => {
+    const invitation = makeInvitation({
+      id: 'session-1',
+      publicCode: 'CODE-1',
+      status: 'draft',
+      currentPage: 1,
+      randomizationSeed: 'seed',
+      answers: [{ id: 'answer-q1', questionId: 'q1', value: '' }],
+      submission: null,
+    })
+    const { service, tx } = makeService(invitation)
+
+    await expect(service.submit('token')).rejects.toThrow(BadRequestException)
+    expect(tx.submission.create).not.toHaveBeenCalled()
+  })
+
+  it('locks a final submission and refuses telemetry once locked', async () => {
+    const invitation = makeInvitation({
+      id: 'session-1',
+      publicCode: 'CODE-1',
+      status: 'draft',
+      currentPage: 1,
+      randomizationSeed: 'seed',
+      answers: [
+        { id: 'answer-q1', questionId: 'q1', value: 'oui' },
+        { id: 'answer-q2', questionId: 'q2', value: 'Réponse libre' },
+      ],
+      submission: null,
+    })
+    const { service, tx } = makeService(invitation)
+
+    const response = await service.submit('token')
+    expect(response.submission.publicCode).toBe('CODE-1')
+    expect(tx.responseSession.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'locked', submittedAt: expect.any(Date), lockedAt: expect.any(Date) }),
+    }))
+    expect(tx.answer.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { isDraft: false } }))
+
+    invitation.responseSession.status = 'locked'
+    await expect(service.recordTelemetry({ token: 'token', eventType: 'page_view' })).rejects.toThrow(BadRequestException)
   })
 
   it('refuses expired invitations before creating or updating a respondent session', async () => {
