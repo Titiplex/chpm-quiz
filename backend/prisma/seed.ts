@@ -393,7 +393,7 @@ async function cleanup() {
   await prisma.auditLog.deleteMany()
   await prisma.identityVaultAuditLog.deleteMany()
   await prisma.emailDeliveryEvent.deleteMany()
-  await prisma.emailIdentity.deleteMany()
+  await prisma.identityVaultEntry.deleteMany()
   await prisma.submission.deleteMany()
   await prisma.telemetryEvent.deleteMany()
   await prisma.answer.deleteMany()
@@ -990,10 +990,10 @@ async function createSeedInvitation(
       notifyModerator: true,
       expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       sentAt: new Date(),
-      emailIdentity: {
+      identityVaultEntry: {
         create: {
-          publicCode,
-          emailCiphertext: encryptEmail(email),
+          uniqueCode: publicCode,
+          encryptedEmail: encryptEmail(email),
           emailHash: hashEmail(email),
           questionnaireVersionId,
           buildingId,
@@ -1053,10 +1053,10 @@ async function createDemoInvitations(questionnaireVersionId: string, moderatorId
         openedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
         startedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
         submittedAt,
-        emailIdentity: {
+        identityVaultEntry: {
           create: {
-            publicCode,
-            emailCiphertext: encryptEmail(email),
+            uniqueCode: publicCode,
+            encryptedEmail: encryptEmail(email),
             emailHash: hashEmail(email),
             questionnaireVersionId,
             buildingId,
@@ -1169,10 +1169,10 @@ async function createDemoInvitations(questionnaireVersionId: string, moderatorId
       notifyModerator: true,
       expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       sentAt: new Date(),
-      emailIdentity: {
+      identityVaultEntry: {
         create: {
-          publicCode: pendingCode,
-          emailCiphertext: encryptEmail('pending.demo@example.org'),
+          uniqueCode: pendingCode,
+          encryptedEmail: encryptEmail('pending.demo@example.org'),
           emailHash: hashEmail('pending.demo@example.org'),
           questionnaireVersionId,
           buildingId,

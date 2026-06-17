@@ -404,7 +404,7 @@ model Invitation {
   createdAt              DateTime             @default(now())
   updatedAt              DateTime             @updatedAt
 
-  emailIdentity  EmailIdentity?
+  identityVaultEntry  IdentityVaultEntry?
   deliveryEvents EmailDeliveryEvent[]
   responseSession ResponseSession?
 
@@ -417,12 +417,12 @@ model Invitation {
   @@schema("public")
 }
 
-model EmailIdentity {
+model IdentityVaultEntry {
   id                     String     @id @default(uuid()) @db.Uuid
   invitationId           String     @unique @db.Uuid
   invitation             Invitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
-  publicCode             String     @unique
-  emailCiphertext        String
+  uniqueCode             String     @unique @map("publicCode")
+  encryptedEmail         String     @map("emailCiphertext")
   emailHash              String
   questionnaireVersionId String     @db.Uuid
   buildingId             String     @db.Uuid
@@ -434,7 +434,7 @@ model EmailIdentity {
 
   @@map("email_identities")
   @@index([emailHash])
-  @@index([publicCode])
+  @@index([uniqueCode])
   @@schema("identity")
 }
 
