@@ -316,11 +316,16 @@ export interface StatsResponse {
     threshold: number
     totals: {
       invited: number
+      opened: number
       started: number
       submitted: number
       abandoned: number
       expired: number
+      openingRate: number
+      startRate: number
+      submissionRate: number
       completionRate: number
+      abandonmentRate: number
       telemetryEvents: number
       popupOpens: number
       answerChanges: number
@@ -333,19 +338,42 @@ export interface StatsResponse {
       versionLabel: string
       status: string
       invited: number
+      opened: number
       started: number
       submitted: number
+      abandoned: number
+      openingRate: number
+      startRate: number
+      submissionRate: number
       completionRate: number
+      abandonmentRate: number
       effectifSufficient: boolean
     }>
     buildings: Array<{
       buildingId: string
       label: string
       invited: number | null
+      opened: number | null
       started: number | null
       submitted: number | null
       effectifSufficient: boolean
+      openingRate: number | null
+      startRate: number | null
+      submissionRate: number | null
       completionRate: number | null
+      displayValue: string
+    }>
+    groups: Array<{
+      id: string
+      title: string
+      versionId: string
+      versionLabel: string
+      questionCount: number
+      answerCount: number | null
+      respondentCount: number | null
+      popupOpens: number | null
+      medianDurationMs: number | null
+      effectifSufficient: boolean
       displayValue: string
     }>
     questions: Array<{
@@ -359,6 +387,9 @@ export interface StatsResponse {
       responseChanges: number | null
       backtracks: number | null
       medianDurationMs?: number | null
+      likertDistribution: Array<{ value: number; label: string; count: number; rate: number }> | null
+      freeTextResponses: Array<{ publicCode: string | null; value: string; warning: string | null }>
+      freeTextAccess: 'granted' | 'forbidden' | 'not_applicable'
       highMedianDuration: boolean
       popupOftenOpened: boolean
       difficultQuestion: boolean
@@ -366,5 +397,103 @@ export interface StatsResponse {
       effectifSufficient: boolean
       displayValue: string
     }>
+    submissions: Array<{
+      publicCode: string
+      building: string
+      status: string
+      startedAt: string | null
+      submittedAt: string
+      answerCount: number
+      totalDurationMs: number | null
+      telemetryEvents: number
+      versionLabel: string
+    }>
   }
 }
+
+export interface SubmissionDetailsResponse {
+  submission: {
+    publicCode: string
+    status: string
+    submittedAt: string
+    startedAt: string | null
+    totalDurationMs: number | null
+    answerCount: number
+    questionnaire: string
+    versionLabel: string
+    building: string
+    answers: Array<{
+      questionCode: string
+      questionLabel: string
+      responseType: QuestionType
+      value: unknown
+      warning: string | null
+    }>
+    telemetry: {
+      totalEvents: number
+      popupOpens: number
+      answerChanges: number
+      backtracks: number
+      resumes: number
+    }
+  }
+}
+
+export interface IdentityVaultStatusResponse {
+  status: {
+    operationalSchema: string
+    identitySchema: string
+    identityTable: string
+    model: string
+    directEmailVisibleInAdmin: boolean
+    currentRole: UserRole
+    currentRoleCanExecuteEmailAccess: boolean
+    accessMode: string
+    audit: string[]
+  }
+}
+
+export interface JudicialAccessRequestRecord {
+  id: string
+  requestReference: string
+  legalBasisDescription: string
+  courtOrderReference: string | null
+  requestedPublicCodes: string[]
+  requestedBy: string
+  receivedAt: string
+  dpoValidationUserId: string | null
+  legalValidationUserId: string | null
+  executedByUserId: string | null
+  status: 'received' | 'validated' | 'rejected' | 'executed' | 'closed'
+  executedAt: string | null
+  exportFingerprint: string | null
+  comments: string | null
+}
+
+export interface JudicialAccessRequestsResponse {
+  requests: JudicialAccessRequestRecord[]
+}
+
+export interface CreateJudicialAccessRequest {
+  requestReference: string
+  legalBasisDescription: string
+  courtOrderReference?: string
+  requestedPublicCodes: string[]
+  requestedBy: string
+  comments?: string
+}
+
+export interface JudicialAccessRequestResponse {
+  judicialRequest: JudicialAccessRequestRecord
+  encryptedExport?: {
+    algorithm: string
+    keyRef: string
+    iv: string
+    authTag: string
+    ciphertext: string
+    fingerprint: string
+    expiresInMinutes: number
+    warning: string
+  }
+}
+

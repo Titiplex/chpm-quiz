@@ -19,13 +19,48 @@ export class StatsController {
 
   @Get('questionnaires/:id')
   @Roles('admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo')
-  async questionnaireStats(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+  async questionnaireStats(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: Request,
+  ) {
     const stats = await this.statsService.questionnaireStats(id, user)
+    await this.auditService.log({
+      actor: user,
+      action: 'stats.questionnaire.read',
+      entityType: 'Questionnaire',
+      entityId: id,
+      request,
+      metadata: {
+        threshold: stats.threshold,
+        submitted: stats.totals.submitted,
+        pseudonymizedSubmissionRows: stats.submissions.length,
+      },
+    })
+    return { stats }
+  }
+
+  @Get('questions/:id')
+  @Roles('admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo')
+  async questionStats(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: Request,
+  ) {
+    const stats = await this.statsService.questionStats(id, user)
+    await this.auditService.log({
+      actor: user,
+      action: 'stats.question.read',
+      entityType: 'Question',
+      entityId: id,
+      request,
+      metadata: { questionnaireId: stats.questionnaire.id, questionCode: stats.question.code },
+    })
     return { stats }
   }
 
   @Get('submissions/:publicCode')
-  @Roles('admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo')
+  @Roles('admin', 'analyst', 'dpo')
   async submission(
     @Param('publicCode') publicCode: string,
     @CurrentUser() user: AuthenticatedUser,
