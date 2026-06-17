@@ -2,6 +2,7 @@
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
+import { appConfig } from '@/config/env'
 import { defaultPathByRole } from '@/config/navigation'
 import { useSessionStore } from '@/stores/session'
 import type { UserRole } from '@shared/types/rbac'
@@ -82,9 +83,13 @@ async function submit(): Promise<void> {
           <div class="hero-card p-4 p-lg-5 h-100">
             <div class="position-relative z-1">
               <p class="hero-eyebrow mb-3">Authentification interne</p>
-              <h1 class="hero-title fw-black mb-4">Connexion réelle à l’API centrale.</h1>
+              <h1 class="hero-title fw-black mb-4">
+                {{ appConfig.demoMode ? 'Connexion simulée pour GitHub Pages.' : 'Connexion réelle à l’API centrale.' }}
+              </h1>
               <p class="hero-text mb-4">
-                Les comptes internes utilisent une session serveur HTTP-only. Les répondants, eux, accèdent au questionnaire par lien signé généré dans la modération.
+                {{ appConfig.demoMode
+                  ? 'Cette démo publique fonctionne sans backend : comptes, questionnaires, invitations et réponses sont simulés dans le navigateur.'
+                  : 'Les comptes internes utilisent une session serveur HTTP-only. Les répondants, eux, accèdent au questionnaire par lien signé généré dans la modération.' }}
               </p>
 
               <div class="d-grid gap-3">
@@ -146,9 +151,9 @@ async function submit(): Promise<void> {
 
             <hr class="my-4" />
             <p class="small muted mb-0">
-              Le cookie de session n’est pas lisible par JavaScript. Les pages privées interrogent
-              `/me` au chargement, puis le routeur applique les permissions retournées par le
-              serveur.
+              {{ appConfig.demoMode
+                ? 'Mode GitHub Pages : aucune donnée réelle n’est envoyée à un serveur. Les actions sont conservées localement dans le navigateur pour la démonstration.'
+                : 'Le cookie de session n’est pas lisible par JavaScript. Les pages privées interrogent `/me` au chargement, puis le routeur applique les permissions retournées par le serveur.' }}
             </p>
           </div>
         </div>

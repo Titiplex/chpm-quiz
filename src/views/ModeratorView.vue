@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 
 import KpiCard from '@/components/common/KpiCard.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
+import { appConfig } from '@/config/env'
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
 import { useCatalogStore } from '@/stores/catalog'
 import { useModerationStore } from '@/stores/moderation'
@@ -101,8 +102,8 @@ function canResend(invitation: ApiInvitation): boolean {
       <PageHeader
         eyebrow="Modération conforme CDC"
         title="Créer des invitations par email sans exposer les réponses"
-        description="Le backend génère un code public non prédictible, un jeton signé, une identité email isolée logiquement et un journal d’audit. Le modérateur reste limité à son périmètre bâtiment."
-        badge="Invitations réelles"
+        :description="appConfig.demoMode ? 'La démo simule la génération de liens, les statuts d’invitation et le parcours répondant directement dans le navigateur.' : 'Le backend génère un code public non prédictible, un jeton signé, une identité email isolée logiquement et un journal d’audit. Le modérateur reste limité à son périmètre bâtiment.'"
+        :badge="appConfig.demoMode ? 'Invitations simulées' : 'Invitations réelles'"
       />
       <RoleGateInfo class="mb-4" />
 
@@ -110,7 +111,9 @@ function canResend(invitation: ApiInvitation): boolean {
         {{ catalog.error || moderation.error }}
       </div>
       <div v-else class="alert alert-success rounded-4" role="status">
-        Les questionnaires publiés et ouverts, bâtiments et invitations viennent de PostgreSQL. Le lien répondant utilise `/r/&lt;token&gt;` et ne contient aucun email.
+        {{ appConfig.demoMode
+          ? 'Mode GitHub Pages : questionnaires, bâtiments et invitations sont simulés localement. Le lien répondant utilise `#/r/<token>` et ne contient aucun email.'
+          : 'Les questionnaires publiés et ouverts, bâtiments et invitations viennent de PostgreSQL. Le lien répondant utilise `/r/<token>` et ne contient aucun email.' }}
       </div>
 
       <div class="row g-4">
@@ -141,7 +144,9 @@ function canResend(invitation: ApiInvitation): boolean {
             <label class="form-label fw-bold" for="respondent-email">Adresse email du répondant</label>
             <input id="respondent-email" v-model="form.email" class="form-control mb-3" type="email" required />
             <p class="small muted mb-3">
-              L’email est chiffré et stocké dans la base identité. La table opérationnelle ne conserve que le code public, le hash de jeton et les statuts.
+              {{ appConfig.demoMode
+                ? 'En démo statique, l’email est seulement masqué côté navigateur. En production, il sera chiffré et séparé des réponses.'
+                : 'L’email est chiffré et stocké dans la base identité. La table opérationnelle ne conserve que le code public, le hash de jeton et les statuts.' }}
             </p>
 
             <div class="row g-3 mb-4">

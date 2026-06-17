@@ -1,4 +1,5 @@
 import { appConfig } from '@/config/env'
+import { demoApiRequest } from '@/services/demoApi'
 
 export class ApiError extends Error {
   readonly status: number
@@ -14,11 +15,15 @@ export class ApiError extends Error {
 
 type JsonBody = object | Array<unknown>
 
-interface ApiRequestOptions extends Omit<RequestInit, 'body'> {
+export interface ApiRequestOptions extends Omit<RequestInit, 'body'> {
   body?: JsonBody
 }
 
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+  if (appConfig.demoMode) {
+    return demoApiRequest<T>(path, options)
+  }
+
   const response = await fetch(`${appConfig.apiBaseUrl}${path}`, {
     ...options,
     credentials: 'include',

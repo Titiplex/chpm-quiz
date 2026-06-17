@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import { createRouter, createWebHashHistory, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
 import { defaultPathByRole } from '@/config/navigation'
 import { useSessionStore } from '@/stores/session'
@@ -110,7 +110,9 @@ const routes: RouteRecordRaw[] = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  history: import.meta.env.VITE_ROUTER_MODE === 'hash'
+    ? createWebHashHistory(import.meta.env.BASE_URL)
+    : createWebHistory(import.meta.env.BASE_URL),
   routes,
 })
 

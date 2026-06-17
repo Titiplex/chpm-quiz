@@ -3,6 +3,7 @@ import { computed, onMounted, watch } from 'vue'
 
 import KpiCard from '@/components/common/KpiCard.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
+import { appConfig } from '@/config/env'
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
 import { useCatalogStore } from '@/stores/catalog'
 import { useStatsStore } from '@/stores/stats'
@@ -39,8 +40,8 @@ function formatDuration(durationMs?: number | null): string {
       <PageHeader
         eyebrow="Statistiques pseudonymisées"
         title="Pilotage réel avec seuils anti-réidentification"
-        description="Les indicateurs sont calculés depuis les invitations, réponses, soumissions et événements de télémétrie PostgreSQL. Les ventilations faibles affichent “effectif insuffisant”."
-        badge="Données réelles"
+        :description="appConfig.demoMode ? 'Indicateurs simulés pour démonstration métier. Les ventilations faibles affichent “effectif insuffisant” comme dans le comportement attendu.' : 'Les indicateurs sont calculés depuis les invitations, réponses, soumissions et événements de télémétrie PostgreSQL. Les ventilations faibles affichent “effectif insuffisant”.'"
+        :badge="appConfig.demoMode ? 'Données simulées' : 'Données réelles'"
       />
       <RoleGateInfo class="mb-4" />
 

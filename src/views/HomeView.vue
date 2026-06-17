@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
+import { appConfig } from '@/config/env'
 import { useSessionStore } from '@/stores/session'
 import { hasRoleAccess, type UserRole } from '@shared/types/rbac'
 
@@ -49,7 +50,7 @@ const canOpenArchitecture = computed(() => hasRoleAccess(session.currentRole, ['
 const canOpenStats = computed(() => hasRoleAccess(session.currentRole, ['admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo']))
 
 const principles = [
-  'Serveur central NestJS connecté à PostgreSQL',
+  appConfig.demoMode ? 'Mode démo navigateur, sans backend ni données personnelles réelles' : 'Serveur central NestJS connecté à PostgreSQL',
   'Cookie HTTP-only comme preuve de session',
   'Contrôle des rôles côté routeur et côté API',
   'Invitations, sessions répondant et statistiques servies par la base',
@@ -61,13 +62,14 @@ const principles = [
     <div class="container-fluid px-4 px-xl-5">
       <div class="hero-card p-4 p-lg-5 mb-4">
         <div class="position-relative z-1">
-          <p class="hero-eyebrow mb-3">Produit connecté</p>
+          <p class="hero-eyebrow mb-3">{{ appConfig.demoMode ? 'Démo statique' : 'Produit connecté' }}</p>
           <h1 class="hero-title fw-black mb-4">
             Plateforme de questionnaires adaptatifs, anonymisés et pilotables à grande échelle.
           </h1>
           <p class="hero-text mb-4">
-            Cette itération branche la maquette sur une API centrale : authentification serveur,
-            permissions réelles, données bâtiments et questionnaires chargées depuis PostgreSQL.
+            {{ appConfig.demoMode
+              ? 'Cette version est prévue pour GitHub Pages : elle simule l’API centrale afin de recueillir des retours métier sans exposer de données réelles.'
+              : 'Cette itération branche la maquette sur une API centrale : authentification serveur, permissions réelles, données bâtiments et questionnaires chargées depuis PostgreSQL.' }}
           </p>
           <RoleGateInfo class="mb-4" />
           <div class="d-flex flex-wrap gap-2">
