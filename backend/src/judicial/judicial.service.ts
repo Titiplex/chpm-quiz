@@ -84,15 +84,15 @@ export class JudicialService {
   }
 
   async validateDpo(id: string, user: AuthenticatedUser, dto: JudicialWorkflowCommentDto, request: Request) {
-    if (user.role !== 'dpo' && user.role !== 'admin') {
-      throw new ForbiddenException('Validation DPO réservée au DPO ou à un administrateur global habilité')
+    if (user.role !== 'dpo') {
+      throw new ForbiddenException('Validation DPO réservée au DPO')
     }
 
     return this.validate(id, user, dto, request, 'dpo')
   }
 
   async validateLegal(id: string, user: AuthenticatedUser, dto: JudicialWorkflowCommentDto, request: Request) {
-    if (user.role !== 'judicial_officer' && user.role !== 'admin') {
+    if (user.role !== 'judicial_officer') {
       throw new ForbiddenException('Validation juridique réservée au responsable accès judiciaire')
     }
 
@@ -141,7 +141,7 @@ export class JudicialService {
   }
 
   async execute(id: string, user: AuthenticatedUser, request: Request) {
-    if (user.role !== 'judicial_officer' && user.role !== 'admin') {
+    if (user.role !== 'judicial_officer') {
       throw new ForbiddenException('Exécution réservée au responsable accès judiciaire')
     }
 
@@ -155,17 +155,17 @@ export class JudicialService {
       throw new BadRequestException('Double validation incomplète : DPO et juridique sont obligatoires')
     }
 
-    const emailIdentities = await this.prisma.emailIdentity.findMany({
+    const identityVaultEntries = await this.prisma.identityVaultEntry.findMany({
       where: {
-        publicCode: { in: judicialRequest.requestedPublicCodes },
+        uniqueCode: { in: judicialRequest.requestedPublicCodes },
         deletedAt: null,
       },
-      orderBy: { publicCode: 'asc' },
+      orderBy: { uniqueCode: 'asc' },
     })
 
-    const rows = emailIdentities.map((identity: any) => ({
-      publicCode: identity.publicCode,
-      email: this.emailCryptoService.decryptEmail(identity.emailCiphertext),
+    const rows = identityVaultEntries.map((identity: any) => ({
+      publicCode: identity.uniqueCode,
+      email: this.emailCryptoService.decryptEmail(identity.encryptedEmail),
       questionnaireVersionId: identity.questionnaireVersionId,
       buildingId: identity.buildingId,
     }))

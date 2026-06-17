@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config'
 import { AuditModule } from './audit/audit.module'
 import { AuthModule } from './auth/auth.module'
 import { BuildingsModule } from './buildings/buildings.module'
+import { IdentityVaultModule } from './identity-vault/identity-vault.module'
 import { JudicialModule } from './judicial/judicial.module'
 import { ModerationModule } from './moderation/moderation.module'
 import { NotificationsModule } from './notifications/notifications.module'
@@ -25,6 +26,7 @@ import { VersionsModule } from './versions/versions.module'
     AuthModule,
     AuditModule,
     BuildingsModule,
+    IdentityVaultModule,
     QuestionnairesModule,
     VersionsModule,
     ModerationModule,

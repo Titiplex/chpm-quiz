@@ -34,7 +34,7 @@ export class ModerationService {
             questionnaire: true,
           },
         },
-        emailIdentity: true,
+        identityVaultEntry: true,
         responseSession: {
           include: {
             submission: true,
@@ -72,7 +72,7 @@ export class ModerationService {
     const normalizedEmail = this.emailCryptoService.normalize(dto.email)
     const emailHash = this.emailCryptoService.hashEmail(normalizedEmail)
 
-    const duplicate = await this.prisma.emailIdentity.findFirst({
+    const duplicate = await this.prisma.identityVaultEntry.findFirst({
       where: {
         questionnaireVersionId: dto.questionnaireVersionId,
         emailHash,
@@ -105,10 +105,10 @@ export class ModerationService {
           notifyAdmins: dto.notifyAdmins ?? false,
           expiresAt,
           sentAt: new Date(),
-          emailIdentity: {
+          identityVaultEntry: {
             create: {
-              publicCode,
-              emailCiphertext: this.emailCryptoService.encryptEmail(normalizedEmail),
+              uniqueCode: publicCode,
+              encryptedEmail: this.emailCryptoService.encryptEmail(normalizedEmail),
               emailHash,
               questionnaireVersionId: dto.questionnaireVersionId,
               buildingId: dto.buildingId,
@@ -126,7 +126,7 @@ export class ModerationService {
         },
         include: {
           building: true,
-          emailIdentity: true,
+          identityVaultEntry: true,
           responseSession: true,
           questionnaireVersion: { include: { questionnaire: true } },
         },
@@ -175,7 +175,7 @@ export class ModerationService {
       },
       include: {
         building: true,
-        emailIdentity: true,
+        identityVaultEntry: true,
         responseSession: true,
         questionnaireVersion: { include: { questionnaire: true } },
       },
@@ -204,7 +204,7 @@ export class ModerationService {
       },
       include: {
         building: true,
-        emailIdentity: true,
+        identityVaultEntry: true,
         responseSession: true,
         questionnaireVersion: { include: { questionnaire: true } },
       },
@@ -263,7 +263,7 @@ export class ModerationService {
       id: invitation.id,
       publicCode: invitation.publicCode,
       status: invitation.status,
-      maskedEmail: invitation.emailIdentity ? this.emailCryptoService.maskEncryptedEmail(invitation.emailIdentity.emailCiphertext) : null,
+      maskedEmail: invitation.identityVaultEntry ? this.emailCryptoService.maskEncryptedEmail(invitation.identityVaultEntry.encryptedEmail) : null,
       questionnaireVersionId: invitation.questionnaireVersionId,
       questionnaireTitle: invitation.questionnaireVersion?.questionnaire?.title ?? null,
       versionLabel: invitation.questionnaireVersion?.versionLabel ?? null,
