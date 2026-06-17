@@ -65,8 +65,9 @@ describe('RespondentView functional flow', () => {
     expect(wrapper.text()).toContain('Avoir des rêves perturbants ?')
     expect(wrapper.text()).toContain('Page 1 / 2')
 
-    const pageViewCall = calls.find((call) => call.url.endsWith('/respondent/telemetry'))
+    const pageViewCall = calls.find((call) => call.url.endsWith('/respondent/telemetry') && (call.body as any)?.eventType === 'page_view')
     expect(pageViewCall?.body).toMatchObject({ token: 'token-demo', eventType: 'page_view', currentPage: 1 })
+    expect(calls.some((call) => call.url.endsWith('/respondent/telemetry') && (call.body as any)?.eventType === 'questionnaire_start')).toBe(true)
 
     const infoButton = wrapper.findAll('button').find((button) => button.text().includes('Rêves perturbants'))
     expect(infoButton).toBeTruthy()
@@ -81,6 +82,7 @@ describe('RespondentView functional flow', () => {
     await zeroButton?.trigger('click')
     await flushPromises()
 
+    expect(calls.some((call) => call.url.endsWith('/respondent/telemetry') && (call.body as any)?.eventType === 'answer_change')).toBe(true)
     expect(calls.some((call) => call.url.endsWith('/respondent/answers') && call.method === 'PUT')).toBe(true)
   })
 })
