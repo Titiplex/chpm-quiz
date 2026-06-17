@@ -111,18 +111,32 @@ export class RespondentService {
         },
       })
 
+      const sessionStatusPatch = dto.eventType === 'questionnaire_abandon'
+        ? { status: 'abandoned' }
+        : dto.eventType === 'questionnaire_resume'
+          ? { status: 'draft' }
+          : {}
+
       if (dto.currentPage !== undefined) {
         await tx.responseSession.update({
           where: { id: responseSession.id },
           data: {
             currentPage: Math.max(1, dto.currentPage),
             lastSeenAt: new Date(),
+            ...sessionStatusPatch,
           },
         })
       } else {
         await tx.responseSession.update({
           where: { id: responseSession.id },
-          data: { lastSeenAt: new Date() },
+          data: { lastSeenAt: new Date(), ...sessionStatusPatch },
+        })
+      }
+
+      if (dto.eventType === 'questionnaire_resume' && invitation.status !== 'submitted') {
+        await tx.invitation.update({
+          where: { id: invitation.id },
+          data: { status: 'in_progress', startedAt: invitation.startedAt ?? new Date() },
         })
       }
 

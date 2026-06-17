@@ -11,6 +11,8 @@ const respondent = useRespondentSessionStore()
 const answers = reactive<Record<string, unknown>>({})
 const textAutosaveTimers = new Map<string, number>()
 const pendingTextQuestionIds = new Set<string>()
+const questionStartedAt = new Map<string, number>()
+
 
 const token = computed(() => String(route.params.token ?? ''))
 const hasToken = computed(() => Boolean(token.value))
@@ -21,6 +23,7 @@ const activePopup = ref<{ questionId: string; popupDefinitionId: string; termKey
 const showSubmitConfirmation = ref(false)
 const isSubmitting = ref(false)
 const submitError = ref<string | null>(null)
+const sessionStartedAtMs = ref(Date.now())
 
 const textAutosaveDelayMs = 650
 
@@ -74,6 +77,9 @@ onMounted(async () => {
     await respondent.load(token.value)
     pageIndex.value = Math.max(0, (respondent.session?.responseSession.currentPage ?? 1) - 1)
     hydrateLocalAnswers()
+    sessionStartedAtMs.value = Date.parse(String(respondent.session?.responseSession.startedAt ?? '')) || Date.now()
+    startQuestionTimers()
+    await recordLifecycleTelemetry()
     await recordPageTelemetry('page_view')
   }
 })
@@ -81,7 +87,9 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   void flushPendingAutosaves()
   void closeActivePopup('popup_close')
+  void recordQuestionTelemetry('question_time')
   void recordPageTelemetry('page_leave')
+  void recordAbandonTelemetry()
   clearAutosaveTimers()
 })
 
@@ -105,9 +113,27 @@ function hasAnswerValue(value: unknown): boolean {
 }
 
 async function save(question: RespondentQuestion, value: unknown) {
+  const previous = questionValue(question)
   answers[question.id] = value
+
+  if (!areValuesEqual(previous, value)) {
+    await respondent.telemetry({
+      questionId: question.id,
+      eventType: 'answer_change',
+      currentPage: currentPageNumber.value,
+      eventPayload: {
+        questionCode: question.code,
+        previousShape: valueShape(previous),
+        nextShape: valueShape(value),
+        page: currentPageNumber.value,
+      },
+      occurredAt: new Date().toISOString(),
+    })
+  }
+
   await respondent.save(question.id, value)
   hydrateLocalAnswers()
+  startQuestionTimers()
 }
 
 function queueTextAutosave(question: RespondentQuestion, value: string): void {
@@ -136,8 +162,27 @@ async function flushQuestionAutosave(question: RespondentQuestion): Promise<void
   if (!pendingTextQuestionIds.has(question.id) || respondent.isLocked) return
 
   pendingTextQuestionIds.delete(question.id)
-  await respondent.save(question.id, answers[question.id] ?? '')
+  const previous = question.answer?.value ?? null
+  const next = answers[question.id] ?? ''
+
+  if (!areValuesEqual(previous, next)) {
+    await respondent.telemetry({
+      questionId: question.id,
+      eventType: 'answer_change',
+      currentPage: currentPageNumber.value,
+      eventPayload: {
+        questionCode: question.code,
+        previousShape: valueShape(previous),
+        nextShape: valueShape(next),
+        page: currentPageNumber.value,
+      },
+      occurredAt: new Date().toISOString(),
+    })
+  }
+
+  await respondent.save(question.id, next)
   hydrateLocalAnswers()
+  startQuestionTimers()
 }
 
 async function flushPendingAutosaves(): Promise<void> {
@@ -176,22 +221,32 @@ function likertValues(scale?: { points: number; minValue?: number } | null): num
 async function previousPage(): Promise<void> {
   await flushPendingAutosaves()
   await closeActivePopup('popup_close')
-  await recordPageTelemetry('page_change')
+  await recordQuestionTelemetry('question_time')
+  await recordPageTelemetry('page_change', { direction: 'backward' })
+  await respondent.telemetry({
+    eventType: 'backward_navigation',
+    currentPage: currentPageNumber.value,
+    eventPayload: { fromPage: currentPageNumber.value, toPage: Math.max(1, currentPageNumber.value - 1) },
+    occurredAt: new Date().toISOString(),
+  })
   pageIndex.value = Math.max(0, pageIndex.value - 1)
   pageStartedAt.value = Date.now()
+  startQuestionTimers()
   await recordPageTelemetry('page_view')
 }
 
 async function nextPage(): Promise<void> {
   await flushPendingAutosaves()
   await closeActivePopup('popup_close')
-  await recordPageTelemetry('page_change')
+  await recordQuestionTelemetry('question_time')
+  await recordPageTelemetry('page_change', { direction: 'forward' })
   pageIndex.value = Math.min(Math.max(pages.value.length - 1, 0), pageIndex.value + 1)
   pageStartedAt.value = Date.now()
+  startQuestionTimers()
   await recordPageTelemetry('page_view')
 }
 
-async function recordPageTelemetry(eventType: string): Promise<void> {
+async function recordPageTelemetry(eventType: string, extraPayload: Record<string, unknown> = {}): Promise<void> {
   if (!currentPage.value || !respondent.session || respondent.isLocked) return
   await respondent.telemetry({
     eventType,
@@ -201,9 +256,82 @@ async function recordPageTelemetry(eventType: string): Promise<void> {
       groupId: currentPage.value.group.id,
       groupTitle: currentPage.value.group.title,
       questionIds: currentPage.value.questions.map((question) => question.id),
+      ...extraPayload,
     },
     occurredAt: new Date().toISOString(),
   })
+}
+
+async function recordLifecycleTelemetry(): Promise<void> {
+  if (!respondent.session || respondent.isLocked) return
+
+  const hasDraft = respondent.answeredCount > 0 || (respondent.session.responseSession.currentPage ?? 1) > 1
+  await respondent.telemetry({
+    eventType: hasDraft ? 'questionnaire_resume' : 'questionnaire_start',
+    currentPage: currentPageNumber.value || 1,
+    eventPayload: {
+      publicCode: respondent.session.responseSession.publicCode,
+      answeredCount: respondent.answeredCount,
+      restoredPage: respondent.session.responseSession.currentPage,
+    },
+    occurredAt: new Date().toISOString(),
+  })
+}
+
+async function recordAbandonTelemetry(): Promise<void> {
+  if (!respondent.session || respondent.isLocked || respondent.status === 'submitted') return
+
+  await respondent.telemetry({
+    eventType: 'questionnaire_abandon',
+    currentPage: currentPageNumber.value || 1,
+    durationMs: Math.max(0, Date.now() - sessionStartedAtMs.value),
+    eventPayload: { page: currentPageNumber.value, answeredCount: respondent.answeredCount },
+    occurredAt: new Date().toISOString(),
+  })
+}
+
+function startQuestionTimers(): void {
+  questionStartedAt.clear()
+  const now = Date.now()
+
+  for (const question of currentPage.value?.questions ?? []) {
+    questionStartedAt.set(question.id, now)
+  }
+}
+
+async function recordQuestionTelemetry(eventType: 'question_time'): Promise<void> {
+  if (!currentPage.value || respondent.isLocked) return
+
+  const now = Date.now()
+  const questions = currentPage.value.questions
+
+  for (const question of questions) {
+    const startedAt = questionStartedAt.get(question.id) ?? pageStartedAt.value
+    await respondent.telemetry({
+      questionId: question.id,
+      eventType,
+      currentPage: currentPageNumber.value,
+      durationMs: Math.max(0, now - startedAt),
+      eventPayload: {
+        questionCode: question.code,
+        groupId: currentPage.value.group.id,
+        page: currentPageNumber.value,
+      },
+      occurredAt: new Date().toISOString(),
+    })
+  }
+
+  startQuestionTimers()
+}
+
+function areValuesEqual(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left ?? null) === JSON.stringify(right ?? null)
+}
+
+function valueShape(value: unknown): string {
+  if (value === null || value === undefined || value === '') return 'empty'
+  if (Array.isArray(value)) return `array:${value.length}`
+  return typeof value
 }
 
 function popupDomId(popup: ApiPopupDefinition): string {
@@ -268,6 +396,7 @@ async function closeActivePopup(eventType: 'popup_close' | 'popup_switch'): Prom
 async function openSubmitConfirmation(): Promise<void> {
   submitError.value = null
   await flushPendingAutosaves()
+  await recordQuestionTelemetry('question_time')
   showSubmitConfirmation.value = true
 }
 
@@ -279,6 +408,15 @@ async function confirmSubmit(): Promise<void> {
 
   try {
     await flushPendingAutosaves()
+    await closeActivePopup('popup_close')
+    await recordQuestionTelemetry('question_time')
+    await respondent.telemetry({
+      eventType: 'questionnaire_total_time',
+      currentPage: currentPageNumber.value,
+      durationMs: Math.max(0, Date.now() - sessionStartedAtMs.value),
+      eventPayload: { pageCount: pages.value.length, answeredCount: respondent.answeredCount },
+      occurredAt: new Date().toISOString(),
+    })
     await respondent.submit()
     showSubmitConfirmation.value = false
   } catch (caught) {
