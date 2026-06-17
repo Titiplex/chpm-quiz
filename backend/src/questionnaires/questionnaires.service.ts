@@ -154,6 +154,7 @@ export class QuestionnairesService {
         displayOrder,
         questionsPerPage: dto.questionsPerPage ?? 3,
         randomize: dto.randomize ?? false,
+        conditionExpression: dto.conditionExpression as any,
       },
     })
 
@@ -176,6 +177,7 @@ export class QuestionnairesService {
         ...(dto.displayOrder !== undefined ? { displayOrder: dto.displayOrder } : {}),
         ...(dto.questionsPerPage !== undefined ? { questionsPerPage: dto.questionsPerPage } : {}),
         ...(dto.randomize !== undefined ? { randomize: dto.randomize } : {}),
+        ...(dto.conditionExpression !== undefined ? { conditionExpression: dto.conditionExpression as any } : {}),
       },
     })
 
@@ -214,6 +216,7 @@ export class QuestionnairesService {
         isRequired: dto.isRequired ?? false,
         displayOrder,
         tags: dto.popupDefinition ? ['popup'] : [],
+        conditionExpression: dto.conditionExpression as any,
         ...(dto.responseType === 'likert' && dto.likertScale
           ? {
               likertScale: {
@@ -272,6 +275,7 @@ export class QuestionnairesService {
           ...(dto.responseType !== undefined ? { responseType: dto.responseType } : {}),
           ...(dto.isRequired !== undefined ? { isRequired: dto.isRequired } : {}),
           ...(dto.displayOrder !== undefined ? { displayOrder: dto.displayOrder } : {}),
+          ...(dto.conditionExpression !== undefined ? { conditionExpression: dto.conditionExpression as any } : {}),
           ...(dto.popupDefinition !== undefined ? { tags: dto.popupDefinition ? ['popup'] : [] } : {}),
         },
       })
@@ -353,6 +357,7 @@ export class QuestionnairesService {
       displayOrder: group.displayOrder,
       questionsPerPage: group.questionsPerPage,
       randomize: group.randomize,
+      conditionExpression: group.conditionExpression,
       questions: group.questions.map((question: any) => ({
         id: question.id,
         code: question.code,
@@ -366,6 +371,7 @@ export class QuestionnairesService {
         popupBody: question.popupDefinitions[0]?.body ?? null,
         displayOrder: question.displayOrder,
         isRequired: question.isRequired,
+        conditionExpression: question.conditionExpression,
         likertScale: question.likertScale,
         options: question.answerOptions,
         popupDefinitions: question.popupDefinitions.map((popup: any) => ({

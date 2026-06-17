@@ -201,9 +201,18 @@ export class VersionsService {
       }
     }
 
-    const groupIds = new Set(groups.map((group: any) => group.id))
-    const questionIds = new Set(questions.map((question: any) => question.id))
-    const questionCodes = new Set(questions.map((question: any) => question.code))
+    const groupIds = new Set<string>(
+      groups.map((group: any) => group.id).filter((id: unknown): id is string => typeof id === 'string'),
+    )
+    const questionIds = new Set<string>(
+      questions.map((question: any) => question.id).filter((id: unknown): id is string => typeof id === 'string'),
+    )
+    const questionCodes = new Set<string>(
+      questions
+        .map((question: any) => question.code)
+        .filter((code: unknown): code is string => typeof code === 'string')
+        .map((code: string) => code.toUpperCase()),
+    )
 
     for (const question of questions) {
       if (!question.label?.trim()) {
@@ -236,6 +245,14 @@ export class VersionsService {
       }
     }
 
+    for (const group of groups) {
+      this.validateConditionReferences(group.conditionExpression, `le groupe ${group.title || group.id}`, groupIds, questionIds, questionCodes, errors)
+    }
+
+    for (const question of questions) {
+      this.validateConditionReferences(question.conditionExpression, `la question ${question.code}`, groupIds, questionIds, questionCodes, errors)
+    }
+
     for (const rule of version.conditionalRules.filter((item: any) => item.isActive)) {
       const serialized = JSON.stringify({ trigger: rule.trigger, effect: rule.effect })
       const referencedIds = this.extractUuidLikeValues(serialized)
@@ -255,6 +272,32 @@ export class VersionsService {
 
     if (errors.length) {
       throw new BadRequestException(`Publication impossible : ${errors.join(' ; ')}`)
+    }
+  }
+
+  private validateConditionReferences(
+    expression: unknown,
+    label: string,
+    groupIds: Set<string>,
+    questionIds: Set<string>,
+    questionCodes: Set<string>,
+    errors: string[],
+  ): void {
+    if (!expression) return
+
+    const serialized = JSON.stringify(expression)
+    const referencedIds = this.extractUuidLikeValues(serialized)
+    for (const ref of referencedIds) {
+      if (!groupIds.has(ref) && !questionIds.has(ref)) {
+        errors.push(`${label} référence un objet conditionnel supprimé ou introuvable (${ref})`)
+      }
+    }
+
+    const referencedCodes = this.extractQuestionCodes(serialized)
+    for (const code of referencedCodes) {
+      if (!questionCodes.has(code)) {
+        errors.push(`${label} référence le code question introuvable ${code}`)
+      }
     }
   }
 

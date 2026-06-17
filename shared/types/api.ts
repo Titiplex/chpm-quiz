@@ -54,12 +54,24 @@ export interface ApiPopupDefinition {
   termLabel?: string
 }
 
+export interface ConditionExpression {
+  questionId?: string
+  questionCode?: string
+  operator?: 'answered' | 'not_answered' | 'equals' | 'not_equals' | 'contains' | 'gt' | 'gte' | 'lt' | 'lte'
+  value?: unknown
+  equals?: unknown
+  all?: ConditionExpression[]
+  any?: ConditionExpression[]
+  not?: ConditionExpression
+}
+
 export interface ApiQuestion extends Omit<QuestionDefinition, 'groupId'> {
   id: string
   type: QuestionType
   responseType?: QuestionType
   displayOrder: number
   isRequired?: boolean
+  conditionExpression?: ConditionExpression | null
   likertScale?: ApiLikertScale | null
   options?: ApiAnswerOption[]
   popupDefinitions?: ApiPopupDefinition[]
@@ -72,6 +84,7 @@ export interface ApiQuestionGroup {
   displayOrder: number
   questionsPerPage?: number
   randomize: boolean
+  conditionExpression?: ConditionExpression | null
   questions: ApiQuestion[]
 }
 
@@ -128,6 +141,7 @@ export interface CreateQuestionGroupRequest {
   displayOrder?: number
   questionsPerPage?: number
   randomize?: boolean
+  conditionExpression?: ConditionExpression | null
 }
 
 export interface UpdateQuestionGroupRequest {
@@ -136,6 +150,7 @@ export interface UpdateQuestionGroupRequest {
   displayOrder?: number
   questionsPerPage?: number
   randomize?: boolean
+  conditionExpression?: ConditionExpression | null
 }
 
 export interface LikertScaleRequest {
@@ -160,6 +175,7 @@ export interface CreateQuestionRequest {
   responseType: Extract<QuestionType, 'free_text' | 'free_text_short' | 'free_text_long' | 'likert' | 'single_choice' | 'multiple_choice' | 'number' | 'date' | 'information'>
   isRequired?: boolean
   displayOrder?: number
+  conditionExpression?: ConditionExpression | null
   likertScale?: LikertScaleRequest
   answerOptions?: Array<{ value: string; label: string; displayOrder?: number; isExclusive?: boolean }>
   popupDefinition?: PopupDefinitionRequest
@@ -172,6 +188,7 @@ export interface UpdateQuestionRequest {
   responseType?: Extract<QuestionType, 'free_text' | 'free_text_short' | 'free_text_long' | 'likert' | 'single_choice' | 'multiple_choice' | 'number' | 'date' | 'information'>
   isRequired?: boolean
   displayOrder?: number
+  conditionExpression?: ConditionExpression | null
   likertScale?: LikertScaleRequest
   answerOptions?: Array<{ value: string; label: string; displayOrder?: number; isExclusive?: boolean }>
   popupDefinition?: PopupDefinitionRequest | null
@@ -306,6 +323,10 @@ export interface StatsResponse {
       completionRate: number
       telemetryEvents: number
       popupOpens: number
+      answerChanges: number
+      backtracks: number
+      resumes: number
+      medianTotalDurationMs: number | null
     }
     versions: Array<{
       id: string
@@ -334,7 +355,14 @@ export interface StatsResponse {
       responseType: QuestionType
       answerCount: number | null
       popupOpens: number | null
+      popupOpenRate: number | null
+      responseChanges: number | null
+      backtracks: number | null
       medianDurationMs?: number | null
+      highMedianDuration: boolean
+      popupOftenOpened: boolean
+      difficultQuestion: boolean
+      difficultyLabels: string[]
       effectifSufficient: boolean
       displayValue: string
     }>

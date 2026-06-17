@@ -5,6 +5,7 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   Max,
@@ -67,6 +68,10 @@ export class CreateQuestionGroupDto {
   @IsOptional()
   @IsBoolean()
   randomize?: boolean
+
+  @IsOptional()
+  @IsObject()
+  conditionExpression?: Record<string, unknown>
 }
 
 export class UpdateQuestionGroupDto {
@@ -96,6 +101,10 @@ export class UpdateQuestionGroupDto {
   @IsOptional()
   @IsBoolean()
   randomize?: boolean
+
+  @IsOptional()
+  @IsObject()
+  conditionExpression?: Record<string, unknown>
 }
 
 export class LikertScaleDto {
@@ -202,6 +211,10 @@ export class CreateQuestionDto {
   @Max(500)
   displayOrder?: number
 
+  @IsOptional()
+  @IsObject()
+  conditionExpression?: Record<string, unknown>
+
   @ValidateIf((dto: CreateQuestionDto) => dto.responseType === 'single_choice' || dto.responseType === 'multiple_choice')
   @IsArray()
   @ArrayMaxSize(30)
@@ -253,6 +266,10 @@ export class UpdateQuestionDto {
   @Min(1)
   @Max(500)
   displayOrder?: number
+
+  @IsOptional()
+  @IsObject()
+  conditionExpression?: Record<string, unknown>
 
   @ValidateIf((dto: UpdateQuestionDto) => dto.responseType === 'single_choice' || dto.responseType === 'multiple_choice' || dto.answerOptions !== undefined)
   @IsArray()
