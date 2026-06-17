@@ -22,6 +22,15 @@ onMounted(async () => {
 watch(selectedQuestionnaireId, async (id) => {
   if (id) await statsStore.fetchForQuestionnaire(id)
 })
+
+function formatDuration(durationMs?: number | null): string {
+  if (!durationMs) return '—'
+  const seconds = Math.round(durationMs / 1000)
+  if (seconds < 60) return `${seconds} s`
+  const minutes = Math.floor(seconds / 60)
+  const remainder = seconds % 60
+  return remainder ? `${minutes} min ${remainder} s` : `${minutes} min`
+}
 </script>
 
 <template>
@@ -56,6 +65,18 @@ watch(selectedQuestionnaireId, async (id) => {
           </div>
           <div class="col-md-3">
             <KpiCard label="Completion" :value="`${statsStore.stats.totals.completionRate} %`" />
+          </div>
+          <div class="col-md-3">
+            <KpiCard label="Temps médian total" :value="formatDuration(statsStore.stats.totals.medianTotalDurationMs)" />
+          </div>
+          <div class="col-md-3">
+            <KpiCard label="Popups ouvertes" :value="String(statsStore.stats.totals.popupOpens)" tone="warning" />
+          </div>
+          <div class="col-md-3">
+            <KpiCard label="Changements" :value="String(statsStore.stats.totals.answerChanges)" />
+          </div>
+          <div class="col-md-3">
+            <KpiCard label="Retours / reprises" :value="`${statsStore.stats.totals.backtracks} / ${statsStore.stats.totals.resumes}`" />
           </div>
         </div>
 
@@ -137,7 +158,9 @@ watch(selectedQuestionnaireId, async (id) => {
                       <th>Type</th>
                       <th>Réponses</th>
                       <th>Popups</th>
-                      <th>Règle</th>
+                      <th>Temps médian</th>
+                      <th>Changements</th>
+                      <th>Signal admin</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -148,11 +171,25 @@ watch(selectedQuestionnaireId, async (id) => {
                       </td>
                       <td>{{ question.responseType }}</td>
                       <td>{{ question.answerCount ?? "—" }}</td>
-                      <td>{{ question.popupOpens ?? "—" }}</td>
                       <td>
-                        <span class="badge-soft" :class="{ success: question.effectifSufficient, warning: !question.effectifSufficient }">
-                          {{ question.displayValue }}
+                        <span>{{ question.popupOpens ?? "—" }}</span>
+                        <div v-if="question.popupOpenRate !== null" class="small muted">{{ question.popupOpenRate }} % des sessions</div>
+                      </td>
+                      <td>
+                        <span class="badge-soft" :class="{ warning: question.highMedianDuration }">
+                          {{ formatDuration(question.medianDurationMs) }}
                         </span>
+                      </td>
+                      <td>{{ question.responseChanges ?? "—" }}</td>
+                      <td>
+                        <div class="d-flex flex-wrap gap-1">
+                          <span class="badge-soft" :class="{ danger: question.difficultQuestion, success: question.effectifSufficient && !question.difficultQuestion, warning: !question.effectifSufficient }">
+                            {{ question.difficultQuestion ? 'question difficile' : question.displayValue }}
+                          </span>
+                          <span v-for="label in question.difficultyLabels" :key="label" class="badge-soft warning">
+                            {{ label }}
+                          </span>
+                        </div>
                       </td>
                     </tr>
                   </tbody>

@@ -70,6 +70,17 @@ export class StatsService {
     const telemetryEvents = scopedVersions.flatMap((version: any) =>
       version.invitations.flatMap((invitation: any) => invitation.responseSession?.telemetryEvents ?? []),
     )
+    const visibleSessionIds = new Set<string>(
+      scopedVersions.flatMap((version: any) =>
+        version.invitations
+          .map((invitation: any) => invitation.responseSession?.id)
+          .filter((id: unknown): id is string => typeof id === 'string'),
+      ),
+    )
+    const totalDurations = telemetryEvents
+      .filter((event: any) => event.eventType === 'questionnaire_total_time')
+      .map((event: any) => event.durationMs)
+      .filter((duration: unknown): duration is number => typeof duration === 'number')
 
     return {
       questionnaire: {
@@ -87,10 +98,14 @@ export class StatsService {
         completionRate: totalInvited === 0 ? 0 : Math.round((totalSubmitted / totalInvited) * 100),
         telemetryEvents: telemetryEvents.length,
         popupOpens: telemetryEvents.filter((event: any) => event.eventType === 'popup_open').length,
+        answerChanges: telemetryEvents.filter((event: any) => event.eventType === 'answer_change').length,
+        backtracks: telemetryEvents.filter((event: any) => event.eventType === 'backward_navigation').length,
+        resumes: telemetryEvents.filter((event: any) => event.eventType === 'questionnaire_resume').length,
+        medianTotalDurationMs: this.median(totalDurations),
       },
       versions: scopedVersions.map((version: any) => this.versionStats(version)),
       buildings: this.buildingBreakdown(scopedVersions.flatMap((version: any) => version.invitations)),
-      questions: this.questionBreakdown(scopedVersions),
+      questions: this.questionBreakdown(scopedVersions, visibleSessionIds),
     }
   }
 
@@ -185,21 +200,46 @@ export class StatsService {
     })
   }
 
-  private questionBreakdown(versions: any[]) {
+  private questionBreakdown(versions: any[], visibleSessionIds?: Set<string>) {
     const questions = versions.flatMap((version: any) => version.groups.flatMap((group: any) => group.questions))
+    const scopedSessionIds = visibleSessionIds ?? new Set<string>()
+    const hasScope = scopedSessionIds.size > 0
 
     return questions.map((question: any) => {
-      const submittedAnswers = question.answers.filter((answer: any) => !answer.isDraft)
-      const popupOpens = question.popupDefinitions.reduce(
-        (total: number, popup: any) => total + popup.telemetryEvents.filter((event: any) => event.eventType === 'popup_open').length,
-        0,
-      )
-
-      const effectifSufficient = submittedAnswers.length >= this.threshold()
-      const questionTimes = question.telemetryEvents
+      const submittedAnswers = question.answers.filter((answer: any) => (
+        !answer.isDraft && (!hasScope || scopedSessionIds.has(answer.responseSessionId))
+      ))
+      const questionEvents = question.telemetryEvents.filter((event: any) => (
+        !hasScope || scopedSessionIds.has(event.responseSessionId)
+      ))
+      const popupDefinitionEvents = (question.popupDefinitions ?? [])
+        .flatMap((popup: any) => popup.telemetryEvents ?? [])
+        .filter((event: any) => !hasScope || scopedSessionIds.has(event.responseSessionId))
+      const popupOpensFromQuestion = questionEvents.filter((event: any) => event.eventType === 'popup_open').length
+      const popupOpensFromDefinitions = popupDefinitionEvents.filter((event: any) => event.eventType === 'popup_open').length
+      const popupOpens = popupOpensFromQuestion || popupOpensFromDefinitions
+      const responseChanges = questionEvents.filter((event: any) => event.eventType === 'answer_change').length
+      const backtracks = questionEvents.filter((event: any) => event.eventType === 'backward_navigation').length
+      const sessionCount = new Set([
+        ...submittedAnswers.map((answer: any) => answer.responseSessionId),
+        ...questionEvents.map((event: any) => event.responseSessionId),
+        ...popupDefinitionEvents.map((event: any) => event.responseSessionId),
+      ].filter(Boolean)).size
+      const effectifSufficient = Math.max(sessionCount, submittedAnswers.length) >= this.threshold()
+      const questionTimes = questionEvents
         .filter((event: any) => event.eventType === 'question_time' || event.eventType === 'page_change')
         .map((event: any) => event.durationMs)
         .filter((duration: unknown): duration is number => typeof duration === 'number')
+      const medianDurationMs = this.median(questionTimes)
+      const popupOpenRate = sessionCount > 0 ? Math.round((popupOpens / sessionCount) * 100) : 0
+      const highMedianDuration = effectifSufficient && medianDurationMs !== null && medianDurationMs >= 60_000
+      const popupOftenOpened = effectifSufficient && popupOpenRate >= 50 && popupOpens >= Math.min(this.threshold(), Math.max(sessionCount, 1))
+      const frequentAnswerChanges = effectifSufficient && responseChanges >= Math.max(2, Math.ceil(Math.max(sessionCount, 1) * 0.3))
+      const difficultyLabels = [
+        ...(highMedianDuration ? ['temps médian élevé'] : []),
+        ...(popupOftenOpened ? ['popup souvent ouverte'] : []),
+        ...(frequentAnswerChanges ? ['changements de réponse'] : []),
+      ]
 
       return {
         id: question.id,
@@ -208,7 +248,14 @@ export class StatsService {
         responseType: question.responseType,
         answerCount: effectifSufficient ? submittedAnswers.length : null,
         popupOpens: effectifSufficient ? popupOpens : null,
-        medianDurationMs: effectifSufficient ? this.median(questionTimes) : null,
+        popupOpenRate: effectifSufficient ? popupOpenRate : null,
+        responseChanges: effectifSufficient ? responseChanges : null,
+        backtracks: effectifSufficient ? backtracks : null,
+        medianDurationMs: effectifSufficient ? medianDurationMs : null,
+        highMedianDuration,
+        popupOftenOpened,
+        difficultQuestion: difficultyLabels.length > 0,
+        difficultyLabels: effectifSufficient ? difficultyLabels : [],
         effectifSufficient,
         displayValue: effectifSufficient ? `${submittedAnswers.length} réponse(s)` : 'effectif insuffisant',
       }
