@@ -174,10 +174,9 @@ async function main() {
             randomize: false,
             questions: {
               create: [
-                question('Q-001', 1, 'Langue de passation souhaitée', 'single_choice', false, 'Détermine automatiquement la langue des questions suivantes.', [
+                question('Q-001', 1, 'Langue de passation souhaitée / Preferred language', 'single_choice', true, 'Votre choix pilote automatiquement les groupes de questions affichés ensuite.', [
                   ['fr', 'Français'],
-                  ['en', 'Anglais'],
-                  ['es', 'Espagnol'],
+                  ['en', 'English'],
                 ]),
                 question('Q-002', 2, 'Confirmez-vous pouvoir répondre maintenant ?', 'single_choice', true, 'Permet de reporter la passation si nécessaire.', [
                   ['yes', 'Oui'],
@@ -187,11 +186,12 @@ async function main() {
             },
           },
           {
-            title: 'Compréhension clinique',
-            description: 'Questions principales et signaux de compréhension.',
+            title: 'Questions françaises',
+            description: 'Groupe conditionnel affiché uniquement si la première question vaut “Français”. Les questions sont mélangées de manière stable pour chaque session.',
             displayOrder: 2,
             questionsPerPage: 3,
             randomize: true,
+            conditionExpression: { questionCode: 'Q-001', operator: 'equals', value: 'fr' },
             questions: {
               create: [
                 {
@@ -233,14 +233,64 @@ async function main() {
             },
           },
           {
-            title: 'Commentaires libres',
-            description: 'Synthèse qualitative finale.',
+            title: 'English questions',
+            description: 'Conditional group displayed only when the language answer is “English”. Question order is stable-randomized per respondent session.',
             displayOrder: 3,
-            questionsPerPage: 1,
-            randomize: false,
+            questionsPerPage: 3,
+            randomize: true,
+            conditionExpression: { questionCode: 'Q-001', operator: 'equals', value: 'en' },
             questions: {
               create: [
-                question('Q-027', 1, 'Décrivez les difficultés rencontrées pendant le test.', 'free_text_long', false, 'Champ libre sauvegardé en brouillon avant soumission.'),
+                {
+                  code: 'Q-014-EN',
+                  displayOrder: 1,
+                  label: 'Is the term “cross-site coordination” clear to you?',
+                  responseType: 'likert',
+                  isRequired: true,
+                  helperText: 'This question measures whether the business wording is understood.',
+                  tags: ['comprehension', 'popup', 'en'],
+                  likertScale: {
+                    create: {
+                      points: 7,
+                      leftAnchor: 'Not clear at all',
+                      rightAnchor: 'Very clear',
+                      neutralLabel: 'Neither clear nor unclear',
+                      allowNotApplicable: false,
+                    },
+                  },
+                  popupDefinitions: {
+                    create: {
+                      termKey: 'cross_site_coordination',
+                      language: 'en',
+                      title: 'Cross-site coordination',
+                      body: 'The ability of teams working in different buildings or sites to share information needed for a smooth process.',
+                      version: '1.0',
+                    },
+                  },
+                },
+                question('Q-015-EN', 2, 'What would make this wording easier to understand?', 'free_text_long', false, 'Avoid entering names, emails or directly identifying details.'),
+                question('Q-016-EN', 3, 'Does the proposed pathway seem coherent to you?', 'likert', true, 'Perceived coherence scale.', undefined, {
+                  points: 5,
+                  leftAnchor: 'Not coherent',
+                  rightAnchor: 'Very coherent',
+                  neutralLabel: 'Neutral',
+                }),
+              ],
+            },
+          },
+          {
+            title: 'Commentaires libres / Free comments',
+            description: 'Synthèse qualitative finale, affichée après le choix de langue.',
+            displayOrder: 4,
+            questionsPerPage: 1,
+            randomize: false,
+            conditionExpression: { any: [
+              { questionCode: 'Q-001', operator: 'equals', value: 'fr' },
+              { questionCode: 'Q-001', operator: 'equals', value: 'en' },
+            ] },
+            questions: {
+              create: [
+                question('Q-027', 1, 'Décrivez les difficultés rencontrées pendant le test / Describe any difficulties encountered during the test.', 'free_text_long', false, 'Champ libre sauvegardé en brouillon avant soumission. Avoid directly identifying details.'),
               ],
             },
           },
@@ -253,6 +303,12 @@ async function main() {
             priority: 10,
             trigger: { questionCode: 'Q-001', operator: 'equals', value: 'fr' },
             effect: { action: 'set_language', language: 'fr' },
+          },
+          {
+            code: 'LANG-EN',
+            priority: 11,
+            trigger: { questionCode: 'Q-001', operator: 'equals', value: 'en' },
+            effect: { action: 'set_language', language: 'en' },
           },
         ],
       },
@@ -970,6 +1026,8 @@ async function createDemoInvitations(questionnaireVersionId: string, moderatorId
     },
     orderBy: { code: 'asc' },
   })
+  const q001 = questions.find((question) => question.code === 'Q-001')!
+  const q002 = questions.find((question) => question.code === 'Q-002')!
   const q014 = questions.find((question) => question.code === 'Q-014')!
   const q015 = questions.find((question) => question.code === 'Q-015')!
   const q016 = questions.find((question) => question.code === 'Q-016')!
@@ -1033,6 +1091,8 @@ async function createDemoInvitations(questionnaireVersionId: string, moderatorId
 
     await prisma.answer.createMany({
       data: [
+        { responseSessionId: session.id, questionId: q001.id, value: 'fr', isDraft: false },
+        { responseSessionId: session.id, questionId: q002.id, value: 'yes', isDraft: false },
         { responseSessionId: session.id, questionId: q014.id, value: index % 2 === 0 ? 6 : 5, isDraft: false },
         { responseSessionId: session.id, questionId: q015.id, value: `Formulation plus claire demandée ${index + 1}`, isDraft: false },
         { responseSessionId: session.id, questionId: q016.id, value: index % 3 === 0 ? 4 : 5, isDraft: false },
@@ -1059,6 +1119,26 @@ async function createDemoInvitations(questionnaireVersionId: string, moderatorId
           durationMs: 70_000 + index * 5_000,
           occurredAt: new Date(submittedAt.getTime() - 5 * 60 * 1000),
         },
+        {
+          responseSessionId: session.id,
+          questionId: q014.id,
+          eventType: 'answer_change',
+          eventPayload: { previousShape: 'number', nextShape: 'number', page: 2 },
+          occurredAt: new Date(submittedAt.getTime() - 4 * 60 * 1000),
+        },
+        {
+          responseSessionId: session.id,
+          eventType: index % 2 === 0 ? 'backward_navigation' : 'questionnaire_resume',
+          eventPayload: { seeded: true, page: 2 },
+          occurredAt: new Date(submittedAt.getTime() - 3 * 60 * 1000),
+        },
+        {
+          responseSessionId: session.id,
+          eventType: 'questionnaire_total_time',
+          eventPayload: { seeded: true },
+          durationMs: 240_000 + index * 25_000,
+          occurredAt: submittedAt,
+        },
       ],
     })
 
@@ -1069,7 +1149,7 @@ async function createDemoInvitations(questionnaireVersionId: string, moderatorId
         questionnaireVersionId,
         buildingId,
         submittedAt,
-        answerCount: 4,
+        answerCount: 6,
         pathFingerprint: sha256(`${publicCode}:path`),
       },
     })
