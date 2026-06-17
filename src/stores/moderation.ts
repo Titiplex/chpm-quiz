@@ -16,6 +16,7 @@ export const useModerationStore = defineStore('moderation', () => {
   const status = ref<ModerationStatus>('idle')
   const error = ref<string | null>(null)
   const lastCreatedLink = ref<string | null>(null)
+  const lastCreatedInvitation = ref<ApiInvitation | null>(null)
 
   const totals = computed(() => ({
     sent: invitations.value.length,
@@ -42,6 +43,7 @@ export const useModerationStore = defineStore('moderation', () => {
     status.value = 'creating'
     error.value = null
     lastCreatedLink.value = null
+    lastCreatedInvitation.value = null
 
     try {
       const response = await apiRequest<CreateInvitationResponse>('/moderation/invitations', {
@@ -50,6 +52,7 @@ export const useModerationStore = defineStore('moderation', () => {
       })
       invitations.value = [response.invitation, ...invitations.value]
       lastCreatedLink.value = response.devAccessLink
+      lastCreatedInvitation.value = response.invitation
       status.value = 'ready'
     } catch (caught) {
       status.value = 'error'
@@ -72,6 +75,7 @@ export const useModerationStore = defineStore('moderation', () => {
     status,
     error,
     lastCreatedLink,
+    lastCreatedInvitation,
     totals,
     fetchInvitations,
     createInvitation,

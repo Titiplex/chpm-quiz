@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 
 import KpiCard from '@/components/common/KpiCard.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
 import { useCatalogStore } from '@/stores/catalog'
 import { useModerationStore } from '@/stores/moderation'
+import type { ApiInvitation } from '@shared/types/api'
+import type { InvitationStatus } from '@shared/types/domain'
 
 const catalog = useCatalogStore()
 const moderation = useModerationStore()
+const copiedLink = ref(false)
 
 const form = reactive({
   questionnaireVersionId: '',
@@ -22,11 +25,13 @@ onMounted(async () => {
   await catalog.fetchCatalog()
   await moderation.fetchInvitations()
 
-  form.questionnaireVersionId = catalog.publishedQuestionnaires[0]?.versionId ?? ''
+  form.questionnaireVersionId = questionnaires.value[0]?.versionId ?? ''
   form.buildingId = catalog.buildings[0]?.id ?? ''
 })
 
-const questionnaires = computed(() => catalog.publishedQuestionnaires)
+const questionnaires = computed(() =>
+  catalog.publishedQuestionnaires.filter((questionnaire) => isQuestionnaireOpen(questionnaire.openFrom, questionnaire.openUntil)),
+)
 const total = computed(() => moderation.totals)
 const responseRate = computed(() => {
   if (total.value.sent === 0) return '0 %'
@@ -34,6 +39,7 @@ const responseRate = computed(() => {
 })
 
 async function submitInvitation() {
+  copiedLink.value = false
   await moderation.createInvitation({
     questionnaireVersionId: form.questionnaireVersionId,
     buildingId: form.buildingId,
@@ -41,6 +47,51 @@ async function submitInvitation() {
     notifyModerator: form.notifyModerator,
     notifyAdmins: form.notifyAdmins,
   })
+}
+
+async function copyGeneratedLink(): Promise<void> {
+  if (!moderation.lastCreatedLink) return
+
+  await navigator.clipboard?.writeText(moderation.lastCreatedLink)
+  copiedLink.value = true
+}
+
+async function resend(invitation: ApiInvitation): Promise<void> {
+  await moderation.resendInvitation(invitation.id)
+}
+
+function isQuestionnaireOpen(openFrom?: string | null, openUntil?: string | null): boolean {
+  const now = Date.now()
+  const startsAt = openFrom ? new Date(openFrom).getTime() : Number.NEGATIVE_INFINITY
+  const endsAt = openUntil ? new Date(openUntil).getTime() : Number.POSITIVE_INFINITY
+  return startsAt <= now && endsAt >= now
+}
+
+function statusLabel(status: InvitationStatus): string {
+  const labels: Record<InvitationStatus, string> = {
+    pending: 'En attente',
+    sent: 'Envoyée',
+    opened: 'Ouverte',
+    in_progress: 'En cours',
+    draft: 'Brouillon',
+    submitted: 'Soumise',
+    expired: 'Expirée',
+    blocked: 'Bloquée',
+    cancelled: 'Annulée',
+  }
+
+  return labels[status] ?? status
+}
+
+function statusTone(status: InvitationStatus): 'success' | 'warning' | 'danger' | 'neutral' {
+  if (status === 'submitted') return 'success'
+  if (['expired', 'blocked', 'cancelled'].includes(status)) return 'danger'
+  if (['opened', 'in_progress', 'draft'].includes(status)) return 'warning'
+  return 'neutral'
+}
+
+function canResend(invitation: ApiInvitation): boolean {
+  return !['submitted', 'cancelled', 'blocked', 'expired'].includes(invitation.status)
 }
 </script>
 
@@ -59,7 +110,7 @@ async function submitInvitation() {
         {{ catalog.error || moderation.error }}
       </div>
       <div v-else class="alert alert-success rounded-4" role="status">
-        Les questionnaires publiés, bâtiments et invitations viennent de PostgreSQL. Le lien répondant utilise `/r/&lt;token&gt;` et ne contient aucun email.
+        Les questionnaires publiés et ouverts, bâtiments et invitations viennent de PostgreSQL. Le lien répondant utilise `/r/&lt;token&gt;` et ne contient aucun email.
       </div>
 
       <div class="row g-4">
@@ -68,13 +119,16 @@ async function submitInvitation() {
             <p class="section-eyebrow mb-2">Nouvelle invitation</p>
             <h2 class="h4 fw-bold mb-4">Créer un lien nominatif d’accès</h2>
 
-            <label class="form-label fw-bold" for="questionnaire-select">Questionnaire publié</label>
+            <label class="form-label fw-bold" for="questionnaire-select">Questionnaire publié et ouvert</label>
             <select id="questionnaire-select" v-model="form.questionnaireVersionId" class="form-select mb-3" required>
               <option value="" disabled>Choisir un questionnaire</option>
               <option v-for="questionnaire in questionnaires" :key="questionnaire.versionId" :value="questionnaire.versionId">
                 {{ questionnaire.title }} · version {{ questionnaire.versionLabel }}
               </option>
             </select>
+            <p v-if="!questionnaires.length" class="small text-danger mb-3">
+              Aucun questionnaire publié et ouvert n’est disponible dans le périmètre courant.
+            </p>
 
             <label class="form-label fw-bold" for="building-select">Bâtiment / site</label>
             <select id="building-select" v-model="form.buildingId" class="form-select mb-3" required>
@@ -86,6 +140,9 @@ async function submitInvitation() {
 
             <label class="form-label fw-bold" for="respondent-email">Adresse email du répondant</label>
             <input id="respondent-email" v-model="form.email" class="form-control mb-3" type="email" required />
+            <p class="small muted mb-3">
+              L’email est chiffré et stocké dans la base identité. La table opérationnelle ne conserve que le code public, le hash de jeton et les statuts.
+            </p>
 
             <div class="row g-3 mb-4">
               <div class="col-md-6">
@@ -106,14 +163,20 @@ async function submitInvitation() {
               </div>
             </div>
 
-            <button class="btn btn-primary w-100 btn-lg" :disabled="moderation.status === 'creating'">
+            <button class="btn btn-primary w-100 btn-lg" :disabled="moderation.status === 'creating' || !questionnaires.length">
               {{ moderation.status === 'creating' ? 'Création…' : 'Envoyer le lien sécurisé' }}
             </button>
 
             <div v-if="moderation.lastCreatedLink" class="alert alert-info rounded-4 mt-3 mb-0">
               <strong>Lien de développement généré :</strong>
               <a class="d-block text-break" :href="moderation.lastCreatedLink">{{ moderation.lastCreatedLink }}</a>
-              <span class="small">En production, ce lien sera envoyé par le service email, pas affiché.</span>
+              <span class="small d-block mb-2">En production, ce lien sera envoyé par le service email, pas affiché.</span>
+              <button class="btn btn-sm btn-outline-primary" type="button" @click="copyGeneratedLink">
+                {{ copiedLink ? 'Lien copié' : 'Copier le lien pour la démo' }}
+              </button>
+              <p v-if="moderation.lastCreatedInvitation" class="small muted mt-2 mb-0">
+                Code public : {{ moderation.lastCreatedInvitation.publicCode }} · Statut : {{ statusLabel(moderation.lastCreatedInvitation.status) }}
+              </p>
             </div>
           </form>
         </div>
@@ -149,16 +212,16 @@ async function submitInvitation() {
                     <td>{{ invitation.questionnaireTitle }} v{{ invitation.versionLabel }}</td>
                     <td>{{ invitation.building.label }}</td>
                     <td>
-                      <span class="badge-soft" :class="{ success: invitation.status === 'submitted', warning: invitation.status !== 'submitted' }">
-                        {{ invitation.status }}
+                      <span class="badge-soft" :class="statusTone(invitation.status)">
+                        {{ statusLabel(invitation.status) }}
                       </span>
                     </td>
                     <td>
                       <button
-                        v-if="invitation.status !== 'submitted'"
+                        v-if="canResend(invitation)"
                         class="btn btn-sm btn-outline-primary"
                         type="button"
-                        @click="moderation.resendInvitation(invitation.id)"
+                        @click="resend(invitation)"
                       >
                         Relancer
                       </button>

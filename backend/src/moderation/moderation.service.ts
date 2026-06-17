@@ -22,6 +22,8 @@ export class ModerationService {
   ) {}
 
   async listForUser(user: AuthenticatedUser) {
+    await this.expireOverdueInvitationsForScope(user)
+
     const invitations = await this.prisma.invitation.findMany({
       where: this.scopedWhere(user),
       orderBy: { createdAt: 'desc' },
@@ -231,6 +233,17 @@ export class ModerationService {
         throw new ForbiddenException('Le bâtiment sélectionné est hors de votre site')
       }
     }
+  }
+
+  private async expireOverdueInvitationsForScope(user: AuthenticatedUser): Promise<void> {
+    await this.prisma.invitation.updateMany({
+      where: {
+        ...this.scopedWhere(user),
+        status: { in: [...activeInvitationStatuses] },
+        expiresAt: { lt: new Date() },
+      },
+      data: { status: 'expired' },
+    })
   }
 
   private scopedWhere(user: AuthenticatedUser) {
