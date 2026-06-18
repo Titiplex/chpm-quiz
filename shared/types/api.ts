@@ -51,7 +51,9 @@ export interface ApiPopupDefinition {
   title: string
   body: string
   version: string
+  glossaryTermId?: string | null
   termLabel?: string
+  termDefinition?: string
 }
 
 export interface ConditionExpression {
@@ -533,6 +535,22 @@ export interface NotificationsResponse {
   subscriptions: ApiNotificationSubscription[]
 }
 
+
+export interface NotificationDigestRunResponse {
+  result: {
+    processedAt: string
+    dueSubscriptionCount: number
+    deliveredDigestCount: number
+    dryRun: boolean
+    delivered: Array<{
+      subscriptionId: string
+      recipientUserId: string
+      queuedEventCount: number
+      publicCodes: string[]
+    }>
+  }
+}
+
 export interface UpsertNotificationSubscriptionRequest {
   eventType: NotificationEventType
   channel?: NotificationChannel
@@ -584,6 +602,10 @@ export interface PseudonymizedExportResponse {
     generatedByRole: UserRole
     questionnaire: { id: string; code: string; title: string }
     rowCount: number
+    sourceRowCount?: number
+    threshold?: number
+    suppressedByThreshold?: boolean
+    displayValue?: string
     containsDirectEmail: false
     identityVaultExcluded: true
     fingerprint: string
