@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common'
 
 import { AuditService } from '../audit/audit.service'
+import { NotificationsService } from '../notifications/notifications.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { AccessTokenService } from '../security/access-token.service'
 import type { SaveAnswersDto } from './dto/save-answers.dto'
@@ -19,6 +20,7 @@ export class RespondentService {
     private readonly prisma: PrismaService,
     private readonly accessTokenService: AccessTokenService,
     private readonly auditService: AuditService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async getSession(token: string) {
@@ -233,6 +235,16 @@ export class RespondentService {
       entityId: submission.id,
       publicCode: responseSession.publicCode,
       metadata: { answerCount, pathFingerprint },
+    })
+
+    await this.notificationsService.notifySubmissionReceived({
+      submissionId: submission.id,
+      invitationId: invitation.id,
+      publicCode: responseSession.publicCode,
+      questionnaireVersionId: responseSession.questionnaireVersionId,
+      buildingId: responseSession.buildingId,
+      answerCount,
+      submittedAt,
     })
 
     return { submission }

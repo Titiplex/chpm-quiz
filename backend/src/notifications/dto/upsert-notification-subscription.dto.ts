@@ -1,4 +1,4 @@
-import { IsBoolean, IsIn, IsOptional, IsString, IsUUID } from 'class-validator'
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator'
 
 const notificationEvents = [
   'submission_received',
@@ -9,14 +9,28 @@ const notificationEvents = [
   'judicial_access_executed',
 ] as const
 
+const notificationChannels = ['email', 'internal'] as const
+const notificationFrequencies = ['immediate', 'daily'] as const
+
 export class UpsertNotificationSubscriptionDto {
   @IsIn(notificationEvents)
   eventType!: (typeof notificationEvents)[number]
 
   @IsOptional()
   @IsString()
-  @IsIn(['email', 'internal'])
-  channel?: string
+  @IsIn(notificationChannels)
+  channel?: (typeof notificationChannels)[number]
+
+  @IsOptional()
+  @IsString()
+  @IsIn(notificationFrequencies)
+  frequency?: (typeof notificationFrequencies)[number]
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(23)
+  digestHour?: number
 
   @IsOptional()
   @IsUUID()

@@ -6,7 +6,7 @@ vi.mock('../prisma/prisma.service', () => ({ PrismaService: class PrismaService 
 import { RespondentService } from './respondent.service'
 
 function makeService() {
-  return new RespondentService({} as any, {} as any, {} as any) as any
+  return new RespondentService({} as any, {} as any, {} as any, { notifySubmissionReceived: vi.fn() } as any) as any
 }
 
 describe('RespondentService unit rules', () => {

@@ -80,7 +80,9 @@ function makeInvitation(responseSession: any) {
     questionnaireVersionId: 'version-1',
     buildingId: 'building-1',
     building: { id: 'building-1', label: 'Bâtiment A' },
-    responseSession,
+    responseSession: responseSession
+      ? { questionnaireVersionId: 'version-1', buildingId: 'building-1', ...responseSession }
+      : responseSession,
     questionnaireVersion: makeQuestionnaireVersion(),
   }
 }
@@ -126,12 +128,16 @@ function makeService(invitation: any) {
   const audit = {
     log: vi.fn(async () => undefined),
   }
+  const notifications = {
+    notifySubmissionReceived: vi.fn(async () => undefined),
+  }
 
   return {
-    service: new RespondentService(prisma as any, accessToken as any, audit as any),
+    service: new RespondentService(prisma as any, accessToken as any, audit as any, notifications as any),
     prisma,
     tx,
     audit,
+    notifications,
   }
 }
 
@@ -224,7 +230,7 @@ describe('RespondentService functional flow', () => {
       ],
       submission: null,
     })
-    const { service, tx } = makeService(invitation)
+    const { service, tx, notifications } = makeService(invitation)
 
     const response = await service.submit('token')
     expect(response.submission.publicCode).toBe('CODE-1')
@@ -232,6 +238,13 @@ describe('RespondentService functional flow', () => {
       data: expect.objectContaining({ status: 'locked', submittedAt: expect.any(Date), lockedAt: expect.any(Date) }),
     }))
     expect(tx.answer.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { isDraft: false } }))
+    expect(notifications.notifySubmissionReceived).toHaveBeenCalledWith(expect.objectContaining({
+      publicCode: 'CODE-1',
+      invitationId: 'invitation-1',
+      questionnaireVersionId: 'version-1',
+      buildingId: 'building-1',
+      answerCount: 1,
+    }))
 
     invitation.responseSession.status = 'locked'
     await expect(service.recordTelemetry({ token: 'token', eventType: 'page_view' })).rejects.toThrow(BadRequestException)
