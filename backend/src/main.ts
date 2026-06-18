@@ -24,6 +24,34 @@ async function bootstrap() {
     credentials: true,
   })
 
+
+  const rateLimitWindowMs = Math.max(1, Number(config.get<string>('RATE_LIMIT_WINDOW_SECONDS', '60'))) * 1000
+  const rateLimitMax = Math.max(10, Number(config.get<string>('RATE_LIMIT_MAX_REQUESTS', '240')))
+  const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>()
+
+  app.use((request: Request, response: Response, next: NextFunction) => {
+    const now = Date.now()
+    const key = `${request.ip}:${request.method}:${request.path}`
+    const bucket = rateLimitBuckets.get(key)
+
+    if (!bucket || bucket.resetAt <= now) {
+      rateLimitBuckets.set(key, { count: 1, resetAt: now + rateLimitWindowMs })
+      next()
+      return
+    }
+
+    bucket.count += 1
+    if (bucket.count > rateLimitMax) {
+      response.status(429).json({
+        message: 'Trop de requêtes. Réessayez dans quelques instants.',
+        error: 'Rate limit',
+      })
+      return
+    }
+
+    next()
+  })
+
   app.use((_request: Request, response: Response, next: NextFunction) => {
     response.setHeader('X-Request-Id', randomUUID())
     response.setHeader('X-Content-Type-Options', 'nosniff')
