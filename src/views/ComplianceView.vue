@@ -119,7 +119,10 @@ function formatDate(value: string | null | undefined): string {
 
             <div v-if="compliance.exportPayload" class="mt-4 p-3 rounded-4 border bg-white">
               <strong>{{ compliance.exportPayload.questionnaire.title }}</strong>
-              <div class="small muted">{{ compliance.exportPayload.rowCount }} ligne(s) · empreinte {{ compliance.exportPayload.fingerprint }}</div>
+              <div class="small muted">{{ compliance.exportPayload.displayValue ?? `${compliance.exportPayload.rowCount} ligne(s)` }} · empreinte {{ compliance.exportPayload.fingerprint }}</div>
+              <div v-if="compliance.exportPayload.suppressedByThreshold" class="alert alert-warning rounded-4 py-2 mt-2 mb-0">
+                Export détaillé masqué : effectif inférieur au seuil anti-réidentification ({{ compliance.exportPayload.threshold }}).
+              </div>
               <div class="small mt-2">
                 Email direct : {{ compliance.exportPayload.containsDirectEmail ? 'présent' : 'absent' }} · coffre identité exclu : {{ compliance.exportPayload.identityVaultExcluded ? 'oui' : 'non' }}.
               </div>

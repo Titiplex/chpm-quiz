@@ -22,6 +22,7 @@ import type {
   CreateQuestionRequest,
   IdentityVaultStatusResponse,
   NotificationsResponse,
+  NotificationDigestRunResponse,
   PseudonymizedExportResponse,
   RetentionPolicyResponse,
   InvitationsResponse,
@@ -248,6 +249,10 @@ export async function demoApiRequest<T>(path: string, options: DemoRequestOption
 
   if (method === 'POST' && route === '/notifications/subscriptions') {
     return asResponse<T>({ subscription: upsertNotificationSubscription(options.body as UpsertNotificationSubscriptionRequest) })
+  }
+
+  if (method === 'POST' && route === '/notifications/daily-digests/run') {
+    return asResponse<T>(runDemoDailyDigests() satisfies NotificationDigestRunResponse)
   }
 
   if (method === 'GET' && route === '/compliance/technical-register') {
@@ -1346,6 +1351,45 @@ function notifyDemoSubmission(session: RespondentSessionResponse, answerCount: n
   }
 
   saveNotificationSubscriptions(subscriptions)
+}
+
+
+function runDemoDailyDigests(): NotificationDigestRunResponse {
+  const now = nowIso()
+  const subscriptions = readStorage(NOTIFICATION_SUBSCRIPTIONS_STORAGE_KEY, createInitialNotificationSubscriptions)
+  const delivered = subscriptions
+    .filter((subscription) => subscription.isEnabled && subscription.frequency === 'daily')
+    .map((subscription) => {
+      subscription.lastDeliveredAt = now
+      subscription.updatedAt = now
+      const publicCodes = ['8F4K-29QX']
+      appendAuditLog('notification.daily_digest.sent', 'NotificationSubscription', subscription.id, null, {
+        subscriptionId: subscription.id,
+        userId: subscription.userId,
+        queuedEventCount: publicCodes.length,
+        publicCodes,
+        directEmailVisible: false,
+        simulation: true,
+      })
+      return {
+        subscriptionId: subscription.id,
+        recipientUserId: subscription.userId,
+        queuedEventCount: publicCodes.length,
+        publicCodes,
+      }
+    })
+
+  saveNotificationSubscriptions(subscriptions)
+
+  return {
+    result: {
+      processedAt: now,
+      dueSubscriptionCount: delivered.length,
+      deliveredDigestCount: delivered.length,
+      dryRun: false,
+      delivered,
+    },
+  }
 }
 
 function getTechnicalRegister(): TechnicalRegisterResponse {
