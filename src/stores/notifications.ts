@@ -5,6 +5,7 @@ import { apiRequest } from '@/services/api'
 import type {
   ApiNotificationSubscription,
   NotificationsResponse,
+  NotificationDigestRunResponse,
   UpsertNotificationSubscriptionRequest,
 } from '@shared/types/api'
 
@@ -14,6 +15,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
   const subscriptions = ref<ApiNotificationSubscription[]>([])
   const status = ref<NotificationStatus>('idle')
   const error = ref<string | null>(null)
+  const lastDigestRun = ref<NotificationDigestRunResponse['result'] | null>(null)
 
   const activeSubmissionSubscriptions = computed(() =>
     subscriptions.value.filter((subscription) => subscription.eventType === 'submission_received' && subscription.isEnabled),
@@ -52,6 +54,26 @@ export const useNotificationsStore = defineStore('notifications', () => {
     }
   }
 
+
+  async function runDailyDigests(): Promise<NotificationDigestRunResponse['result']> {
+    status.value = 'saving'
+    error.value = null
+
+    try {
+      const response = await apiRequest<NotificationDigestRunResponse>('/notifications/daily-digests/run', {
+        method: 'POST',
+      })
+      lastDigestRun.value = response.result
+      await fetchSubscriptions()
+      status.value = 'ready'
+      return response.result
+    } catch (caught) {
+      status.value = 'error'
+      error.value = caught instanceof Error ? caught.message : 'Exécution du digest quotidien impossible.'
+      throw caught
+    }
+  }
+
   function upsert(subscription: ApiNotificationSubscription): void {
     const index = subscriptions.value.findIndex((candidate) => candidate.id === subscription.id)
     if (index >= 0) {
@@ -63,10 +85,12 @@ export const useNotificationsStore = defineStore('notifications', () => {
 
   return {
     subscriptions,
+    lastDigestRun,
     activeSubmissionSubscriptions,
     status,
     error,
     fetchSubscriptions,
     saveSubscription,
+    runDailyDigests,
   }
 })

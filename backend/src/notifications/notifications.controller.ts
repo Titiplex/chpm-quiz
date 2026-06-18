@@ -10,18 +10,26 @@ import { UpsertNotificationSubscriptionDto } from './dto/upsert-notification-sub
 import { NotificationsService } from './notifications.service'
 
 @UseGuards(SessionAuthGuard, RolesGuard)
-@Controller('notifications/subscriptions')
+@Controller('notifications')
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
-  @Get()
+  @Get('subscriptions')
   @Roles('admin', 'moderator', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo')
   async list(@CurrentUser() user: AuthenticatedUser) {
     const subscriptions = await this.notificationsService.list(user)
     return { subscriptions }
   }
 
-  @Post()
+
+  @Post('daily-digests/run')
+  @Roles('admin', 'dpo', 'technical_admin')
+  async runDailyDigests() {
+    const result = await this.notificationsService.processDueDailyDigests()
+    return { result }
+  }
+
+  @Post('subscriptions')
   @Roles('admin', 'moderator', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo')
   async upsert(
     @Body() dto: UpsertNotificationSubscriptionDto,

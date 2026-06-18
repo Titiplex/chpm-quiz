@@ -3,10 +3,12 @@ import { computed, onMounted, reactive } from 'vue'
 
 import { useCatalogStore } from '@/stores/catalog'
 import { useNotificationsStore } from '@/stores/notifications'
+import { useSessionStore } from '@/stores/session'
 import type { NotificationChannel, NotificationFrequency } from '@shared/types/api'
 
 const catalog = useCatalogStore()
 const notifications = useNotificationsStore()
+const session = useSessionStore()
 
 const form = reactive({
   questionnaireVersionId: '',
@@ -17,6 +19,7 @@ const form = reactive({
 })
 
 const publishedQuestionnaires = computed(() => catalog.publishedQuestionnaires)
+const canRunDigest = computed(() => ['admin', 'dpo', 'technical_admin'].includes(session.user?.role ?? ''))
 
 onMounted(async () => {
   if (catalog.status === 'idle') {
@@ -124,6 +127,20 @@ function frequencyLabel(value: NotificationFrequency): string {
           Canal {{ subscription.channel === 'email' ? 'email simulé' : 'interne' }} · digest {{ subscription.digestHour }}h · dernière livraison {{ subscription.lastDeliveredAt ? new Date(subscription.lastDeliveredAt).toLocaleString() : 'jamais' }}.
         </p>
       </div>
+    </div>
+
+    <div v-if="canRunDigest" class="d-flex flex-wrap gap-2 align-items-center mt-4">
+      <button
+        class="btn btn-outline-primary rounded-pill"
+        type="button"
+        :disabled="notifications.status === 'saving'"
+        @click="notifications.runDailyDigests()"
+      >
+        Exécuter le digest quotidien simulé
+      </button>
+      <span v-if="notifications.lastDigestRun" class="badge-soft success">
+        {{ notifications.lastDigestRun.deliveredDigestCount }} digest(s) livré(s)
+      </span>
     </div>
   </div>
 </template>
