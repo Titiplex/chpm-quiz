@@ -7,6 +7,7 @@ import {
 
 import type { AuthenticatedUser } from '../auth/auth.types'
 import { adminLikeRoles, type UserRole } from '../auth/role-permissions'
+import { assertCanAccessQuestionnaire } from '../common/access-scope'
 import { PrismaService } from '../prisma/prisma.service'
 import type { CreateQuestionnaireDto } from './dto/create-questionnaire.dto'
 import type {
@@ -205,47 +206,46 @@ export class QuestionnairesService {
     await this.assertQuestionOrderAvailable(groupId, displayOrder)
     await this.assertQuestionCodeAvailable(groupId, normalizeCode(dto.code))
 
-    await this.prisma.question.create({
-      data: {
-        groupId,
-        code: normalizeCode(dto.code),
-        language: group.questionnaireVersion.language,
-        label: dto.label.trim(),
-        helperText: cleanOptionalText(dto.helperText),
-        responseType: dto.responseType,
-        isRequired: dto.isRequired ?? false,
-        displayOrder,
-        tags: dto.popupDefinition ? ['popup'] : [],
-        conditionExpression: dto.conditionExpression as any,
-        ...(dto.responseType === 'likert' && dto.likertScale
-          ? {
-              likertScale: {
-                create: {
-                  points: dto.likertScale.points,
-                  minValue: dto.likertScale.minValue ?? 1,
-                  leftAnchor: dto.likertScale.leftAnchor.trim(),
-                  rightAnchor: dto.likertScale.rightAnchor.trim(),
-                  neutralLabel: cleanOptionalText(dto.likertScale.neutralLabel),
-                  allowNotApplicable: dto.likertScale.allowNotApplicable ?? false,
+    await this.prisma.$transaction(async (tx: any) => {
+      const question = await tx.question.create({
+        data: {
+          groupId,
+          code: normalizeCode(dto.code),
+          language: group.questionnaireVersion.language,
+          label: dto.label.trim(),
+          helperText: cleanOptionalText(dto.helperText),
+          responseType: dto.responseType,
+          isRequired: dto.isRequired ?? false,
+          displayOrder,
+          tags: dto.popupDefinition ? ['popup'] : [],
+          conditionExpression: dto.conditionExpression as any,
+          ...(dto.responseType === 'likert' && dto.likertScale
+            ? {
+                likertScale: {
+                  create: {
+                    points: dto.likertScale.points,
+                    minValue: dto.likertScale.minValue ?? 1,
+                    leftAnchor: dto.likertScale.leftAnchor.trim(),
+                    rightAnchor: dto.likertScale.rightAnchor.trim(),
+                    neutralLabel: cleanOptionalText(dto.likertScale.neutralLabel),
+                    allowNotApplicable: dto.likertScale.allowNotApplicable ?? false,
+                  },
                 },
-              },
-            }
-          : {}),
-        ...(choiceQuestionTypes.has(dto.responseType) && dto.answerOptions
-          ? {
-              answerOptions: {
-                create: this.toAnswerOptionCreates(dto.answerOptions),
-              },
-            }
-          : {}),
-        ...(dto.popupDefinition
-          ? {
-              popupDefinitions: {
-                create: this.toPopupCreates(dto.popupDefinition, group.questionnaireVersion.language),
-              },
-            }
-          : {}),
-      },
+              }
+            : {}),
+          ...(choiceQuestionTypes.has(dto.responseType) && dto.answerOptions
+            ? {
+                answerOptions: {
+                  create: this.toAnswerOptionCreates(dto.answerOptions),
+                },
+              }
+            : {}),
+        },
+      })
+
+      if (dto.popupDefinition) {
+        await this.replacePopupDefinitions(tx, question.id, dto.popupDefinition, group.questionnaireVersion.language)
+      }
     })
 
     return this.returnEditableQuestionnaire(id)
@@ -320,16 +320,7 @@ export class QuestionnairesService {
         await tx.popupDefinition.deleteMany({ where: { questionId } })
 
         if (dto.popupDefinition) {
-          await tx.popupDefinition.createMany({
-            data: this.toPopupCreates(dto.popupDefinition, question.group.questionnaireVersion.language).map((popup) => ({
-              questionId,
-              termKey: popup.termKey,
-              language: popup.language,
-              title: popup.title,
-              body: popup.body,
-              version: popup.version,
-            })),
-          })
+          await this.replacePopupDefinitions(tx, questionId, dto.popupDefinition, question.group.questionnaireVersion.language)
         }
       }
     })
@@ -381,7 +372,9 @@ export class QuestionnairesService {
           title: popup.title,
           body: popup.body,
           version: popup.version,
+          glossaryTermId: popup.glossaryTermId,
           termLabel: popup.glossaryTerm?.label ?? popup.title,
+          termDefinition: popup.glossaryTerm?.definition ?? popup.body,
         })),
       })),
     }))
@@ -471,6 +464,16 @@ export class QuestionnairesService {
       return questionnaire.versions[0]
     }
 
+    const latestPublished = await this.prisma.questionnaireVersion.findFirst({
+      where: { questionnaireId, status: publishedStatus },
+      orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+      include: this.versionCloneInclude(),
+    })
+
+    if (latestPublished) {
+      return this.cloneVersionToDraft(questionnaire, latestPublished)
+    }
+
     return this.prisma.questionnaireVersion.create({
       data: {
         questionnaireId,
@@ -545,6 +548,8 @@ export class QuestionnairesService {
     if (!questionnaire) {
       throw new NotFoundException('Questionnaire introuvable')
     }
+
+    assertCanAccessQuestionnaire(user, questionnaire)
   }
 
   private async nextDraftVersionLabel(questionnaireId: string) {
@@ -647,6 +652,204 @@ export class QuestionnairesService {
       body: popup.body.trim(),
       version: '1.0',
     }))
+  }
+
+
+  private async cloneVersionToDraft(questionnaire: any, publishedVersion: any) {
+    return this.prisma.$transaction(async (tx: any) => {
+      const draft = await tx.questionnaireVersion.create({
+        data: {
+          questionnaireId: questionnaire.id,
+          versionLabel: await this.nextDraftVersionLabel(questionnaire.id),
+          language: publishedVersion.language,
+          status: draftStatus,
+          description: publishedVersion.description ?? questionnaire.description,
+          finality: publishedVersion.finality ?? questionnaire.finality,
+          openFrom: publishedVersion.openFrom,
+          openUntil: publishedVersion.openUntil,
+        },
+      })
+
+      const groupIdMap = new Map<string, string>()
+      const questionIdMap = new Map<string, string>()
+
+      for (const group of publishedVersion.groups) {
+        const clonedGroup = await tx.questionGroup.create({
+          data: {
+            questionnaireVersionId: draft.id,
+            title: group.title,
+            description: group.description,
+            displayOrder: group.displayOrder,
+            questionsPerPage: group.questionsPerPage,
+            randomize: group.randomize,
+            conditionExpression: group.conditionExpression,
+            isArchived: false,
+          },
+        })
+        groupIdMap.set(group.id, clonedGroup.id)
+
+        for (const question of group.questions) {
+          const clonedQuestion = await tx.question.create({
+            data: {
+              groupId: clonedGroup.id,
+              code: question.code,
+              language: question.language,
+              label: question.label,
+              helperText: question.helperText,
+              responseType: question.responseType,
+              isRequired: question.isRequired,
+              displayOrder: question.displayOrder,
+              tags: question.tags,
+              conditionExpression: question.conditionExpression,
+            },
+          })
+          questionIdMap.set(question.id, clonedQuestion.id)
+
+          if (question.likertScale) {
+            await tx.likertScale.create({
+              data: {
+                questionId: clonedQuestion.id,
+                points: question.likertScale.points,
+                minValue: question.likertScale.minValue,
+                leftAnchor: question.likertScale.leftAnchor,
+                rightAnchor: question.likertScale.rightAnchor,
+                neutralLabel: question.likertScale.neutralLabel,
+                allowNotApplicable: question.likertScale.allowNotApplicable,
+                orientation: question.likertScale.orientation,
+              },
+            })
+          }
+
+          if (question.answerOptions?.length) {
+            await tx.answerOption.createMany({
+              data: question.answerOptions.map((option: any) => ({
+                questionId: clonedQuestion.id,
+                value: option.value,
+                label: option.label,
+                displayOrder: option.displayOrder,
+                isExclusive: option.isExclusive,
+              })),
+            })
+          }
+
+          for (const popup of question.popupDefinitions ?? []) {
+            await tx.popupDefinition.create({
+              data: {
+                questionId: clonedQuestion.id,
+                glossaryTermId: popup.glossaryTermId,
+                termKey: popup.termKey,
+                language: popup.language,
+                title: popup.title,
+                body: popup.body,
+                version: popup.version,
+                isRequired: popup.isRequired,
+              },
+            })
+          }
+        }
+      }
+
+      for (const rule of publishedVersion.conditionalRules ?? []) {
+        await tx.conditionalRule.create({
+          data: {
+            questionnaireVersionId: draft.id,
+            code: rule.code,
+            trigger: this.rewriteClonedReferences(rule.trigger, groupIdMap, questionIdMap),
+            effect: this.rewriteClonedReferences(rule.effect, groupIdMap, questionIdMap),
+            priority: rule.priority,
+            isActive: rule.isActive,
+          },
+        })
+      }
+
+      return draft
+    })
+  }
+
+  private async replacePopupDefinitions(tx: any, questionId: string, popup: PopupDefinitionDto, language: string): Promise<void> {
+    const popupCreates = this.toPopupCreates(popup, language)
+
+    for (const popupCreate of popupCreates) {
+      const glossaryTerm = await tx.glossaryTerm.upsert({
+        where: {
+          termKey_language_version: {
+            termKey: popupCreate.termKey,
+            language: popupCreate.language,
+            version: popupCreate.version,
+          },
+        },
+        update: {
+          label: popupCreate.title,
+          definition: popupCreate.body,
+          isArchived: false,
+        },
+        create: {
+          termKey: popupCreate.termKey,
+          language: popupCreate.language,
+          label: popupCreate.title,
+          definition: popupCreate.body,
+          version: popupCreate.version,
+        },
+      })
+
+      await tx.popupDefinition.create({
+        data: {
+          questionId,
+          glossaryTermId: glossaryTerm.id,
+          termKey: popupCreate.termKey,
+          language: popupCreate.language,
+          title: popupCreate.title,
+          body: popupCreate.body,
+          version: popupCreate.version,
+        },
+      })
+    }
+  }
+
+  private rewriteClonedReferences(value: unknown, groupIdMap: Map<string, string>, questionIdMap: Map<string, string>): unknown {
+    if (value === null || value === undefined) {
+      return value
+    }
+
+    if (typeof value === 'string') {
+      return groupIdMap.get(value) ?? questionIdMap.get(value) ?? value
+    }
+
+    if (Array.isArray(value)) {
+      return value.map((entry) => this.rewriteClonedReferences(entry, groupIdMap, questionIdMap))
+    }
+
+    if (typeof value === 'object') {
+      return Object.fromEntries(
+        Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
+          key,
+          this.rewriteClonedReferences(nested, groupIdMap, questionIdMap),
+        ]),
+      )
+    }
+
+    return value
+  }
+
+  private versionCloneInclude() {
+    return {
+      conditionalRules: { orderBy: [{ priority: 'asc' as const }, { createdAt: 'asc' as const }] },
+      groups: {
+        where: { isArchived: false },
+        orderBy: { displayOrder: 'asc' as const },
+        include: {
+          questions: {
+            where: { isArchived: false },
+            orderBy: { displayOrder: 'asc' as const },
+            include: {
+              likertScale: true,
+              answerOptions: { orderBy: { displayOrder: 'asc' as const } },
+              popupDefinitions: { orderBy: { createdAt: 'asc' as const } },
+            },
+          },
+        },
+      },
+    }
   }
 
   private versionInclude() {
