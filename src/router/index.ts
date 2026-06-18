@@ -84,6 +84,18 @@ const routes: RouteRecordRaw[] = [
     },
   },
 
+
+  {
+    path: '/rgpd',
+    name: 'compliance',
+    component: () => import('@/views/ComplianceView.vue'),
+    meta: {
+      label: 'RGPD / sécurité',
+      allowedRoles: ['admin', 'analyst', 'dpo', 'technical_admin', 'judicial_officer'],
+      requiresAuthenticatedUser: true,
+    },
+  },
+
   {
     path: '/coffre-email',
     name: 'identity-vault',

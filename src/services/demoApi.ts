@@ -8,16 +8,22 @@ import type {
   ApiPopupDefinition,
   ApiQuestion,
   ApiQuestionnaire,
+  ApiNotificationSubscription,
   AuthResponse,
   AuthUserProfile,
   BuildingsResponse,
   CreateInvitationRequest,
   CreateInvitationResponse,
+  AuditLogsResponse,
+  ComplianceMaintenanceResponse,
   CreateJudicialAccessRequest,
   CreateQuestionGroupRequest,
   CreateQuestionnaireRequest,
   CreateQuestionRequest,
   IdentityVaultStatusResponse,
+  NotificationsResponse,
+  PseudonymizedExportResponse,
+  RetentionPolicyResponse,
   InvitationsResponse,
   JudicialAccessRequestRecord,
   JudicialAccessRequestResponse,
@@ -34,7 +40,9 @@ import type {
   SubmitResponse,
   UpdateQuestionGroupRequest,
   UpdateQuestionnaireRequest,
+  TechnicalRegisterResponse,
   UpdateQuestionRequest,
+  UpsertNotificationSubscriptionRequest,
 } from '@shared/types/api'
 
 interface DemoRequestOptions {
@@ -46,6 +54,8 @@ const QUESTIONNAIRES_STORAGE_KEY = 'chpm_demo_questionnaires'
 const INVITATIONS_STORAGE_KEY = 'chpm_demo_invitations'
 const RESPONDENT_SESSIONS_STORAGE_KEY = 'chpm_demo_respondent_sessions'
 const JUDICIAL_REQUESTS_STORAGE_KEY = 'chpm_demo_judicial_requests'
+const NOTIFICATION_SUBSCRIPTIONS_STORAGE_KEY = 'chpm_demo_notification_subscriptions'
+const AUDIT_LOGS_STORAGE_KEY = 'chpm_demo_audit_logs'
 
 interface DemoUserSeed {
   email: string
@@ -129,6 +139,12 @@ const demoUsers: DemoUserSeed[] = [
     password: 'Judiciaire123!',
     displayName: 'Julie Accès judiciaire',
     role: 'judicial_officer',
+  },
+  {
+    email: 'tech@chpm.local',
+    password: 'Tech12345!',
+    displayName: 'Thomas Exploitation',
+    role: 'technical_admin',
   },
 ]
 
@@ -222,6 +238,40 @@ export async function demoApiRequest<T>(path: string, options: DemoRequestOption
 
   if (method === 'POST' && route === '/respondent/submit') {
     return asResponse<T>(submitRespondentSession(options.body as { token?: string }))
+  }
+
+
+
+  if (method === 'GET' && route === '/notifications/subscriptions') {
+    return asResponse<T>({ subscriptions: getNotificationSubscriptions() } satisfies NotificationsResponse)
+  }
+
+  if (method === 'POST' && route === '/notifications/subscriptions') {
+    return asResponse<T>({ subscription: upsertNotificationSubscription(options.body as UpsertNotificationSubscriptionRequest) })
+  }
+
+  if (method === 'GET' && route === '/compliance/technical-register') {
+    return asResponse<T>(getTechnicalRegister())
+  }
+
+  if (method === 'GET' && route === '/compliance/retention-policy') {
+    return asResponse<T>(getRetentionPolicy())
+  }
+
+  if (method === 'POST' && route === '/compliance/maintenance/expire-invitations') {
+    return asResponse<T>(expireDemoInvitations())
+  }
+
+  if (method === 'POST' && route === '/compliance/maintenance/cleanup-drafts') {
+    return asResponse<T>(cleanupDemoDrafts())
+  }
+
+  if (method === 'GET' && route === '/compliance/exports/pseudonymized') {
+    return asResponse<T>(getPseudonymizedExport(requestUrl.searchParams.get('questionnaireId') ?? undefined))
+  }
+
+  if (method === 'GET' && route === '/audit-logs') {
+    return asResponse<T>({ logs: getAuditLogs(Number(requestUrl.searchParams.get('limit') ?? 30)) } satisfies AuditLogsResponse)
   }
 
   const statsMatch = route.match(/^\/stats\/questionnaires\/([^/]+)$/)
@@ -698,6 +748,14 @@ function submitRespondentSession(payload: { token?: string }): SubmitResponse {
 
   saveInvitations(invitations)
   saveRespondentSessions(sessions)
+  appendAuditLog('response.submitted', 'RespondentSession', session.responseSession.id, session.responseSession.publicCode, {
+    questionnaireVersionId: session.questionnaire.versionId,
+    questionnaireTitle: session.questionnaire.title,
+    answerCount,
+    directEmailVisible: false,
+    simulation: true,
+  })
+  notifyDemoSubmission(session, answerCount, submittedAt)
 
   return {
     submission: {
@@ -1009,6 +1067,22 @@ function createInitialInvitations(): ApiInvitation[] {
       submittedAt: null,
       responseStatus: null,
     },
+    {
+      id: 'demo-invitation-expired-draft',
+      publicCode: 'EXP-0001',
+      status: 'in_progress',
+      maskedEmail: 'e***@example.org',
+      questionnaireVersionId: CHPM_VERSION_ID,
+      questionnaireTitle: 'Questionnaire CHPM',
+      versionLabel: '1.4',
+      building: mtl,
+      expiresAt: addDaysIso(-3),
+      sentAt: addDaysIso(-35),
+      openedAt: addDaysIso(-34),
+      startedAt: addDaysIso(-34),
+      submittedAt: null,
+      responseStatus: 'draft' as SubmissionStatus,
+    },
     ...submitted,
   ]
 }
@@ -1023,9 +1097,15 @@ function createInitialRespondentSessions(): RespondentSessionMap {
     return {}
   }
 
+  const expiredDraft = createRespondentSession('demo-expired-draft', chpm, building, 'EXP-0001', 'draft')
+  expiredDraft.invitation.expiresAt = addDaysIso(-3)
+  expiredDraft.invitation.status = 'in_progress'
+  expiredDraft.responseSession.startedAt = addDaysIso(-34)
+
   return {
     [CHPM_TOKEN]: createRespondentSession(CHPM_TOKEN, chpm, building, 'PEND-0001', 'draft'),
     [ITQ_TOKEN]: createRespondentSession(ITQ_TOKEN, itq, building, 'ITQ-0001', 'draft'),
+    'demo-expired-draft': expiredDraft,
   }
 }
 
@@ -1074,6 +1154,468 @@ function createRespondentSession(
         })),
       })),
     },
+  }
+}
+
+
+function getNotificationSubscriptions(): ApiNotificationSubscription[] {
+  const currentUser = safeCurrentUser()
+  const subscriptions = readStorage(NOTIFICATION_SUBSCRIPTIONS_STORAGE_KEY, createInitialNotificationSubscriptions)
+
+  if (!currentUser) {
+    return []
+  }
+
+  return subscriptions.filter((subscription) => subscription.userId === `demo-user-${currentUser.role}`)
+}
+
+function saveNotificationSubscriptions(subscriptions: ApiNotificationSubscription[]): void {
+  window.localStorage.setItem(NOTIFICATION_SUBSCRIPTIONS_STORAGE_KEY, JSON.stringify(subscriptions))
+}
+
+function createInitialNotificationSubscriptions(): ApiNotificationSubscription[] {
+  const createdAt = addDaysIso(-2)
+
+  return [
+    createNotificationSubscription({
+      id: 'demo-notification-admin-chpm-immediate',
+      userId: 'demo-user-admin',
+      questionnaireVersionId: CHPM_VERSION_ID,
+      eventType: 'submission_received',
+      channel: 'email',
+      frequency: 'immediate',
+      digestHour: 8,
+      isEnabled: true,
+      createdAt,
+      lastDeliveredAt: addDaysIso(-1),
+    }),
+    createNotificationSubscription({
+      id: 'demo-notification-moderator-itq-daily',
+      userId: 'demo-user-moderator',
+      questionnaireVersionId: ITQ_VERSION_ID,
+      eventType: 'submission_received',
+      channel: 'internal',
+      frequency: 'daily',
+      digestHour: 9,
+      isEnabled: true,
+      createdAt,
+      lastDeliveredAt: null,
+    }),
+  ]
+}
+
+function createNotificationSubscription(input: {
+  id: string
+  userId: string
+  questionnaireVersionId: string | null
+  eventType: ApiNotificationSubscription['eventType']
+  channel: ApiNotificationSubscription['channel']
+  frequency: ApiNotificationSubscription['frequency']
+  digestHour: number
+  isEnabled: boolean
+  createdAt: string
+  lastDeliveredAt: string | null
+}): ApiNotificationSubscription {
+  return {
+    id: input.id,
+    userId: input.userId,
+    questionnaireVersionId: input.questionnaireVersionId,
+    buildingId: null,
+    eventType: input.eventType,
+    channel: input.channel,
+    frequency: input.frequency,
+    digestHour: input.digestHour,
+    isEnabled: input.isEnabled,
+    lastDeliveredAt: input.lastDeliveredAt,
+    createdAt: input.createdAt,
+    updatedAt: input.createdAt,
+    questionnaireVersion: getQuestionnaireVersionSnapshot(input.questionnaireVersionId),
+  }
+}
+
+function getQuestionnaireVersionSnapshot(versionId: string | null): ApiNotificationSubscription['questionnaireVersion'] {
+  if (!versionId) {
+    return null
+  }
+
+  const questionnaire = getQuestionnaires().find((candidate) => candidate.versionId === versionId)
+  if (!questionnaire) {
+    return null
+  }
+
+  return {
+    id: questionnaire.versionId,
+    versionLabel: questionnaire.versionLabel,
+    questionnaire: {
+      id: questionnaire.id,
+      title: questionnaire.title,
+      code: questionnaire.code,
+    },
+  }
+}
+
+function upsertNotificationSubscription(payload: UpsertNotificationSubscriptionRequest): ApiNotificationSubscription {
+  const currentUser = safeCurrentUser()
+
+  if (!currentUser) {
+    throw new Error('Session requise pour modifier les notifications.')
+  }
+
+  const subscriptions = readStorage(NOTIFICATION_SUBSCRIPTIONS_STORAGE_KEY, createInitialNotificationSubscriptions)
+  const userId = `demo-user-${currentUser.role}`
+  const questionnaireVersionId = payload.questionnaireVersionId ?? null
+  const buildingId = payload.buildingId ?? null
+  const eventType = payload.eventType
+  const existing = subscriptions.find((subscription) =>
+    subscription.userId === userId
+    && subscription.eventType === eventType
+    && subscription.questionnaireVersionId === questionnaireVersionId
+    && subscription.buildingId === buildingId,
+  )
+
+  if (existing) {
+    existing.channel = payload.channel ?? existing.channel
+    existing.frequency = payload.frequency ?? existing.frequency
+    existing.digestHour = payload.digestHour ?? existing.digestHour
+    existing.isEnabled = payload.isEnabled ?? existing.isEnabled
+    existing.updatedAt = nowIso()
+    existing.questionnaireVersion = getQuestionnaireVersionSnapshot(questionnaireVersionId)
+    saveNotificationSubscriptions(subscriptions)
+    appendAuditLog('notification.preference.updated', 'NotificationSubscription', existing.id, null, {
+      eventType,
+      channel: existing.channel,
+      frequency: existing.frequency,
+      questionnaireVersionId,
+      simulation: true,
+    })
+    return existing
+  }
+
+  const created = createNotificationSubscription({
+    id: createId('notification-subscription'),
+    userId,
+    questionnaireVersionId,
+    eventType,
+    channel: payload.channel ?? 'email',
+    frequency: payload.frequency ?? 'immediate',
+    digestHour: payload.digestHour ?? 8,
+    isEnabled: payload.isEnabled ?? true,
+    createdAt: nowIso(),
+    lastDeliveredAt: null,
+  })
+  created.buildingId = buildingId
+  subscriptions.unshift(created)
+  saveNotificationSubscriptions(subscriptions)
+  appendAuditLog('notification.preference.created', 'NotificationSubscription', created.id, null, {
+    eventType,
+    channel: created.channel,
+    frequency: created.frequency,
+    questionnaireVersionId,
+    simulation: true,
+  })
+  return created
+}
+
+function notifyDemoSubmission(session: RespondentSessionResponse, answerCount: number, submittedAt: string): void {
+  const subscriptions = readStorage(NOTIFICATION_SUBSCRIPTIONS_STORAGE_KEY, createInitialNotificationSubscriptions)
+  const matchingSubscriptions = subscriptions.filter((subscription) =>
+    subscription.isEnabled
+    && subscription.eventType === 'submission_received'
+    && (!subscription.questionnaireVersionId || subscription.questionnaireVersionId === session.questionnaire.versionId),
+  )
+
+  for (const subscription of matchingSubscriptions) {
+    const action = subscription.frequency === 'immediate'
+      ? `notification.${subscription.channel}.simulated`
+      : `notification.${subscription.channel}.daily_digest_queued`
+
+    if (subscription.frequency === 'immediate') {
+      subscription.lastDeliveredAt = submittedAt
+    }
+
+    subscription.updatedAt = submittedAt
+    appendAuditLog(action, 'RespondentSession', session.responseSession.id, session.responseSession.publicCode, {
+      subscriptionId: subscription.id,
+      userId: subscription.userId,
+      questionnaireVersionId: session.questionnaire.versionId,
+      questionnaireTitle: session.questionnaire.title,
+      answerCount,
+      directEmailVisible: false,
+      simulation: true,
+    })
+  }
+
+  saveNotificationSubscriptions(subscriptions)
+}
+
+function getTechnicalRegister(): TechnicalRegisterResponse {
+  const currentUser = safeCurrentUser()
+
+  return {
+    register: {
+      generatedAt: nowIso(),
+      controller: 'CHPM · Démonstration MVP',
+      dpoContact: 'dpo@chpm.local',
+      consultedByRole: currentUser?.role ?? 'respondent',
+      processing: [
+        {
+          name: 'Gestion des questionnaires',
+          finality: 'Créer, publier et versionner des questionnaires adaptatifs.',
+          lawfulBasis: 'Mission d’intérêt public / intérêt légitime selon le contexte de déploiement.',
+          dataCategories: ['métadonnées de questionnaire', 'questions', 'popups explicatifs', 'versions publiées'],
+          recipients: ['administrateurs', 'responsables questionnaire', 'modérateurs autorisés'],
+          storage: 'schéma opérationnel Prisma, hors coffre identité.',
+        },
+        {
+          name: 'Collecte des réponses',
+          finality: 'Mesurer la compréhension et agréger les résultats sans accès direct aux emails.',
+          lawfulBasis: 'Consentement/information répondant et protocole interne documenté.',
+          dataCategories: ['code public pseudonyme', 'réponses', 'télémétrie UX', 'statut de session'],
+          recipients: ['administrateurs', 'analystes autorisés', 'DPO'],
+          storage: 'tables ResponseSession, Answer, TelemetryEvent.',
+        },
+        {
+          name: 'Coffre identité email',
+          finality: 'Acheminer les invitations et permettre une levée d’identité strictement contrôlée.',
+          lawfulBasis: 'Obligation légale ou procédure judiciaire validée.',
+          dataCategories: ['email chiffré', 'hash email', 'clé de chiffrement référencée'],
+          recipients: ['workflow judiciaire double validation uniquement'],
+          storage: 'schéma identity séparé ; aucune exposition dans les vues métier.',
+        },
+      ],
+      safeguards: [
+        'RBAC par rôle et permissions applicatives.',
+        'Export pseudonymisé sans email en clair.',
+        'Journalisation des actions sensibles.',
+        'Rate limiting HTTP basique côté API.',
+        'Expiration des invitations et nettoyage des brouillons prévus dans les tâches de maintenance.',
+      ],
+    },
+  }
+}
+
+function getRetentionPolicy(): RetentionPolicyResponse {
+  return {
+    policy: {
+      generatedAt: nowIso(),
+      rules: [
+        { object: 'Invitation', retention: '30 jours après émission sauf soumission', action: 'expiration automatique', endpoint: 'POST /compliance/maintenance/expire-invitations' },
+        { object: 'RespondentSession brouillon', retention: '30 jours après dernière activité', action: 'suppression du brouillon et audit', endpoint: 'POST /compliance/maintenance/cleanup-drafts' },
+        { object: 'Réponses soumises', retention: 'durée du protocole + archive réglementaire', action: 'conservation pseudonymisée', endpoint: 'GET /compliance/exports/pseudonymized' },
+        { object: 'Coffre email', retention: 'durée minimale nécessaire à la preuve d’invitation', action: 'accès judiciaire uniquement', endpoint: 'POST /judicial-access/requests' },
+        { object: 'AuditLog', retention: '24 mois MVP', action: 'consultation DPO / admin', endpoint: 'GET /audit-logs' },
+      ],
+      knownLimitations: [
+        'Le MVP simule l’envoi email en mode démo ; un SMTP transactionnel doit être branché en production.',
+        'Le rate limiting mémoire doit être remplacé par Redis ou équivalent en environnement multi-instance.',
+        'La purge physique planifiée doit être orchestrée par cron/job scheduler côté production.',
+      ],
+    },
+  }
+}
+
+function expireDemoInvitations(): ComplianceMaintenanceResponse {
+  const now = Date.now()
+  const invitations = getInvitations()
+  let expiredCount = 0
+
+  for (const invitation of invitations) {
+    const expiresAt = Date.parse(invitation.expiresAt)
+    if (Number.isFinite(expiresAt) && expiresAt < now && !['submitted', 'expired'].includes(invitation.status)) {
+      invitation.status = 'expired'
+      invitation.responseStatus = invitation.responseStatus === 'locked' ? invitation.responseStatus : 'abandoned'
+      expiredCount += 1
+    }
+  }
+
+  if (expiredCount > 0) {
+    const sessions = getRespondentSessions()
+    for (const session of Object.values(sessions)) {
+      if (Date.parse(session.invitation.expiresAt) < now && session.responseSession.status !== 'locked') {
+        session.invitation.status = 'expired'
+      }
+    }
+    saveRespondentSessions(sessions)
+  }
+
+  saveInvitations(invitations)
+  appendAuditLog('compliance.invitations.expired', 'Invitation', null, null, { expiredCount, simulation: true })
+
+  return {
+    result: {
+      expiredCount,
+      executedAt: nowIso(),
+    },
+  }
+}
+
+function cleanupDemoDrafts(): ComplianceMaintenanceResponse {
+  const sessions = getRespondentSessions()
+  const now = Date.now()
+  const nextSessions: RespondentSessionMap = {}
+  let deletedDraftSessionCount = 0
+
+  for (const [token, session] of Object.entries(sessions)) {
+    const expired = Date.parse(session.invitation.expiresAt) < now
+    if (expired && session.responseSession.status !== 'locked') {
+      deletedDraftSessionCount += 1
+      continue
+    }
+    nextSessions[token] = session
+  }
+
+  saveRespondentSessions(nextSessions)
+  appendAuditLog('compliance.drafts.cleaned', 'RespondentSession', null, null, { deletedDraftSessionCount, simulation: true })
+
+  return {
+    result: {
+      deletedDraftSessionCount,
+      cutoff: nowIso(),
+      executedAt: nowIso(),
+    },
+  }
+}
+
+function getPseudonymizedExport(questionnaireId?: string): PseudonymizedExportResponse {
+  const questionnaires = getQuestionnaires()
+  const questionnaire = questionnaires.find((candidate) => candidate.id === questionnaireId) ?? questionnaires[0]
+
+  if (!questionnaire) {
+    throw new Error('Questionnaire introuvable pour export pseudonymisé.')
+  }
+
+  const questions = questionnaire.groups.flatMap((group) => group.questions)
+  const rows = createDemoSubmissions(questionnaire).map((submission, submissionIndex) => ({
+    publicCode: submission.publicCode,
+    questionnaireId: questionnaire.id,
+    questionnaireCode: questionnaire.code,
+    versionId: questionnaire.versionId,
+    versionLabel: questionnaire.versionLabel,
+    buildingCode: 'MTL-A',
+    buildingLabel: submission.building,
+    submittedAt: submission.submittedAt,
+    answerCount: submission.answerCount,
+    telemetryEventCount: submission.telemetryEvents,
+    answers: questions.slice(0, Math.min(8, questions.length)).map((questionItem, answerIndex) => ({
+      questionCode: questionItem.code,
+      responseType: questionItem.responseType ?? questionItem.type,
+      value: pseudonymizedDemoAnswerValue(questionItem, submissionIndex, answerIndex),
+      warning: isFreeTextQuestion(questionItem) ? 'Réponse libre pseudonymisée : contenu direct potentiellement identifiant masqué.' : null,
+    })),
+  }))
+  const fingerprint = `demo-sha256-${btoa(`${questionnaire.id}:${rows.length}:${rows[0]?.publicCode ?? 'none'}`).replace(/=+$/g, '').slice(0, 24)}`
+
+  appendAuditLog('compliance.export.pseudonymized', 'QuestionnaireVersion', questionnaire.versionId, null, {
+    questionnaireId: questionnaire.id,
+    rowCount: rows.length,
+    containsDirectEmail: false,
+    fingerprint,
+    simulation: true,
+  })
+
+  return {
+    export: {
+      generatedAt: nowIso(),
+      generatedByRole: safeCurrentUser()?.role ?? 'respondent',
+      questionnaire: {
+        id: questionnaire.id,
+        code: questionnaire.code,
+        title: questionnaire.title,
+      },
+      rowCount: rows.length,
+      containsDirectEmail: false,
+      identityVaultExcluded: true,
+      fingerprint,
+      rows,
+    },
+  }
+}
+
+function pseudonymizedDemoAnswerValue(questionItem: ApiQuestion, submissionIndex: number, answerIndex: number): unknown {
+  const responseType = questionItem.responseType ?? questionItem.type
+  if (responseType === 'likert') {
+    return Math.min((questionItem.likertScale?.minValue ?? 1) + ((submissionIndex + answerIndex) % (questionItem.likertScale?.points ?? 5)), (questionItem.likertScale?.minValue ?? 1) + (questionItem.likertScale?.points ?? 5) - 1)
+  }
+
+  if (responseType === 'single_choice') {
+    const options = questionItem.options ?? []
+    return options.length > 0 ? options[(submissionIndex + answerIndex) % options.length]?.value ?? null : null
+  }
+
+  if (isFreeTextQuestion(questionItem)) {
+    return '[contenu libre masqué dans l’export pseudonymisé MVP]'
+  }
+
+  return null
+}
+
+function isFreeTextQuestion(questionItem: ApiQuestion): boolean {
+  const responseType = questionItem.responseType ?? questionItem.type
+  return responseType === 'free_text' || responseType === 'free_text_short' || responseType === 'free_text_long'
+}
+
+function getAuditLogs(limit = 30): AuditLogsResponse['logs'] {
+  return readStorage(AUDIT_LOGS_STORAGE_KEY, createInitialAuditLogs).slice(0, Math.max(1, limit))
+}
+
+function saveAuditLogs(logs: AuditLogsResponse['logs']): void {
+  window.localStorage.setItem(AUDIT_LOGS_STORAGE_KEY, JSON.stringify(logs))
+}
+
+function createInitialAuditLogs(): AuditLogsResponse['logs'] {
+  return [
+    createAuditLogRecord('judicial.request.received', 'JudicialAccessRequest', 'demo-jar-001', '8F4K-29QX', { workflow: 'double_validation', simulation: true }, addDaysIso(-1), 'demo-user-dpo'),
+    createAuditLogRecord('notification.email.simulated', 'ResponseSubmission', 'demo-submission-001', '8F4K-29QX', { channel: 'email', directEmailVisible: false, simulation: true }, addDaysIso(-2), 'demo-user-admin'),
+    createAuditLogRecord('identity.vault.access.denied', 'IdentityVaultEntry', null, '8F4K-29QX', { reason: 'rôle non judiciaire', directEmailVisible: false, simulation: true }, addDaysIso(-3), 'demo-user-admin'),
+  ]
+}
+
+function appendAuditLog(
+  action: string,
+  entityType: string,
+  entityId: string | null,
+  publicCode: string | null,
+  metadata: JsonRecord | null = null,
+): AuditLogsResponse['logs'][number] {
+  const logs = readStorage(AUDIT_LOGS_STORAGE_KEY, createInitialAuditLogs)
+  const currentUser = safeCurrentUser()
+  const actorUserId = currentUser ? `demo-user-${currentUser.role}` : null
+  const log = createAuditLogRecord(action, entityType, entityId, publicCode, metadata, nowIso(), actorUserId)
+  logs.unshift(log)
+  saveAuditLogs(logs.slice(0, 100))
+  return log
+}
+
+function createAuditLogRecord(
+  action: string,
+  entityType: string,
+  entityId: string | null,
+  publicCode: string | null,
+  metadata: JsonRecord | null,
+  occurredAt: string,
+  actorUserId: string | null,
+): AuditLogsResponse['logs'][number] {
+  const actorSeed = actorUserId ? demoUsers.find((candidate) => `demo-user-${candidate.role}` === actorUserId) ?? null : null
+
+  return {
+    id: createId('audit'),
+    actorUserId,
+    action,
+    entityType,
+    entityId,
+    publicCode,
+    metadata,
+    ipAddress: '127.0.0.1',
+    userAgent: 'CHPM demo browser',
+    occurredAt,
+    actor: actorSeed
+      ? {
+          id: `demo-user-${actorSeed.role}`,
+          displayName: actorSeed.displayName,
+          email: actorSeed.email,
+          role: actorSeed.role,
+        }
+      : null,
   }
 }
 
@@ -1342,6 +1884,12 @@ function createJudicialRequest(payload: CreateJudicialAccessRequest): JudicialAc
   }
   requests.unshift(created)
   saveJudicialRequests(requests)
+  appendAuditLog('judicial.request.created', 'JudicialAccessRequest', created.id, created.requestedPublicCodes[0] ?? null, {
+    requestReference: created.requestReference,
+    requestedPublicCodes: created.requestedPublicCodes,
+    directEmailVisible: false,
+    simulation: true,
+  })
   return { judicialRequest: created }
 }
 
@@ -1381,6 +1929,12 @@ function updateJudicialRequest(id: string, action: string): JudicialAccessReques
   }
 
   saveJudicialRequests(requests)
+  appendAuditLog(`judicial.request.${action}`, 'JudicialAccessRequest', request.id, request.requestedPublicCodes[0] ?? null, {
+    requestReference: request.requestReference,
+    status: request.status,
+    directEmailVisible: false,
+    simulation: true,
+  })
 
   return {
     judicialRequest: request,
@@ -1419,8 +1973,20 @@ function getIdentityVaultStatus(): IdentityVaultStatusResponse {
 function recordIdentityVaultAccessAttempt(payload: { publicCode?: string; justification?: string }): { accepted: boolean; message: string } {
   const currentUser = safeCurrentUser()
   if (currentUser?.role !== 'judicial_officer') {
+    appendAuditLog('identity.vault.access.denied', 'IdentityVaultEntry', null, payload.publicCode ?? null, {
+      role: currentUser?.role ?? 'inconnu',
+      justification: payload.justification ?? null,
+      directEmailVisible: false,
+      simulation: true,
+    })
     throw new Error(`Accès coffre refusé et journalisé pour le rôle ${currentUser?.role ?? 'inconnu'} sur ${payload.publicCode ?? 'code non fourni'}.`)
   }
+
+  appendAuditLog('identity.vault.access.workflow_routed', 'IdentityVaultEntry', null, payload.publicCode ?? null, {
+    justification: payload.justification ?? null,
+    directEmailVisible: false,
+    simulation: true,
+  })
 
   return {
     accepted: true,

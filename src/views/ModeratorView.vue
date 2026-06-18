@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 
 import KpiCard from '@/components/common/KpiCard.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
+import NotificationPreferencesCard from '@/components/notifications/NotificationPreferencesCard.vue'
 import { appConfig } from '@/config/env'
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
 import { useCatalogStore } from '@/stores/catalog'
@@ -261,6 +262,13 @@ function canResend(invitation: ApiInvitation): boolean {
               </p>
             </div>
           </div>
+        </div>
+
+      </div>
+
+      <div class="row g-4 mt-1">
+        <div class="col-12">
+          <NotificationPreferencesCard />
         </div>
       </div>
     </div>

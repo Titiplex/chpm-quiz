@@ -40,6 +40,14 @@ export const navigationItems: NavigationItem[] = [
     description: 'Analyse pseudonymisée, seuils anti-réidentification, temps et popups.',
   },
 
+
+  {
+    label: 'RGPD',
+    to: '/rgpd',
+    roles: ['admin', 'analyst', 'dpo', 'technical_admin', 'judicial_officer'],
+    description: 'Registre technique, conservation, export pseudonymisé, audit et maintenance.',
+  },
+
   {
     label: 'Coffre email',
     to: '/coffre-email',

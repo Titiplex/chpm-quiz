@@ -23,6 +23,7 @@ const activePopup = ref<{ questionId: string; popupDefinitionId: string; termKey
 const showSubmitConfirmation = ref(false)
 const isSubmitting = ref(false)
 const submitError = ref<string | null>(null)
+const consentAccepted = ref(false)
 const sessionStartedAtMs = ref(Date.now())
 
 const textAutosaveDelayMs = 650
@@ -55,7 +56,8 @@ const isLastPage = computed(() => pageIndex.value >= pages.value.length - 1)
 const unansweredRequiredQuestions = computed(() =>
   respondent.questions.filter((question) => question.isRequired && !hasAnswerValue(questionValue(question))),
 )
-const canSubmit = computed(() => !respondent.isLocked && unansweredRequiredQuestions.value.length === 0 && respondent.status !== 'saving')
+const missingConsent = computed(() => !respondent.isLocked && !consentAccepted.value)
+const canSubmit = computed(() => !respondent.isLocked && consentAccepted.value && unansweredRequiredQuestions.value.length === 0 && respondent.status !== 'saving')
 
 watch(
   pages,
@@ -395,6 +397,10 @@ async function closeActivePopup(eventType: 'popup_close' | 'popup_switch'): Prom
 
 async function openSubmitConfirmation(): Promise<void> {
   submitError.value = null
+  if (missingConsent.value) {
+    submitError.value = 'Merci de confirmer la notice d’information RGPD avant la soumission définitive.'
+    return
+  }
   await flushPendingAutosaves()
   await recordQuestionTelemetry('question_time')
   showSubmitConfirmation.value = true
@@ -465,12 +471,22 @@ async function confirmSubmit(): Promise<void> {
 
                 <div class="question-help mb-4" role="note">
                   <strong>Notice d’information avant démarrage</strong>
-                  <ul class="small muted mb-0 mt-2 ps-3">
+                  <ul class="small muted mb-3 mt-2 ps-3">
                     <li>Finalité : compréhension du questionnaire et amélioration des formulations métier.</li>
                     <li>Durée estimée : quelques minutes, avec reprise possible depuis le même lien tant que la soumission finale n’est pas faite.</li>
                     <li>Confidentialité : les réponses sont rattachées au code public ; l’email est conservé séparément dans la base identité.</li>
                     <li>Droits et contact : contactez le responsable de traitement ou le DPO indiqué par l’organisation pour toute demande RGPD.</li>
                   </ul>
+                  <label class="form-check d-flex gap-2 align-items-start mb-0" for="respondent-consent">
+                    <input
+                      id="respondent-consent"
+                      v-model="consentAccepted"
+                      class="form-check-input mt-1"
+                      type="checkbox"
+                      :disabled="respondent.isLocked"
+                    />
+                    <span class="small">J’ai lu la notice d’information et je comprends que la soumission finale verrouille mes réponses pseudonymisées.</span>
+                  </label>
                 </div>
 
                 <div v-if="respondent.isLocked" class="alert alert-success rounded-4">
@@ -642,6 +658,10 @@ async function confirmSubmit(): Promise<void> {
 
                   <div v-if="unansweredRequiredQuestions.length" class="alert alert-warning rounded-4">
                     {{ unansweredRequiredQuestions.length }} question(s) obligatoire(s) doivent encore recevoir une réponse avant soumission finale.
+                  </div>
+
+                  <div v-if="missingConsent" class="alert alert-warning rounded-4">
+                    La notice d’information RGPD doit être confirmée avant la soumission finale.
                   </div>
 
                   <div v-if="respondent.warnings.length" class="alert alert-warning rounded-4">

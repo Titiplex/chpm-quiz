@@ -53,6 +53,13 @@ const demoAccounts: Array<{
     password: 'Judiciaire123!',
     description: 'Validation juridique et exécution du workflow coffre email.',
   },
+  {
+    role: 'technical_admin',
+    label: 'Administrateur technique',
+    email: 'tech@chpm.local',
+    password: 'Tech12345!',
+    description: 'Maintenance conformité, audit technique et registre RGPD.',
+  },
 ]
 
 const form = reactive({
