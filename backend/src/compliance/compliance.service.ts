@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config'
 import type { Request } from 'express'
 
 import { AuditService } from '../audit/audit.service'
+import { assertCanAccessQuestionnaire } from '../common/access-scope'
 import type { AuthenticatedUser } from '../auth/auth.types'
 import { PrismaService } from '../prisma/prisma.service'
 
@@ -173,17 +174,23 @@ export class ComplianceService {
   async pseudonymizedExport(questionnaireId: string | undefined, user: AuthenticatedUser, request: Request) {
     const questionnaire = questionnaireId
       ? await this.prisma.questionnaire.findUnique({ where: { id: questionnaireId } })
-      : await this.prisma.questionnaire.findFirst({ orderBy: { createdAt: 'asc' } })
+      : await this.prisma.questionnaire.findFirst({
+          where: this.questionnaireWhereForUser(user),
+          orderBy: { createdAt: 'asc' },
+        })
 
     if (!questionnaire) {
       throw new NotFoundException('Questionnaire introuvable pour export pseudonymisé')
     }
+
+    assertCanAccessQuestionnaire(user, questionnaire)
 
     const submissions = await this.prisma.submission.findMany({
       where: {
         questionnaireVersion: {
           questionnaireId: questionnaire.id,
         },
+        ...this.submissionWhereForUser(user),
       },
       include: {
         building: true,
@@ -201,24 +208,28 @@ export class ComplianceService {
       orderBy: { submittedAt: 'desc' },
     })
 
-    const rows = submissions.map((submission: any) => ({
-      publicCode: submission.publicCode,
-      questionnaireId: questionnaire.id,
-      questionnaireCode: questionnaire.code,
-      versionId: submission.questionnaireVersionId,
-      versionLabel: submission.questionnaireVersion.versionLabel,
-      buildingCode: submission.building.code,
-      buildingLabel: submission.building.label,
-      submittedAt: submission.submittedAt,
-      answerCount: submission.answerCount,
-      telemetryEventCount: submission.responseSession.telemetryEvents.length,
-      answers: submission.responseSession.answers.map((answer: any) => ({
-        questionCode: answer.question.code,
-        responseType: answer.question.responseType,
-        value: answer.identifiabilityWarning ? '[REDACTED_IDENTIFIABILITY_WARNING]' : answer.value,
-        warning: answer.identifiabilityWarning ? answer.warningReason : null,
-      })),
-    }))
+    const threshold = this.statisticsThreshold()
+    const suppressedByThreshold = submissions.length > 0 && submissions.length < threshold && user.role !== 'dpo'
+    const rows = suppressedByThreshold
+      ? []
+      : submissions.map((submission: any) => ({
+          publicCode: submission.publicCode,
+          questionnaireId: questionnaire.id,
+          questionnaireCode: questionnaire.code,
+          versionId: submission.questionnaireVersionId,
+          versionLabel: submission.questionnaireVersion.versionLabel,
+          buildingCode: submission.building.code,
+          buildingLabel: submission.building.label,
+          submittedAt: submission.submittedAt,
+          answerCount: submission.answerCount,
+          telemetryEventCount: submission.responseSession.telemetryEvents.length,
+          answers: submission.responseSession.answers.map((answer: any) => ({
+            questionCode: answer.question.code,
+            responseType: answer.question.responseType,
+            value: answer.identifiabilityWarning ? '[REDACTED_IDENTIFIABILITY_WARNING]' : answer.value,
+            warning: answer.identifiabilityWarning ? answer.warningReason : null,
+          })),
+        }))
 
     const fingerprint = createHash('sha256').update(JSON.stringify(rows)).digest('hex')
 
@@ -228,7 +239,18 @@ export class ComplianceService {
       entityType: 'Questionnaire',
       entityId: questionnaire.id,
       request,
-      metadata: { rowCount: rows.length, fingerprint },
+      metadata: {
+        rowCount: rows.length,
+        sourceRowCount: submissions.length,
+        suppressedByThreshold,
+        threshold,
+        fingerprint,
+        scope: {
+          organizationId: user.organizationId,
+          siteId: user.siteId,
+          buildingId: user.buildingId,
+        },
+      },
     })
 
     return {
@@ -240,11 +262,44 @@ export class ComplianceService {
         title: questionnaire.title,
       },
       rowCount: rows.length,
+      sourceRowCount: submissions.length,
       containsDirectEmail: false,
       identityVaultExcluded: true,
+      threshold,
+      suppressedByThreshold,
+      displayValue: suppressedByThreshold ? 'effectif insuffisant' : `${rows.length} ligne(s) exportée(s)`,
       fingerprint,
       rows,
     }
+  }
+
+
+  private questionnaireWhereForUser(user: AuthenticatedUser) {
+    if (!user.organizationId) {
+      return undefined
+    }
+
+    return { organizationId: user.organizationId }
+  }
+
+  private submissionWhereForUser(user: AuthenticatedUser) {
+    if (user.role === 'site_manager' && user.siteId) {
+      return { building: { siteId: user.siteId } }
+    }
+
+    if (user.buildingId && user.role !== 'admin' && user.role !== 'dpo') {
+      return { buildingId: user.buildingId }
+    }
+
+    if (user.organizationId) {
+      return { building: { organizationId: user.organizationId } }
+    }
+
+    return {}
+  }
+
+  private statisticsThreshold(): number {
+    return this.numberFromEnv('STATISTICS_MIN_GROUP_SIZE', 5)
   }
 
   private numberFromEnv(key: string, fallback: number): number {

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 
 import type { AuthenticatedUser } from '../auth/auth.types'
+import { assertCanAccessQuestionnaire, sameOrganizationOrUnscoped } from '../common/access-scope'
 import { PrismaService } from '../prisma/prisma.service'
 
 const freeTextTypes = new Set(['free_text', 'free_text_short', 'free_text_long'])
@@ -75,6 +76,8 @@ export class StatsService {
     if (!questionnaire) {
       throw new NotFoundException('Questionnaire introuvable')
     }
+
+    this.assertCanReadQuestionnaireStats(questionnaire, user)
 
     const scopedVersions = questionnaire.versions.map((version: any) => ({
       ...version,
@@ -231,6 +234,18 @@ export class StatsService {
         resumes: submission.responseSession.telemetryEvents.filter((event: any) => event.eventType === 'questionnaire_resume').length,
       },
     }
+  }
+
+
+  private assertCanReadQuestionnaireStats(questionnaire: any, user: AuthenticatedUser): void {
+    if (user.role === 'site_manager') {
+      if (!sameOrganizationOrUnscoped(user, questionnaire.organizationId)) {
+        throw new NotFoundException('Questionnaire introuvable dans votre périmètre')
+      }
+      return
+    }
+
+    assertCanAccessQuestionnaire(user, questionnaire)
   }
 
   private versionStats(version: any) {
