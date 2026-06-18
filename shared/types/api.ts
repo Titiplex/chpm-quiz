@@ -497,3 +497,124 @@ export interface JudicialAccessRequestResponse {
   }
 }
 
+
+
+export type NotificationFrequency = 'immediate' | 'daily'
+export type NotificationChannel = 'email' | 'internal'
+export type NotificationEventType =
+  | 'submission_received'
+  | 'difficult_question'
+  | 'invitation_expired'
+  | 'campaign_finished'
+  | 'double_submission_attempt'
+  | 'judicial_access_executed'
+
+export interface ApiNotificationSubscription {
+  id: string
+  userId: string
+  questionnaireVersionId: string | null
+  buildingId: string | null
+  eventType: NotificationEventType
+  channel: NotificationChannel
+  frequency: NotificationFrequency
+  digestHour: number
+  isEnabled: boolean
+  lastDeliveredAt: string | null
+  createdAt: string
+  updatedAt: string
+  questionnaireVersion?: {
+    id: string
+    versionLabel: string
+    questionnaire: { id: string; title: string; code: string }
+  } | null
+}
+
+export interface NotificationsResponse {
+  subscriptions: ApiNotificationSubscription[]
+}
+
+export interface UpsertNotificationSubscriptionRequest {
+  eventType: NotificationEventType
+  channel?: NotificationChannel
+  frequency?: NotificationFrequency
+  digestHour?: number
+  questionnaireVersionId?: string
+  buildingId?: string
+  isEnabled?: boolean
+}
+
+export interface TechnicalRegisterResponse {
+  register: {
+    generatedAt: string
+    controller: string
+    dpoContact: string
+    consultedByRole: UserRole
+    processing: Array<{
+      name: string
+      finality: string
+      lawfulBasis: string
+      dataCategories: string[]
+      recipients: string[]
+      storage: string
+    }>
+    safeguards: string[]
+  }
+}
+
+export interface RetentionPolicyResponse {
+  policy: {
+    generatedAt: string
+    rules: Array<{ object: string; retention: string; action: string; endpoint: string }>
+    knownLimitations: string[]
+  }
+}
+
+export interface ComplianceMaintenanceResponse {
+  result: {
+    expiredCount?: number
+    deletedDraftSessionCount?: number
+    cutoff?: string
+    executedAt: string
+  }
+}
+
+export interface PseudonymizedExportResponse {
+  export: {
+    generatedAt: string
+    generatedByRole: UserRole
+    questionnaire: { id: string; code: string; title: string }
+    rowCount: number
+    containsDirectEmail: false
+    identityVaultExcluded: true
+    fingerprint: string
+    rows: Array<{
+      publicCode: string
+      questionnaireId: string
+      questionnaireCode: string
+      versionId: string
+      versionLabel: string
+      buildingCode: string
+      buildingLabel: string
+      submittedAt: string
+      answerCount: number
+      telemetryEventCount: number
+      answers: Array<{ questionCode: string; responseType: QuestionType; value: unknown; warning: string | null }>
+    }>
+  }
+}
+
+export interface AuditLogsResponse {
+  logs: Array<{
+    id: string
+    actorUserId: string | null
+    action: string
+    entityType: string
+    entityId: string | null
+    publicCode: string | null
+    metadata: Record<string, unknown> | null
+    ipAddress: string | null
+    userAgent: string | null
+    occurredAt: string
+    actor?: { id: string; displayName: string; email: string; role: UserRole } | null
+  }>
+}

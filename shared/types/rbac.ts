@@ -30,6 +30,9 @@ export type Permission =
   | 'judicial:validateRequest'
   | 'judicial:executeAccess'
   | 'user:administer'
+  | 'notification:configure'
+  | 'compliance:read'
+  | 'compliance:maintain'
 
 export interface RoleProfile {
   role: UserRole
@@ -65,6 +68,9 @@ export const roleProfiles: Record<UserRole, RoleProfile> = {
       'statistics:exportPseudonymized',
       'audit:read',
       'architecture:read',
+      'notification:configure',
+      'compliance:read',
+      'compliance:maintain',
       'user:administer',
     ],
   },
@@ -73,7 +79,7 @@ export const roleProfiles: Record<UserRole, RoleProfile> = {
     label: 'Modérateur',
     shortLabel: 'Modérateur',
     description: 'Invite les répondants de son périmètre et suit les statuts sans accéder aux réponses.',
-    permissions: ['questionnaire:preview', 'invitation:create', 'invitation:readScoped', 'invitation:resend'],
+    permissions: ['questionnaire:preview', 'invitation:create', 'invitation:readScoped', 'invitation:resend', 'notification:configure'],
   },
   site_manager: {
     role: 'site_manager',
@@ -93,6 +99,7 @@ export const roleProfiles: Record<UserRole, RoleProfile> = {
       'questionnaire:preview',
       'statistics:read',
       'architecture:read',
+      'notification:configure',
     ],
   },
   analyst: {
@@ -100,7 +107,7 @@ export const roleProfiles: Record<UserRole, RoleProfile> = {
     label: 'Analyste données',
     shortLabel: 'Analyste',
     description: 'Consulte les statistiques et soumissions pseudonymisées selon les seuils.',
-    permissions: ['statistics:read', 'statistics:readSubmission', 'statistics:exportPseudonymized'],
+    permissions: ['statistics:read', 'statistics:readSubmission', 'statistics:exportPseudonymized', 'compliance:read'],
   },
   dpo: {
     role: 'dpo',
@@ -114,6 +121,8 @@ export const roleProfiles: Record<UserRole, RoleProfile> = {
       'architecture:read',
       'judicial:createRequest',
       'judicial:validateRequest',
+      'compliance:read',
+      'compliance:maintain',
     ],
   },
   judicial_officer: {
@@ -121,14 +130,14 @@ export const roleProfiles: Record<UserRole, RoleProfile> = {
     label: 'Responsable accès judiciaire',
     shortLabel: 'Judiciaire',
     description: 'Gère le workflow exceptionnel d’accès email-code sous double contrôle.',
-    permissions: ['judicial:createRequest', 'judicial:validateRequest', 'judicial:executeAccess', 'audit:read'],
+    permissions: ['judicial:createRequest', 'judicial:validateRequest', 'judicial:executeAccess', 'audit:read', 'compliance:read'],
   },
   technical_admin: {
     role: 'technical_admin',
     label: 'Administrateur technique',
     shortLabel: 'Tech',
     description: 'Exploite l’infrastructure avec accès applicatif limité et tracé.',
-    permissions: ['audit:read', 'architecture:read'],
+    permissions: ['audit:read', 'architecture:read', 'compliance:read', 'compliance:maintain'],
   },
   service_account: {
     role: 'service_account',

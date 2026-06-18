@@ -570,7 +570,10 @@ model NotificationSubscription {
   buildingId             String?              @db.Uuid
   eventType              String
   channel                String               @default("email")
+  frequency              String               @default("immediate")
+  digestHour             Int                  @default(8)
   isEnabled              Boolean              @default(true)
+  lastDeliveredAt        DateTime?
   createdAt              DateTime             @default(now())
   updatedAt              DateTime             @updatedAt
 
@@ -578,6 +581,8 @@ model NotificationSubscription {
   @@index([questionnaireVersionId])
   @@index([buildingId])
   @@index([eventType])
+  @@index([frequency])
+  @@index([lastDeliveredAt])
   @@schema("public")
 }
 

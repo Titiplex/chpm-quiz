@@ -55,6 +55,18 @@ const userSeeds: Array<{
     displayName: 'Claire DPO',
     role: 'dpo',
   },
+  {
+    email: 'judiciaire@chpm.local',
+    password: 'Judiciaire123!',
+    displayName: 'Julie Accès judiciaire',
+    role: 'judicial_officer',
+  },
+  {
+    email: 'tech@chpm.local',
+    password: 'Tech12345!',
+    displayName: 'Thomas Technique',
+    role: 'technical_admin',
+  },
 ]
 
 async function main() {
@@ -370,6 +382,40 @@ async function main() {
     'ITQ-0001',
     'itq.demo@example.org',
   )
+
+
+  await prisma.notificationSubscription.createMany({
+    data: [
+      {
+        userId: admin.id,
+        questionnaireVersionId: publishedVersion.id,
+        eventType: 'submission_received',
+        channel: 'email',
+        frequency: 'immediate',
+        digestHour: 8,
+        isEnabled: true,
+      },
+      {
+        userId: moderator.id,
+        questionnaireVersionId: publishedVersion.id,
+        buildingId: buildingByCode.get('MTL-A')!.id,
+        eventType: 'submission_received',
+        channel: 'internal',
+        frequency: 'daily',
+        digestHour: 9,
+        isEnabled: true,
+      },
+      {
+        userId: admin.id,
+        questionnaireVersionId: itqVersion.id,
+        eventType: 'submission_received',
+        channel: 'email',
+        frequency: 'daily',
+        digestHour: 8,
+        isEnabled: true,
+      },
+    ],
+  })
 
   await prisma.auditLog.create({
     data: {
