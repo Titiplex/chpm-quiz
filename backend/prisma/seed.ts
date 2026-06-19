@@ -50,6 +50,13 @@ const userSeeds: Array<{
     role: 'analyst',
   },
   {
+    email: 'site.manager@chpm.local',
+    password: 'SiteManager123!',
+    displayName: 'Sophie Responsable de site',
+    role: 'site_manager',
+    siteCode: 'MTL',
+  },
+  {
     email: 'dpo@chpm.local',
     password: 'Dpo12345!',
     displayName: 'Claire DPO',
@@ -373,7 +380,21 @@ async function main() {
     },
   })
 
-  await createDemoInvitations(publishedVersion.id, moderator.id, buildingByCode.get('MTL-A')!.id, buildingByCode.get('MTL-A')!.siteId)
+  const demoBuildings = ['MTL-A', 'PAR-C', 'TYO-H'].map((code) => {
+    const buildingRecord = buildingByCode.get(code)
+
+    if (!buildingRecord) {
+      throw new Error(`Bâtiment de démonstration introuvable : ${code}`)
+    }
+
+    return {
+      code,
+      buildingId: buildingRecord.id,
+      siteId: buildingRecord.siteId,
+    }
+  })
+
+  await createDemoInvitations(publishedVersion.id, moderator.id, demoBuildings)
   const itqDemoToken = await createSeedInvitation(
     itqVersion.id,
     moderator.id,
@@ -382,6 +403,7 @@ async function main() {
     'ITQ-0001',
     'itq.demo@example.org',
   )
+  await createItqDemoInvitations(itqVersion.id, moderator.id, demoBuildings)
 
 
   await prisma.notificationSubscription.createMany({
@@ -1060,7 +1082,37 @@ async function createSeedInvitation(
   return token
 }
 
-async function createDemoInvitations(questionnaireVersionId: string, moderatorId: string, buildingId: string, siteId: string) {
+type DemoBuildingTarget = {
+  code: string
+  buildingId: string
+  siteId: string
+}
+
+type DemoInvitationStatus = 'sent' | 'opened' | 'in_progress' | 'draft' | 'submitted' | 'expired'
+
+type DemoQuestionWithPopups = {
+  id: string
+  code: string
+  responseType: string
+  popupDefinitions: Array<{ id: string; termKey: string }>
+}
+
+type DemoInvitationSeedParams = {
+  questionnaireVersionId: string
+  moderatorId: string
+  building: DemoBuildingTarget
+  publicCode: string
+  email: string
+  status: DemoInvitationStatus
+  sentAt: Date
+  openedAt?: Date
+  startedAt?: Date
+  submittedAt?: Date
+  expiresAt?: Date
+  includeAccessLink?: boolean
+}
+
+async function createDemoInvitations(questionnaireVersionId: string, moderatorId: string, buildings: DemoBuildingTarget[]) {
   const questions = await prisma.question.findMany({
     where: {
       group: {
@@ -1068,173 +1120,755 @@ async function createDemoInvitations(questionnaireVersionId: string, moderatorId
       },
     },
     include: {
-      popupDefinitions: true,
+      popupDefinitions: {
+        select: { id: true, termKey: true },
+      },
     },
     orderBy: { code: 'asc' },
   })
-  const q001 = questions.find((question) => question.code === 'Q-001')!
-  const q002 = questions.find((question) => question.code === 'Q-002')!
-  const q014 = questions.find((question) => question.code === 'Q-014')!
-  const q015 = questions.find((question) => question.code === 'Q-015')!
-  const q016 = questions.find((question) => question.code === 'Q-016')!
-  const q027 = questions.find((question) => question.code === 'Q-027')!
+  const questionByCode = new Map<string, DemoQuestionWithPopups>(questions.map((item: DemoQuestionWithPopups) => [item.code, item]))
+  const required = (code: string) => requireSeedQuestion(questionByCode, code)
+  const q001 = required('Q-001')
+  const q002 = required('Q-002')
+  const q014 = required('Q-014')
+  const q015 = required('Q-015')
+  const q016 = required('Q-016')
+  const q027 = required('Q-027')
 
-  for (let index = 0; index < 6; index += 1) {
-    const publicCode = index === 0 ? '8F4K-29QX' : `DEMO-${String(index + 1).padStart(4, '0')}`
-    const token = createRespondentToken(publicCode)
-    const submittedAt = new Date(Date.now() - (6 - index) * 36 * 60 * 60 * 1000)
-    const email = `repondant.demo.${index + 1}@example.org`
-    const invitation = await prisma.invitation.create({
-      data: {
+  const campaigns = [
+    {
+      buildingCode: 'MTL-A',
+      submitted: 6,
+      pending: [
+        { suffix: 'DRAFT', status: 'draft' as DemoInvitationStatus },
+        { suffix: 'SENT', status: 'sent' as DemoInvitationStatus },
+      ],
+    },
+    {
+      buildingCode: 'PAR-C',
+      submitted: 5,
+      pending: [
+        { suffix: 'OPEN', status: 'opened' as DemoInvitationStatus },
+        { suffix: 'EXP', status: 'expired' as DemoInvitationStatus },
+      ],
+    },
+    {
+      buildingCode: 'TYO-H',
+      submitted: 3,
+      pending: [
+        { suffix: 'SENT', status: 'sent' as DemoInvitationStatus },
+      ],
+    },
+  ]
+
+  let globalSubmissionIndex = 0
+
+  for (const campaign of campaigns) {
+    const building = requireDemoBuilding(buildings, campaign.buildingCode)
+
+    for (let index = 0; index < campaign.submitted; index += 1) {
+      const publicCode = globalSubmissionIndex === 0
+        ? '8F4K-29QX'
+        : `CHPM-${campaign.buildingCode.replace('-', '')}-${String(index + 1).padStart(3, '0')}`
+      const submittedAt = daysAgo(10 - globalSubmissionIndex, -15 * index)
+      const startedAt = new Date(submittedAt.getTime() - (4 * 60_000 + index * 12_000))
+      const email = `chpm.${campaign.buildingCode.toLowerCase().replace('-', '.')}.${index + 1}@example.org`
+      const { invitation } = await createDemoInvitationRecord({
         questionnaireVersionId,
-        buildingId,
-        siteId,
-        createdByUserId: moderatorId,
+        moderatorId,
+        building,
         publicCode,
-        tokenHash: sha256(token),
+        email,
         status: 'submitted',
-        notifyModerator: true,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-        sentAt: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000),
-        openedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
-        startedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
+        sentAt: daysAgo(20 - globalSubmissionIndex),
+        openedAt: daysAgo(18 - globalSubmissionIndex),
+        startedAt,
         submittedAt,
-        identityVaultEntry: {
-          create: {
-            uniqueCode: publicCode,
-            encryptedEmail: encryptEmail(email),
-            emailHash: hashEmail(email),
-            questionnaireVersionId,
-            buildingId,
-            createdByUserId: moderatorId,
-            lastEmailSentAt: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000),
-          },
+      })
+
+      const session = await prisma.responseSession.create({
+        data: {
+          invitationId: invitation.id,
+          publicCode,
+          questionnaireVersionId,
+          buildingId: building.buildingId,
+          status: 'locked',
+          currentPage: 4,
+          randomizationSeed: sha256(`${publicCode}:seed`),
+          pathFingerprint: sha256(`${publicCode}:path`),
+          startedAt,
+          lastSeenAt: submittedAt,
+          submittedAt,
+          lockedAt: submittedAt,
         },
-        deliveryEvents: {
-          create: {
+      })
+
+      const longFreeText = chpmFreeTextAnswer(globalSubmissionIndex)
+      await prisma.answer.createMany({
+        data: [
+          { responseSessionId: session.id, questionId: q001.id, value: 'fr', isDraft: false, createdAt: startedAt, updatedAt: submittedAt },
+          { responseSessionId: session.id, questionId: q002.id, value: 'yes', isDraft: false, createdAt: startedAt, updatedAt: submittedAt },
+          { responseSessionId: session.id, questionId: q014.id, value: chpmCoordinationScore(globalSubmissionIndex), isDraft: false, createdAt: startedAt, updatedAt: submittedAt },
+          {
+            responseSessionId: session.id,
+            questionId: q015.id,
+            value: longFreeText.value,
+            isDraft: false,
+            identifiabilityWarning: longFreeText.identifiabilityWarning,
+            warningReason: longFreeText.warningReason,
+            createdAt: startedAt,
+            updatedAt: submittedAt,
+          },
+          { responseSessionId: session.id, questionId: q016.id, value: chpmCoherenceScore(globalSubmissionIndex), isDraft: false, createdAt: startedAt, updatedAt: submittedAt },
+          { responseSessionId: session.id, questionId: q027.id, value: chpmFinalComment(globalSubmissionIndex), isDraft: false, createdAt: startedAt, updatedAt: submittedAt },
+        ],
+      })
+
+      await prisma.telemetryEvent.createMany({
+        data: buildChpmTelemetry(session.id, submittedAt, globalSubmissionIndex, q014, q015, q016, q027),
+      })
+
+      await prisma.submission.create({
+        data: {
+          responseSessionId: session.id,
+          publicCode,
+          questionnaireVersionId,
+          buildingId: building.buildingId,
+          submittedAt,
+          answerCount: 6,
+          pathFingerprint: sha256(`${publicCode}:path`),
+        },
+      })
+
+      globalSubmissionIndex += 1
+    }
+
+    for (const pending of campaign.pending) {
+      const publicCode = `CHPM-${campaign.buildingCode.replace('-', '')}-${pending.suffix}`
+      const status = pending.status
+      const sentAt = status === 'expired' ? daysAgo(45) : daysAgo(3)
+      const openedAt = status === 'opened' || status === 'draft' ? daysAgo(2) : undefined
+      const startedAt = status === 'draft' ? daysAgo(1) : undefined
+      const { invitation, token } = await createDemoInvitationRecord({
+        questionnaireVersionId,
+        moderatorId,
+        building,
+        publicCode,
+        email: `chpm.${campaign.buildingCode.toLowerCase().replace('-', '.')}.${pending.suffix.toLowerCase()}@example.org`,
+        status,
+        sentAt,
+        openedAt,
+        startedAt,
+        expiresAt: status === 'expired' ? daysAgo(10) : undefined,
+        includeAccessLink: status !== 'expired',
+      })
+
+      if (status === 'draft' && startedAt) {
+        const session = await prisma.responseSession.create({
+          data: {
+            invitationId: invitation.id,
             publicCode,
-            eventType: 'dev_link_created',
-            metadata: { seeded: true },
+            questionnaireVersionId,
+            buildingId: building.buildingId,
+            status: 'draft',
+            currentPage: 2,
+            randomizationSeed: sha256(`${publicCode}:seed`),
+            pathFingerprint: sha256(`${publicCode}:path`),
+            startedAt,
+            lastSeenAt: daysAgo(0),
           },
-        },
-      },
-    })
+        })
 
-    const session = await prisma.responseSession.create({
-      data: {
-        invitationId: invitation.id,
-        publicCode,
+        await prisma.answer.createMany({
+          data: [
+            { responseSessionId: session.id, questionId: q001.id, value: 'fr', isDraft: false, createdAt: startedAt, updatedAt: startedAt },
+            { responseSessionId: session.id, questionId: q002.id, value: 'yes', isDraft: true, createdAt: startedAt, updatedAt: startedAt },
+          ],
+        })
+        await prisma.telemetryEvent.create({
+          data: {
+            responseSessionId: session.id,
+            eventType: 'questionnaire_resume',
+            eventPayload: { seeded: true, status, accessLink: `/r/${token}` },
+            occurredAt: daysAgo(0),
+          },
+        })
+      }
+    }
+  }
+}
+
+async function createItqDemoInvitations(questionnaireVersionId: string, moderatorId: string, buildings: DemoBuildingTarget[]) {
+  const questions = await prisma.question.findMany({
+    where: {
+      group: {
         questionnaireVersionId,
-        buildingId,
-        status: 'locked',
-        currentPage: 3,
-        randomizationSeed: randomBytes(16).toString('hex'),
-        pathFingerprint: sha256(`${publicCode}:path`),
-        submittedAt,
-        lockedAt: submittedAt,
       },
-    })
-
-    await prisma.answer.createMany({
-      data: [
-        { responseSessionId: session.id, questionId: q001.id, value: 'fr', isDraft: false },
-        { responseSessionId: session.id, questionId: q002.id, value: 'yes', isDraft: false },
-        { responseSessionId: session.id, questionId: q014.id, value: index % 2 === 0 ? 6 : 5, isDraft: false },
-        { responseSessionId: session.id, questionId: q015.id, value: `Formulation plus claire demandée ${index + 1}`, isDraft: false },
-        { responseSessionId: session.id, questionId: q016.id, value: index % 3 === 0 ? 4 : 5, isDraft: false },
-        { responseSessionId: session.id, questionId: q027.id, value: 'Aucune difficulté majeure pendant le test.', isDraft: false },
-      ],
-    })
-
-    await prisma.telemetryEvent.createMany({
-      data: [
-        {
-          responseSessionId: session.id,
-          questionId: q014.id,
-          popupDefinitionId: q014.popupDefinitions[0]?.id,
-          eventType: 'popup_open',
-          eventPayload: { termKey: 'coordination_inter_site', page: 2, language: 'fr' },
-          durationMs: 8_000 + index * 700,
-          occurredAt: new Date(submittedAt.getTime() - 6 * 60 * 1000),
-        },
-        {
-          responseSessionId: session.id,
-          questionId: q014.id,
-          eventType: 'question_time',
-          eventPayload: { page: 2 },
-          durationMs: 70_000 + index * 5_000,
-          occurredAt: new Date(submittedAt.getTime() - 5 * 60 * 1000),
-        },
-        {
-          responseSessionId: session.id,
-          questionId: q014.id,
-          eventType: 'answer_change',
-          eventPayload: { previousShape: 'number', nextShape: 'number', page: 2 },
-          occurredAt: new Date(submittedAt.getTime() - 4 * 60 * 1000),
-        },
-        {
-          responseSessionId: session.id,
-          eventType: index % 2 === 0 ? 'backward_navigation' : 'questionnaire_resume',
-          eventPayload: { seeded: true, page: 2 },
-          occurredAt: new Date(submittedAt.getTime() - 3 * 60 * 1000),
-        },
-        {
-          responseSessionId: session.id,
-          eventType: 'questionnaire_total_time',
-          eventPayload: { seeded: true },
-          durationMs: 240_000 + index * 25_000,
-          occurredAt: submittedAt,
-        },
-      ],
-    })
-
-    await prisma.submission.create({
-      data: {
-        responseSessionId: session.id,
-        publicCode,
-        questionnaireVersionId,
-        buildingId,
-        submittedAt,
-        answerCount: 6,
-        pathFingerprint: sha256(`${publicCode}:path`),
+    },
+    include: {
+      popupDefinitions: {
+        select: { id: true, termKey: true },
       },
-    })
+    },
+    orderBy: { code: 'asc' },
+  })
+  const questionByCode = new Map<string, DemoQuestionWithPopups>(questions.map((item: DemoQuestionWithPopups) => [item.code, item]))
+
+  for (const code of itqQuestionCodes) {
+    requireSeedQuestion(questionByCode, code)
   }
 
-  const pendingCode = 'PEND-0001'
-  const pendingToken = createRespondentToken(pendingCode)
-  await prisma.invitation.create({
+  const campaigns = [
+    {
+      buildingCode: 'MTL-A',
+      submitted: 7,
+      pending: [
+        { suffix: 'DRAFT', status: 'draft' as DemoInvitationStatus },
+        { suffix: 'SENT', status: 'sent' as DemoInvitationStatus },
+      ],
+    },
+    {
+      buildingCode: 'PAR-C',
+      submitted: 6,
+      pending: [
+        { suffix: 'OPEN', status: 'opened' as DemoInvitationStatus },
+        { suffix: 'EXP', status: 'expired' as DemoInvitationStatus },
+      ],
+    },
+    {
+      buildingCode: 'TYO-H',
+      submitted: 4,
+      pending: [
+        { suffix: 'SENT', status: 'sent' as DemoInvitationStatus },
+      ],
+    },
+  ]
+
+  let globalSubmissionIndex = 0
+
+  for (const campaign of campaigns) {
+    const building = requireDemoBuilding(buildings, campaign.buildingCode)
+
+    for (let index = 0; index < campaign.submitted; index += 1) {
+      const publicCode = `ITQ-${campaign.buildingCode.replace('-', '')}-${String(index + 1).padStart(3, '0')}`
+      const submittedAt = daysAgo(16 - globalSubmissionIndex, -9 * index)
+      const startedAt = new Date(submittedAt.getTime() - (8 * 60_000 + globalSubmissionIndex * 15_000))
+      const email = `itq.${campaign.buildingCode.toLowerCase().replace('-', '.')}.${index + 1}@example.org`
+      const { invitation } = await createDemoInvitationRecord({
+        questionnaireVersionId,
+        moderatorId,
+        building,
+        publicCode,
+        email,
+        status: 'submitted',
+        sentAt: daysAgo(25 - globalSubmissionIndex),
+        openedAt: daysAgo(23 - globalSubmissionIndex),
+        startedAt,
+        submittedAt,
+      })
+
+      const session = await prisma.responseSession.create({
+        data: {
+          invitationId: invitation.id,
+          publicCode,
+          questionnaireVersionId,
+          buildingId: building.buildingId,
+          status: 'locked',
+          currentPage: 20,
+          randomizationSeed: sha256(`${publicCode}:seed`),
+          pathFingerprint: sha256(`${publicCode}:path`),
+          startedAt,
+          lastSeenAt: submittedAt,
+          submittedAt,
+          lockedAt: submittedAt,
+        },
+      })
+
+      await prisma.answer.createMany({
+        data: itqQuestionCodes.map((code) => {
+          const question = requireSeedQuestion(questionByCode, code)
+          const answer = itqAnswerFor(code, globalSubmissionIndex, campaign.buildingCode)
+
+          return {
+            responseSessionId: session.id,
+            questionId: question.id,
+            value: answer.value,
+            isDraft: false,
+            identifiabilityWarning: answer.identifiabilityWarning,
+            warningReason: answer.warningReason,
+            createdAt: startedAt,
+            updatedAt: submittedAt,
+          }
+        }),
+      })
+
+      await prisma.telemetryEvent.createMany({
+        data: buildItqTelemetry(session.id, submittedAt, globalSubmissionIndex, questionByCode),
+      })
+
+      await prisma.submission.create({
+        data: {
+          responseSessionId: session.id,
+          publicCode,
+          questionnaireVersionId,
+          buildingId: building.buildingId,
+          submittedAt,
+          answerCount: itqQuestionCodes.length,
+          pathFingerprint: sha256(`${publicCode}:path`),
+        },
+      })
+
+      globalSubmissionIndex += 1
+    }
+
+    for (const pending of campaign.pending) {
+      const publicCode = `ITQ-${campaign.buildingCode.replace('-', '')}-${pending.suffix}`
+      const status = pending.status
+      const sentAt = status === 'expired' ? daysAgo(50) : daysAgo(4)
+      const openedAt = status === 'opened' || status === 'draft' ? daysAgo(3) : undefined
+      const startedAt = status === 'draft' ? daysAgo(2) : undefined
+      const { invitation, token } = await createDemoInvitationRecord({
+        questionnaireVersionId,
+        moderatorId,
+        building,
+        publicCode,
+        email: `itq.${campaign.buildingCode.toLowerCase().replace('-', '.')}.${pending.suffix.toLowerCase()}@example.org`,
+        status,
+        sentAt,
+        openedAt,
+        startedAt,
+        expiresAt: status === 'expired' ? daysAgo(12) : undefined,
+        includeAccessLink: status !== 'expired',
+      })
+
+      if (status === 'draft' && startedAt) {
+        const session = await prisma.responseSession.create({
+          data: {
+            invitationId: invitation.id,
+            publicCode,
+            questionnaireVersionId,
+            buildingId: building.buildingId,
+            status: 'draft',
+            currentPage: 7,
+            randomizationSeed: sha256(`${publicCode}:seed`),
+            pathFingerprint: sha256(`${publicCode}:path`),
+            startedAt,
+            lastSeenAt: daysAgo(1),
+          },
+        })
+        const expDesc = requireSeedQuestion(questionByCode, 'ITQ-EXP-DESC')
+        const expDate = requireSeedQuestion(questionByCode, 'ITQ-EXP-DATE')
+
+        await prisma.answer.createMany({
+          data: [
+            { responseSessionId: session.id, questionId: expDesc.id, value: 'Brouillon de démonstration non soumis.', isDraft: false, createdAt: startedAt, updatedAt: startedAt },
+            { responseSessionId: session.id, questionId: expDate.id, value: '1_5_ans', isDraft: true, createdAt: startedAt, updatedAt: startedAt },
+          ],
+        })
+        await prisma.telemetryEvent.create({
+          data: {
+            responseSessionId: session.id,
+            eventType: 'questionnaire_resume',
+            eventPayload: { seeded: true, questionnaire: 'ITQ', accessLink: `/r/${token}` },
+            occurredAt: daysAgo(1),
+          },
+        })
+      }
+    }
+  }
+}
+
+async function createDemoInvitationRecord(params: DemoInvitationSeedParams) {
+  const token = createRespondentToken(params.publicCode)
+  const metadata: Record<string, unknown> = {
+    seeded: true,
+    status: params.status,
+    buildingCode: params.building.code,
+  }
+
+  if (params.includeAccessLink) {
+    metadata.accessLink = `/r/${token}`
+  }
+
+  const invitation = await prisma.invitation.create({
     data: {
-      questionnaireVersionId,
-      buildingId,
-      siteId,
-      createdByUserId: moderatorId,
-      publicCode: pendingCode,
-      tokenHash: sha256(pendingToken),
-      status: 'sent',
+      questionnaireVersionId: params.questionnaireVersionId,
+      buildingId: params.building.buildingId,
+      siteId: params.building.siteId,
+      createdByUserId: params.moderatorId,
+      publicCode: params.publicCode,
+      tokenHash: sha256(token),
+      status: params.status,
       notifyModerator: true,
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      sentAt: new Date(),
+      notifyAdmins: params.status === 'submitted',
+      expiresAt: params.expiresAt ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      sentAt: params.sentAt,
+      openedAt: params.openedAt,
+      startedAt: params.startedAt,
+      submittedAt: params.submittedAt,
       identityVaultEntry: {
         create: {
-          uniqueCode: pendingCode,
-          encryptedEmail: encryptEmail('pending.demo@example.org'),
-          emailHash: hashEmail('pending.demo@example.org'),
-          questionnaireVersionId,
-          buildingId,
-          createdByUserId: moderatorId,
-          lastEmailSentAt: new Date(),
+          uniqueCode: params.publicCode,
+          encryptedEmail: encryptEmail(params.email),
+          emailHash: hashEmail(params.email),
+          questionnaireVersionId: params.questionnaireVersionId,
+          buildingId: params.building.buildingId,
+          createdByUserId: params.moderatorId,
+          lastEmailSentAt: params.sentAt,
+          deletionScheduledAt: params.status === 'expired' ? daysAgo(-30) : undefined,
         },
       },
       deliveryEvents: {
-        create: {
-          publicCode: pendingCode,
-          eventType: 'dev_link_created',
-          metadata: { seeded: true, accessLink: `/r/${pendingToken}` },
-        },
+        create: [
+          {
+            publicCode: params.publicCode,
+            eventType: 'dev_link_created',
+            metadata,
+            occurredAt: params.sentAt,
+          },
+          ...(params.openedAt
+            ? [{
+                publicCode: params.publicCode,
+                eventType: 'link_opened',
+                metadata: { seeded: true },
+                occurredAt: params.openedAt,
+              }]
+            : []),
+        ],
       },
     },
   })
+
+  return { invitation, token }
+}
+
+function requireDemoBuilding(buildings: DemoBuildingTarget[], code: string): DemoBuildingTarget {
+  const building = buildings.find((item) => item.code === code)
+
+  if (!building) {
+    throw new Error(`Bâtiment de seed stats introuvable : ${code}`)
+  }
+
+  return building
+}
+
+function requireSeedQuestion(questionByCode: Map<string, DemoQuestionWithPopups>, code: string): DemoQuestionWithPopups {
+  const question = questionByCode.get(code)
+
+  if (!question) {
+    throw new Error(`Question de seed stats introuvable : ${code}`)
+  }
+
+  return question
+}
+
+function buildChpmTelemetry(
+  responseSessionId: string,
+  submittedAt: Date,
+  index: number,
+  q014: DemoQuestionWithPopups,
+  q015: DemoQuestionWithPopups,
+  q016: DemoQuestionWithPopups,
+  q027: DemoQuestionWithPopups,
+) {
+  const popupDefinition = q014.popupDefinitions[0]
+  const events: any[] = [
+    ...(popupDefinition
+      ? [{
+          responseSessionId,
+          popupDefinitionId: popupDefinition.id,
+          eventType: 'popup_open',
+          eventPayload: { termKey: popupDefinition.termKey, page: 2, seeded: true },
+          durationMs: 8_000 + index * 450,
+          occurredAt: minutesBefore(submittedAt, 9),
+        }]
+      : []),
+    {
+      responseSessionId,
+      questionId: q014.id,
+      eventType: 'question_time',
+      eventPayload: { page: 2, seeded: true },
+      durationMs: 64_000 + index * 4_200,
+      occurredAt: minutesBefore(submittedAt, 8),
+    },
+    {
+      responseSessionId,
+      questionId: q015.id,
+      eventType: 'question_time',
+      eventPayload: { page: 2, seeded: true },
+      durationMs: 46_000 + index * 2_500,
+      occurredAt: minutesBefore(submittedAt, 7),
+    },
+    {
+      responseSessionId,
+      questionId: q016.id,
+      eventType: 'question_time',
+      eventPayload: { page: 2, seeded: true },
+      durationMs: 34_000 + index * 1_300,
+      occurredAt: minutesBefore(submittedAt, 6),
+    },
+    {
+      responseSessionId,
+      questionId: q027.id,
+      eventType: 'question_time',
+      eventPayload: { page: 4, seeded: true },
+      durationMs: 39_000 + index * 1_100,
+      occurredAt: minutesBefore(submittedAt, 4),
+    },
+    {
+      responseSessionId,
+      eventType: 'page_change',
+      eventPayload: { from: 2, to: 3, seeded: true },
+      durationMs: 18_000 + index * 500,
+      occurredAt: minutesBefore(submittedAt, 3),
+    },
+    {
+      responseSessionId,
+      eventType: 'questionnaire_total_time',
+      eventPayload: { seeded: true },
+      durationMs: 245_000 + index * 18_000,
+      occurredAt: submittedAt,
+    },
+  ]
+
+  if (index % 2 === 0) {
+    events.push({
+      responseSessionId,
+      questionId: q014.id,
+      eventType: 'answer_change',
+      eventPayload: { previousShape: 'number', nextShape: 'number', seeded: true },
+      occurredAt: minutesBefore(submittedAt, 5),
+    })
+  }
+
+  if (index % 3 === 0) {
+    events.push({
+      responseSessionId,
+      eventType: 'backward_navigation',
+      eventPayload: { from: 3, to: 2, seeded: true },
+      occurredAt: minutesBefore(submittedAt, 4),
+    })
+  }
+
+  if (index % 4 === 0) {
+    events.push({
+      responseSessionId,
+      eventType: 'questionnaire_resume',
+      eventPayload: { page: 2, seeded: true },
+      occurredAt: minutesBefore(submittedAt, 11),
+    })
+  }
+
+  return events
+}
+
+const itqQuestionCodes = [
+  'ITQ-EXP-DESC',
+  'ITQ-EXP-DATE',
+  'P1',
+  'P2',
+  'P3',
+  'P4',
+  'P5',
+  'P6',
+  'P7',
+  'P8',
+  'P9',
+  'C1',
+  'C2',
+  'C3',
+  'C4',
+  'C5',
+  'C6',
+  'C7',
+  'C8',
+  'C9',
+]
+
+function buildItqTelemetry(responseSessionId: string, submittedAt: Date, respondentIndex: number, questionByCode: Map<string, DemoQuestionWithPopups>) {
+  const events: any[] = []
+
+  itqQuestionCodes.forEach((code, questionIndex) => {
+    const question = requireSeedQuestion(questionByCode, code)
+    const durationMs = itqQuestionDurationMs(code, respondentIndex, questionIndex)
+
+    events.push({
+      responseSessionId,
+      questionId: question.id,
+      eventType: 'question_time',
+      eventPayload: { code, page: questionIndex + 1, seeded: true },
+      durationMs,
+      occurredAt: minutesBefore(submittedAt, Math.max(1, itqQuestionCodes.length - questionIndex)),
+    })
+
+    const popupDefinition = question.popupDefinitions[0]
+    if (popupDefinition && shouldOpenItqPopup(code, respondentIndex, questionIndex)) {
+      events.push({
+        responseSessionId,
+        popupDefinitionId: popupDefinition.id,
+        eventType: 'popup_open',
+        eventPayload: { termKey: popupDefinition.termKey, code, seeded: true },
+        durationMs: 5_500 + ((respondentIndex + questionIndex) % 5) * 1_100,
+        occurredAt: minutesBefore(submittedAt, Math.max(1, itqQuestionCodes.length - questionIndex) + 1),
+      })
+    }
+
+    if (question.responseType === 'likert' && (respondentIndex + questionIndex) % 7 === 0) {
+      events.push({
+        responseSessionId,
+        questionId: question.id,
+        eventType: 'answer_change',
+        eventPayload: { previousShape: 'number', nextShape: 'number', code, seeded: true },
+        occurredAt: minutesBefore(submittedAt, Math.max(1, itqQuestionCodes.length - questionIndex)),
+      })
+    }
+  })
+
+  if (respondentIndex % 3 === 0) {
+    events.push({
+      responseSessionId,
+      eventType: 'questionnaire_resume',
+      eventPayload: { page: 8, seeded: true },
+      occurredAt: minutesBefore(submittedAt, 28),
+    })
+  }
+
+  if (respondentIndex % 4 === 0) {
+    events.push({
+      responseSessionId,
+      eventType: 'backward_navigation',
+      eventPayload: { from: 12, to: 11, seeded: true },
+      occurredAt: minutesBefore(submittedAt, 13),
+    })
+  }
+
+  events.push({
+    responseSessionId,
+    eventType: 'questionnaire_total_time',
+    eventPayload: { seeded: true, questionnaire: 'ITQ' },
+    durationMs: 8 * 60_000 + respondentIndex * 24_000,
+    occurredAt: submittedAt,
+  })
+
+  return events
+}
+
+function chpmCoordinationScore(index: number): number {
+  const values = [2, 3, 4, 5, 6, 7, 3, 4, 5, 6, 2, 4, 5, 6]
+  return values[index % values.length] ?? 4
+}
+
+function chpmCoherenceScore(index: number): number {
+  const values = [3, 4, 5, 4, 5, 3, 2, 4, 5, 4, 3, 5, 4, 5]
+  return values[index % values.length] ?? 4
+}
+
+function chpmFreeTextAnswer(index: number) {
+  const answers = [
+    'Remplacer coordination inter-site par un exemple concret entre deux bâtiments aiderait beaucoup.',
+    'La formulation est claire, mais la bulle devrait apparaître avant la question.',
+    'J’ai hésité sur le périmètre : service, bâtiment ou site complet.',
+    'Le terme est compréhensible après lecture de l’aide contextuelle.',
+    'Ajouter un exemple opérationnel éviterait une interprétation trop administrative.',
+    'Mentionne fictivement Mme Martin du service A : contenu gardé pour tester l’alerte PII.',
+  ]
+  const value = answers[index % answers.length] ?? answers[0]!
+  const identifiabilityWarning = value.includes('Mme Martin')
+
+  return {
+    value,
+    identifiabilityWarning,
+    warningReason: identifiabilityWarning ? 'Contenu libre potentiellement identifiant dans le seed de démonstration.' : undefined,
+  }
+}
+
+function chpmFinalComment(index: number): string {
+  const comments = [
+    'Navigation fluide, reprise du brouillon rassurante.',
+    'Aucune difficulté majeure pendant le test.',
+    'Les popups rendent le vocabulaire plus accessible.',
+    'Le bouton de soumission définitive est assez explicite.',
+  ]
+
+  return comments[index % comments.length] ?? comments[0]!
+}
+
+function itqAnswerFor(code: string, respondentIndex: number, buildingCode: string) {
+  if (code === 'ITQ-EXP-DESC') {
+    const descriptions = [
+      'Accident ancien décrit sans détail directement identifiant.',
+      'Événement professionnel difficile, résumé volontairement de façon générale.',
+      'Situation familiale stressante, sans nom ni date précise.',
+      'Agression passée mentionnée uniquement par catégorie.',
+      'Événement fictif impliquant Jean Dupont : utilisé pour valider l’alerte PII.',
+    ]
+    const value = descriptions[respondentIndex % descriptions.length] ?? descriptions[0]!
+    const identifiabilityWarning = value.includes('Jean Dupont')
+
+    return {
+      value,
+      identifiabilityWarning,
+      warningReason: identifiabilityWarning ? 'Nom propre détecté dans le champ libre du seed de démonstration.' : undefined,
+    }
+  }
+
+  if (code === 'ITQ-EXP-DATE') {
+    const periods = ['moins_6_mois', '6_12_mois', '1_5_ans', '5_10_ans', '10_20_ans', 'plus_20_ans']
+
+    return {
+      value: periods[(respondentIndex + buildingCode.length) % periods.length] ?? '1_5_ans',
+      identifiabilityWarning: false,
+      warningReason: undefined,
+    }
+  }
+
+  return {
+    value: itqLikertValue(code, respondentIndex, buildingCode),
+    identifiabilityWarning: false,
+    warningReason: undefined,
+  }
+}
+
+function itqLikertValue(code: string, respondentIndex: number, buildingCode: string): number {
+  const itemNumber = Number(code.slice(1)) || 1
+  const isDso = code.startsWith('C')
+  const profile = respondentIndex % 6
+  const buildingShift = buildingCode === 'PAR-C' ? 1 : buildingCode === 'TYO-H' ? -1 : 0
+  const profileBase = profile <= 1
+    ? 3
+    : profile === 2
+      ? 2
+      : profile === 3
+        ? (isDso ? 1 : 3)
+        : profile === 4
+          ? (isDso ? 3 : 1)
+          : 1
+  const itemShift = itemNumber % 3 === 0 ? 1 : itemNumber % 4 === 0 ? -1 : 0
+
+  return clamp(profileBase + buildingShift + itemShift, 0, 4)
+}
+
+function itqQuestionDurationMs(code: string, respondentIndex: number, questionIndex: number): number {
+  if (code === 'ITQ-EXP-DESC') return 95_000 + respondentIndex * 1_800
+  if (code === 'ITQ-EXP-DATE') return 22_000 + respondentIndex * 600
+  if (['P2', 'P5', 'C1', 'C4', 'C7'].includes(code)) return 72_000 + respondentIndex * 2_400
+  return 34_000 + questionIndex * 850 + respondentIndex * 500
+}
+
+function shouldOpenItqPopup(code: string, respondentIndex: number, questionIndex: number): boolean {
+  return ['ITQ-EXP-DESC', 'P2', 'P5', 'C1', 'C7'].includes(code) || (respondentIndex + questionIndex) % 4 === 0
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
+}
+
+function daysAgo(days: number, minutesOffset = 0): Date {
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000 + minutesOffset * 60 * 1000)
+}
+
+function minutesBefore(date: Date, minutes: number): Date {
+  return new Date(date.getTime() - minutes * 60 * 1000)
 }
 
 function encryptEmail(email: string): string {
