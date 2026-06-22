@@ -1,5 +1,5 @@
 import { roleProfiles, type UserRole } from '@shared/types/rbac'
-import type { InvitationStatus, QuestionType, SubmissionStatus } from '@shared/types/domain'
+import type { AssistanceMode, InvitationDeliveryMode, InvitationStatus, QuestionType, SubmissionStatus } from '@shared/types/domain'
 import type {
   ApiAnswerOption,
   ApiBuilding,
@@ -9,11 +9,13 @@ import type {
   ApiQuestion,
   ApiQuestionnaire,
   ApiNotificationSubscription,
+  ApiTerminalDevice,
   AuthResponse,
   AuthUserProfile,
   BuildingsResponse,
   CreateInvitationRequest,
   CreateInvitationResponse,
+  OpenTerminalInvitationResponse,
   AuditLogsResponse,
   ComplianceMaintenanceResponse,
   CreateJudicialAccessRequest,
@@ -26,6 +28,8 @@ import type {
   PseudonymizedExportResponse,
   RetentionPolicyResponse,
   InvitationsResponse,
+  RegisterTerminalDeviceRequest,
+  RegisterTerminalDeviceResponse,
   JudicialAccessRequestRecord,
   JudicialAccessRequestResponse,
   JudicialAccessRequestsResponse,
@@ -38,6 +42,8 @@ import type {
   SaveAnswersResponse,
   StatsResponse,
   SubmissionDetailsResponse,
+  TerminalDevicesResponse,
+  TerminalSessionResponse,
   SubmitResponse,
   UpdateQuestionGroupRequest,
   UpdateQuestionnaireRequest,
@@ -54,6 +60,7 @@ const SESSION_EMAIL_STORAGE_KEY = 'chpm_demo_session_email'
 const QUESTIONNAIRES_STORAGE_KEY = 'chpm_demo_questionnaires'
 const INVITATIONS_STORAGE_KEY = 'chpm_demo_invitations'
 const RESPONDENT_SESSIONS_STORAGE_KEY = 'chpm_demo_respondent_sessions'
+const TERMINAL_DEVICES_STORAGE_KEY = 'chpm_demo_terminal_devices'
 const JUDICIAL_REQUESTS_STORAGE_KEY = 'chpm_demo_judicial_requests'
 const NOTIFICATION_SUBSCRIPTIONS_STORAGE_KEY = 'chpm_demo_notification_subscriptions'
 const AUDIT_LOGS_STORAGE_KEY = 'chpm_demo_audit_logs'
@@ -106,6 +113,42 @@ const buildingSeeds: ApiBuilding[] = [
     timezone: 'Asia/Tokyo',
     organizationId: DEMO_ORGANIZATION_ID,
     siteId: 'demo-site-tyo',
+  },
+]
+
+const terminalTokenSeeds: Record<string, string> = {
+  'demo-terminal-mtl-accueil': 'demo-terminal-mtl-accueil-token',
+  'demo-terminal-mtl-salle': 'demo-terminal-mtl-salle-token',
+  'demo-terminal-par-accueil': 'demo-terminal-par-accueil-token',
+}
+
+const terminalDeviceSeeds: ApiTerminalDevice[] = [
+  {
+    id: 'demo-terminal-mtl-accueil',
+    code: 'TERM-MTL-A-ACCUEIL',
+    label: 'Tablette accueil · Montréal A',
+    status: 'active',
+    building: buildingSeeds[0]!,
+    lastSeenAt: addMinutesIso(-18),
+    pendingInvitationCount: 1,
+  },
+  {
+    id: 'demo-terminal-mtl-salle',
+    code: 'TERM-MTL-A-SALLE',
+    label: 'Borne salle commune · Montréal A',
+    status: 'active',
+    building: buildingSeeds[0]!,
+    lastSeenAt: addMinutesIso(-44),
+    pendingInvitationCount: 0,
+  },
+  {
+    id: 'demo-terminal-par-accueil',
+    code: 'TERM-PAR-C-ACCUEIL',
+    label: 'Tablette accueil · Paris C',
+    status: 'active',
+    building: buildingSeeds[1]!,
+    lastSeenAt: null,
+    pendingInvitationCount: 0,
   },
 ]
 
@@ -216,6 +259,14 @@ export async function demoApiRequest<T>(path: string, options: DemoRequestOption
     return asResponse<T>({ invitations: getInvitations() } satisfies InvitationsResponse)
   }
 
+  if (method === 'GET' && route === '/moderation/terminal-devices') {
+    return asResponse<T>({ terminalDevices: getTerminalDevicesWithCounts() } satisfies TerminalDevicesResponse)
+  }
+
+  if (method === 'POST' && route === '/moderation/terminal-devices') {
+    return asResponse<T>(registerTerminalDevice(options.body as RegisterTerminalDeviceRequest) satisfies RegisterTerminalDeviceResponse)
+  }
+
   if (method === 'POST' && route === '/moderation/invitations') {
     return asResponse<T>(createInvitation(options.body as CreateInvitationRequest))
   }
@@ -225,8 +276,17 @@ export async function demoApiRequest<T>(path: string, options: DemoRequestOption
     return asResponse<T>(resendInvitation(resendMatch[1]))
   }
 
+  if (method === 'GET' && route === '/terminal/session') {
+    return asResponse<T>(getTerminalSession(requestUrl.searchParams.get('token') ?? '') satisfies TerminalSessionResponse)
+  }
+
+  const terminalOpenMatch = route.match(/^\/terminal\/invitations\/([^/]+)\/open$/)
+  if (terminalOpenMatch?.[1] && method === 'POST') {
+    return asResponse<T>(openTerminalInvitation(terminalOpenMatch[1], options.body as { terminalToken?: string }) satisfies OpenTerminalInvitationResponse)
+  }
+
   if (method === 'GET' && route === '/respondent/session') {
-    return asResponse<T>(getRespondentSession(requestUrl.searchParams.get('token') ?? ''))
+    return asResponse<T>(getRespondentSession(requestUrl.searchParams.get('token') ?? '', requestUrl.searchParams.get('terminalToken') ?? undefined))
   }
 
   if (method === 'PUT' && route === '/respondent/answers') {
@@ -238,7 +298,7 @@ export async function demoApiRequest<T>(path: string, options: DemoRequestOption
   }
 
   if (method === 'POST' && route === '/respondent/submit') {
-    return asResponse<T>(submitRespondentSession(options.body as { token?: string }))
+    return asResponse<T>(submitRespondentSession(options.body as { token?: string; terminalToken?: string }))
   }
 
 
@@ -397,6 +457,27 @@ function getInvitations(): ApiInvitation[] {
 
 function saveInvitations(invitations: ApiInvitation[]): void {
   window.localStorage.setItem(INVITATIONS_STORAGE_KEY, JSON.stringify(invitations))
+}
+
+function getTerminalDevices(): ApiTerminalDevice[] {
+  return readStorage(TERMINAL_DEVICES_STORAGE_KEY, () => terminalDeviceSeeds)
+}
+
+function saveTerminalDevices(devices: ApiTerminalDevice[]): void {
+  window.localStorage.setItem(TERMINAL_DEVICES_STORAGE_KEY, JSON.stringify(devices))
+}
+
+function getTerminalDevicesWithCounts(): ApiTerminalDevice[] {
+  const invitations = getInvitations()
+  return getTerminalDevices().map((device) => ({
+    ...device,
+    pendingInvitationCount: invitations.filter((invitation) =>
+      invitation.deliveryMode === 'onsite_terminal'
+      && invitation.terminalDevice?.id === device.id
+      && ['sent', 'opened', 'in_progress', 'draft'].includes(invitation.status)
+      && new Date(invitation.expiresAt).getTime() > Date.now(),
+    ).length,
+  }))
 }
 
 function getRespondentSessions(): RespondentSessionMap {
@@ -601,19 +682,38 @@ function createInvitation(payload: CreateInvitationRequest): CreateInvitationRes
     throw new Error('Questionnaire ou bâtiment de démonstration introuvable.')
   }
 
+  const deliveryMode: InvitationDeliveryMode = payload.deliveryMode ?? 'email_simulation'
+  const assistanceMode: AssistanceMode = payload.assistanceMode ?? 'none'
+  const terminalDevice = payload.terminalDeviceId
+    ? getTerminalDevices().find((candidate) => candidate.id === payload.terminalDeviceId) ?? null
+    : null
+
+  if (deliveryMode === 'onsite_terminal') {
+    if (!terminalDevice) throw new Error('Terminal de démonstration introuvable.')
+    if (terminalDevice.building.id !== building.id) throw new Error('Le terminal choisi est hors du bâtiment sélectionné.')
+  } else if (!payload.email) {
+    throw new Error('Adresse email requise pour une invitation email.')
+  }
+
   const invitations = getInvitations()
-  const publicCode = `DEMO-${String(invitations.length + 1).padStart(4, '0')}`
+  const publicCode = deliveryMode === 'onsite_terminal'
+    ? `TERM-${String(invitations.length + 1).padStart(4, '0')}`
+    : `DEMO-${String(invitations.length + 1).padStart(4, '0')}`
   const token = `demo-${publicCode.toLowerCase()}-${crypto.randomUUID()}`
   const invitation: ApiInvitation = {
     id: createId('invitation'),
     publicCode,
     status: 'sent',
-    maskedEmail: maskEmail(payload.email),
+    deliveryMode,
+    assistanceMode,
+    maskedEmail: deliveryMode === 'onsite_terminal' ? null : maskEmail(payload.email),
     questionnaireVersionId: payload.questionnaireVersionId,
     questionnaireTitle: questionnaire.title,
     versionLabel: questionnaire.versionLabel,
     building,
-    expiresAt: addDaysIso(30),
+    terminalDevice,
+    terminalDispatchedAt: deliveryMode === 'onsite_terminal' ? nowIso() : null,
+    expiresAt: payload.expiresAt ?? addDaysIso(deliveryMode === 'onsite_terminal' ? 1 : 30),
     sentAt: nowIso(),
     openedAt: null,
     startedAt: null,
@@ -624,14 +724,17 @@ function createInvitation(payload: CreateInvitationRequest): CreateInvitationRes
   invitations.unshift(invitation)
   saveInvitations(invitations)
 
-  const sessions = getRespondentSessions()
-  sessions[token] = createRespondentSession(token, questionnaire, building, publicCode, 'draft')
-  saveRespondentSessions(sessions)
+  if (deliveryMode !== 'onsite_terminal') {
+    const sessions = getRespondentSessions()
+    sessions[token] = createRespondentSession(token, questionnaire, building, publicCode, 'draft', invitation)
+    saveRespondentSessions(sessions)
+  }
 
   return {
     invitation,
-    accessToken: token,
-    devAccessLink: createRespondentLink(token),
+    accessToken: deliveryMode === 'onsite_terminal' ? null : token,
+    devAccessLink: deliveryMode === 'onsite_terminal' ? null : createRespondentLink(token),
+    terminalDispatchLink: terminalDevice ? createTerminalLink(terminalTokenSeeds[terminalDevice.id] ?? '') : null,
   }
 }
 
@@ -649,13 +752,129 @@ function resendInvitation(invitationId: string): { invitation: ApiInvitation } {
   return { invitation }
 }
 
-function getRespondentSession(token: string): RespondentSessionResponse {
+function registerTerminalDevice(payload: RegisterTerminalDeviceRequest): RegisterTerminalDeviceResponse {
+  const building = buildingSeeds.find((candidate) => candidate.id === payload.buildingId)
+  if (!building) throw new Error('Bâtiment introuvable pour créer le terminal.')
+
+  const devices = getTerminalDevices()
+  const id = createId('terminal')
+  const code = `TERM-${building.code}-${String(devices.length + 1).padStart(2, '0')}`
+  const token = `${id}-token`
+  const terminalDevice: ApiTerminalDevice = {
+    id,
+    code,
+    label: payload.label || `Terminal ${building.label}`,
+    status: 'active',
+    building,
+    lastSeenAt: null,
+    pendingInvitationCount: 0,
+  }
+
+  terminalTokenSeeds[id] = token
+  devices.unshift(terminalDevice)
+  saveTerminalDevices(devices)
+  appendAuditLog('terminal_device.register', 'TerminalDevice', id, null, {
+    buildingId: building.id,
+    code,
+    simulation: true,
+  })
+
+  return {
+    terminalDevice,
+    terminalAccessToken: token,
+    terminalLaunchLink: createTerminalLink(token),
+  }
+}
+
+function getTerminalSession(terminalToken: string): TerminalSessionResponse {
+  const terminalDevice = findTerminalByToken(terminalToken)
+  const devices = getTerminalDevices()
+  saveTerminalDevices(devices.map((device) => device.id === terminalDevice.id ? { ...device, lastSeenAt: nowIso() } : device))
+
+  const invitations = getInvitations().filter((invitation) =>
+    invitation.deliveryMode === 'onsite_terminal'
+    && invitation.terminalDevice?.id === terminalDevice.id
+    && ['sent', 'opened', 'in_progress', 'draft'].includes(invitation.status)
+    && new Date(invitation.expiresAt).getTime() > Date.now(),
+  )
+
+  return {
+    terminalDevice: { ...terminalDevice, lastSeenAt: nowIso(), pendingInvitationCount: invitations.length },
+    invitations,
+  }
+}
+
+function openTerminalInvitation(invitationId: string, payload: { terminalToken?: string }): OpenTerminalInvitationResponse {
+  const terminalDevice = findTerminalByToken(payload.terminalToken ?? '')
+  const invitations = getInvitations()
+  const invitation = invitations.find((candidate) => candidate.id === invitationId)
+
+  if (!invitation) throw new Error('Invitation terminal introuvable.')
+  if (invitation.deliveryMode !== 'onsite_terminal') throw new Error('Cette invitation n’est pas destinée à un terminal.')
+  if (invitation.terminalDevice?.id !== terminalDevice.id) throw new Error('Invitation affectée à un autre terminal.')
+  if (invitation.building.id !== terminalDevice.building.id) throw new Error('Terminal hors bâtiment.')
+  if (invitation.status === 'submitted' || invitation.responseStatus === 'locked') throw new Error('Invitation déjà soumise.')
+  if (new Date(invitation.expiresAt).getTime() <= Date.now()) throw new Error('Invitation expirée.')
+
+  const questionnaire = getQuestionnaires().find((candidate) => candidate.versionId === invitation.questionnaireVersionId)
+  if (!questionnaire) throw new Error('Questionnaire terminal introuvable.')
+
+  const accessToken = `demo-terminal-${invitation.publicCode.toLowerCase()}-${crypto.randomUUID()}`
+  const sessions = getRespondentSessions()
+  sessions[accessToken] = createRespondentSession(accessToken, questionnaire, invitation.building, invitation.publicCode, 'draft', {
+    ...invitation,
+    status: 'opened',
+    openedAt: invitation.openedAt ?? nowIso(),
+  })
+  saveRespondentSessions(sessions)
+
+  invitation.status = 'opened'
+  invitation.openedAt = invitation.openedAt ?? nowIso()
+  invitation.responseStatus = 'draft'
+  saveInvitations(invitations)
+
+  appendAuditLog('terminal.invitation.open', 'Invitation', invitation.id, invitation.publicCode, {
+    terminalDeviceId: terminalDevice.id,
+    buildingId: terminalDevice.building.id,
+    simulation: true,
+  })
+
+  return {
+    invitation,
+    accessToken,
+    respondentAccessLink: `${createRespondentLink(accessToken)}?terminalToken=${encodeURIComponent(payload.terminalToken ?? '')}`,
+  }
+}
+
+function findTerminalByToken(terminalToken: string): ApiTerminalDevice {
+  const seededTerminalId = Object.entries(terminalTokenSeeds).find(([, token]) => token === terminalToken)?.[0]
+  const terminalId = seededTerminalId ?? (terminalToken.endsWith('-token') ? terminalToken.slice(0, -'-token'.length) : null)
+  const terminalDevice = terminalId ? getTerminalDevices().find((device) => device.id === terminalId) : null
+  if (!terminalDevice || terminalDevice.status !== 'active') {
+    throw new Error('Terminal de démonstration invalide ou désactivé.')
+  }
+
+  return terminalDevice
+}
+
+function assertTerminalTokenIfNeeded(session: RespondentSessionResponse, terminalToken?: string): void {
+  if (session.invitation.deliveryMode !== 'onsite_terminal') return
+
+  const terminalDevice = findTerminalByToken(terminalToken ?? '')
+  if (session.invitation.terminalDevice?.id !== terminalDevice.id) {
+    throw new Error('Cette session répondant doit rester sur le terminal hospitalier affecté.')
+  }
+}
+
+function getRespondentSession(token: string, terminalToken?: string): RespondentSessionResponse {
   const sessions = getRespondentSessions()
   const session = sessions[token]
 
   if (!session) {
     throw new Error('Lien répondant invalide ou expiré dans la démo.')
   }
+
+  assertTerminalTokenIfNeeded(session, terminalToken)
 
   if (session.invitation.status === 'sent') {
     session.invitation.status = 'opened'
@@ -679,6 +898,8 @@ function saveRespondentAnswers(payload: SaveAnswersRequest): SaveAnswersResponse
   if (!session || session.responseSession.status === 'locked') {
     throw new Error('Session répondant verrouillée ou introuvable.')
   }
+
+  assertTerminalTokenIfNeeded(session, payload.terminalToken)
 
   const savedAnswers: RespondentAnswer[] = []
   const warnings: Array<{ questionId: string; reason: string | null }> = []
@@ -720,7 +941,7 @@ function saveRespondentAnswers(payload: SaveAnswersRequest): SaveAnswersResponse
   return { savedAnswers, warnings }
 }
 
-function submitRespondentSession(payload: { token?: string }): SubmitResponse {
+function submitRespondentSession(payload: { token?: string; terminalToken?: string }): SubmitResponse {
   const token = payload.token ?? ''
   const sessions = getRespondentSessions()
   const session = sessions[token]
@@ -728,6 +949,8 @@ function submitRespondentSession(payload: { token?: string }): SubmitResponse {
   if (!session) {
     throw new Error('Session répondant introuvable dans la démo.')
   }
+
+  assertTerminalTokenIfNeeded(session, payload.terminalToken)
 
   const submittedAt = nowIso()
   session.responseSession.status = 'locked'
@@ -1021,16 +1244,22 @@ function createPilotQuestionnaire(): ApiQuestionnaire {
 
 function createInitialInvitations(): ApiInvitation[] {
   const mtl = buildingSeeds[0]
-  if (!mtl) return []
-  const submitted = Array.from({ length: 6 }, (_, index) => ({
+  const terminal = terminalDeviceSeeds[0]
+  if (!mtl || !terminal) return []
+
+  const submitted: ApiInvitation[] = Array.from({ length: 6 }, (_, index) => ({
     id: `demo-invitation-submitted-${index + 1}`,
     publicCode: index === 0 ? '8F4K-29QX' : `DEMO-${String(index + 1).padStart(4, '0')}`,
     status: 'submitted' as InvitationStatus,
-    maskedEmail: `r***.${index + 1}@example.org`,
+    deliveryMode: index === 5 ? 'onsite_terminal' : 'email_simulation',
+    assistanceMode: index === 5 ? 'technical_help' : 'none',
+    maskedEmail: index === 5 ? null : `r***.${index + 1}@example.org`,
     questionnaireVersionId: CHPM_VERSION_ID,
     questionnaireTitle: 'Questionnaire CHPM',
     versionLabel: '1.4',
     building: mtl,
+    terminalDevice: index === 5 ? terminal : null,
+    terminalDispatchedAt: index === 5 ? addDaysIso(-7) : null,
     expiresAt: addDaysIso(30),
     sentAt: addDaysIso(-9),
     openedAt: addDaysIso(-8),
@@ -1041,14 +1270,38 @@ function createInitialInvitations(): ApiInvitation[] {
 
   return [
     {
+      id: 'demo-invitation-terminal-mtl-open',
+      publicCode: 'TERM-0001',
+      status: 'sent',
+      deliveryMode: 'onsite_terminal',
+      assistanceMode: 'none',
+      maskedEmail: null,
+      questionnaireVersionId: ITQ_VERSION_ID,
+      questionnaireTitle: 'International Trauma Questionnaire (ITQ)',
+      versionLabel: '1.0-cn2r',
+      building: mtl,
+      terminalDevice: terminal,
+      terminalDispatchedAt: nowIso(),
+      expiresAt: addDaysIso(1),
+      sentAt: nowIso(),
+      openedAt: null,
+      startedAt: null,
+      submittedAt: null,
+      responseStatus: null,
+    },
+    {
       id: 'demo-invitation-itq-open',
       publicCode: 'ITQ-0001',
       status: 'sent',
+      deliveryMode: 'email_simulation',
+      assistanceMode: 'none',
       maskedEmail: 'i***@example.org',
       questionnaireVersionId: ITQ_VERSION_ID,
       questionnaireTitle: 'International Trauma Questionnaire (ITQ)',
       versionLabel: '1.0-cn2r',
       building: mtl,
+      terminalDevice: null,
+      terminalDispatchedAt: null,
       expiresAt: addDaysIso(30),
       sentAt: nowIso(),
       openedAt: null,
@@ -1060,11 +1313,15 @@ function createInitialInvitations(): ApiInvitation[] {
       id: 'demo-invitation-pending',
       publicCode: 'PEND-0001',
       status: 'sent',
+      deliveryMode: 'email_simulation',
+      assistanceMode: 'none',
       maskedEmail: 'p***@example.org',
       questionnaireVersionId: CHPM_VERSION_ID,
       questionnaireTitle: 'Questionnaire CHPM',
       versionLabel: '1.4',
       building: mtl,
+      terminalDevice: null,
+      terminalDispatchedAt: null,
       expiresAt: addDaysIso(30),
       sentAt: nowIso(),
       openedAt: null,
@@ -1076,11 +1333,15 @@ function createInitialInvitations(): ApiInvitation[] {
       id: 'demo-invitation-expired-draft',
       publicCode: 'EXP-0001',
       status: 'in_progress',
+      deliveryMode: 'email_simulation',
+      assistanceMode: 'none',
       maskedEmail: 'e***@example.org',
       questionnaireVersionId: CHPM_VERSION_ID,
       questionnaireTitle: 'Questionnaire CHPM',
       versionLabel: '1.4',
       building: mtl,
+      terminalDevice: null,
+      terminalDispatchedAt: null,
       expiresAt: addDaysIso(-3),
       sentAt: addDaysIso(-35),
       openedAt: addDaysIso(-34),
@@ -1120,6 +1381,7 @@ function createRespondentSession(
   building: ApiBuilding,
   publicCode: string,
   status: SubmissionStatus,
+  invitationOverride?: Partial<ApiInvitation>,
 ): RespondentSessionResponse {
   return {
     responseSession: {
@@ -1133,9 +1395,12 @@ function createRespondentSession(
     },
     invitation: {
       publicCode,
-      status: status === 'locked' ? 'submitted' : 'sent',
-      expiresAt: addDaysIso(30),
+      status: invitationOverride?.status ?? (status === 'locked' ? 'submitted' : 'sent'),
+      expiresAt: invitationOverride?.expiresAt ?? addDaysIso(30),
       building,
+      deliveryMode: invitationOverride?.deliveryMode ?? 'email_simulation',
+      assistanceMode: invitationOverride?.assistanceMode ?? 'none',
+      terminalDevice: invitationOverride?.terminalDevice ?? null,
     },
     questionnaire: {
       id: questionnaire.id,
@@ -1714,6 +1979,30 @@ function createStats(questionnaireId: string): StatsResponse['stats'] {
         effectifSufficient: true,
       },
     ],
+    deliveryModes: [
+      {
+        mode: 'email_simulation',
+        label: 'Email simulé',
+        invited: 6,
+        opened: 6,
+        started: 6,
+        submitted: 5,
+        openingRate: 86,
+        startRate: 86,
+        submissionRate: 83,
+      },
+      {
+        mode: 'onsite_terminal',
+        label: 'Terminal hospitalier',
+        invited: 2,
+        opened: 1,
+        started: 1,
+        submitted: 1,
+        openingRate: 50,
+        startRate: 50,
+        submissionRate: 50,
+      },
+    ],
     buildings: [
       {
         buildingId: 'demo-building-mtl-a',
@@ -2144,8 +2433,19 @@ function createRespondentLink(token: string): string {
   return `${window.location.origin}${normalizedBasePath}r/${encodeURIComponent(token)}`
 }
 
-function maskEmail(email: string): string {
-  const [localPart = '', domain = 'domaine.org'] = email.split('@')
+function createTerminalLink(token: string): string {
+  const basePath = import.meta.env.BASE_URL || '/'
+  const normalizedBasePath = basePath.endsWith('/') ? basePath : `${basePath}/`
+
+  if (import.meta.env.VITE_ROUTER_MODE === 'hash') {
+    return `${window.location.origin}${normalizedBasePath}#/terminal/${encodeURIComponent(token)}`
+  }
+
+  return `${window.location.origin}${normalizedBasePath}terminal/${encodeURIComponent(token)}`
+}
+
+function maskEmail(email?: string): string {
+  const [localPart = '', domain = 'domaine.org'] = (email ?? 'x@domaine.org').split('@')
   const first = localPart[0] ?? 'x'
   return `${first}***@${domain}`
 }
@@ -2170,6 +2470,12 @@ function nowIso(): string {
 function addDaysIso(days: number): string {
   const date = new Date()
   date.setDate(date.getDate() + days)
+  return date.toISOString()
+}
+
+function addMinutesIso(minutes: number): string {
+  const date = new Date()
+  date.setMinutes(date.getMinutes() + minutes)
   return date.toISOString()
 }
 

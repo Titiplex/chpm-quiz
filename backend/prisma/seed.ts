@@ -395,6 +395,8 @@ async function main() {
   })
 
   await createDemoInvitations(publishedVersion.id, moderator.id, demoBuildings)
+  const terminalSeeds = await createDemoTerminalDevices(organization.id, moderator.id, demoBuildings)
+  const terminalInvitation = await createOnsiteTerminalInvitation(itqVersion.id, moderator.id, terminalSeeds[0]!)
   const itqDemoToken = await createSeedInvitation(
     itqVersion.id,
     moderator.id,
@@ -403,7 +405,7 @@ async function main() {
     'ITQ-0001',
     'itq.demo@example.org',
   )
-  await createItqDemoInvitations(itqVersion.id, moderator.id, demoBuildings)
+  await createItqDemoInvitations(itqVersion.id, moderator.id, demoBuildings, terminalSeeds)
 
 
   await prisma.notificationSubscription.createMany({
@@ -455,6 +457,8 @@ async function main() {
   console.log('Le répondant utilise désormais un lien /r/<token> généré par la modération, pas un compte interne.')
   console.log(`Questionnaire ITQ seedé : version publiée, 20 écrans dont 18 items cotés, 1 question par page, bulles d’information activées.`)
   console.log(`Lien répondant ITQ de démonstration : /r/${itqDemoToken}`)
+  console.log(`Lien terminal hospitalier de démonstration : /terminal/${terminalSeeds[0]?.terminalToken}`)
+  console.log(`Invitation ITQ affectée au terminal : ${terminalInvitation.publicCode}`)
 }
 
 async function cleanup() {
@@ -467,6 +471,7 @@ async function cleanup() {
   await prisma.answer.deleteMany()
   await prisma.responseSession.deleteMany()
   await prisma.invitation.deleteMany()
+  await (prisma as any).terminalDevice.deleteMany()
   await prisma.notificationSubscription.deleteMany()
   await prisma.judicialAccessRequest.deleteMany()
   await prisma.session.deleteMany()
@@ -1110,6 +1115,8 @@ type DemoInvitationSeedParams = {
   submittedAt?: Date
   expiresAt?: Date
   includeAccessLink?: boolean
+  terminalDevice?: any
+  assistanceMode?: 'none' | 'technical_help' | 'full_assisted_entry'
 }
 
 async function createDemoInvitations(questionnaireVersionId: string, moderatorId: string, buildings: DemoBuildingTarget[]) {
@@ -1184,6 +1191,8 @@ async function createDemoInvitations(questionnaireVersionId: string, moderatorId
         openedAt: daysAgo(18 - globalSubmissionIndex),
         startedAt,
         submittedAt,
+        terminalDevice,
+        assistanceMode,
       })
 
       const session = await prisma.responseSession.create({
@@ -1192,6 +1201,9 @@ async function createDemoInvitations(questionnaireVersionId: string, moderatorId
           publicCode,
           questionnaireVersionId,
           buildingId: building.buildingId,
+          terminalDeviceId: terminalDevice?.id,
+          assistanceMode,
+          assistanceDeclaredAt: assistanceMode !== 'none' ? startedAt : undefined,
           status: 'locked',
           currentPage: 4,
           randomizationSeed: sha256(`${publicCode}:seed`),
@@ -1298,7 +1310,7 @@ async function createDemoInvitations(questionnaireVersionId: string, moderatorId
   }
 }
 
-async function createItqDemoInvitations(questionnaireVersionId: string, moderatorId: string, buildings: DemoBuildingTarget[]) {
+async function createItqDemoInvitations(questionnaireVersionId: string, moderatorId: string, buildings: DemoBuildingTarget[], terminalDevices: any[] = []) {
   const questions = await prisma.question.findMany({
     where: {
       group: {
@@ -1354,6 +1366,10 @@ async function createItqDemoInvitations(questionnaireVersionId: string, moderato
       const submittedAt = daysAgo(16 - globalSubmissionIndex, -9 * index)
       const startedAt = new Date(submittedAt.getTime() - (8 * 60_000 + globalSubmissionIndex * 15_000))
       const email = `itq.${campaign.buildingCode.toLowerCase().replace('-', '.')}.${index + 1}@example.org`
+      const terminalDevice = campaign.buildingCode === 'MTL-A' && index < 2
+        ? terminalDevices.find((device) => device.building?.code === campaign.buildingCode)
+        : undefined
+      const assistanceMode = terminalDevice && index === 1 ? 'technical_help' : 'none'
       const { invitation } = await createDemoInvitationRecord({
         questionnaireVersionId,
         moderatorId,
@@ -1365,6 +1381,8 @@ async function createItqDemoInvitations(questionnaireVersionId: string, moderato
         openedAt: daysAgo(23 - globalSubmissionIndex),
         startedAt,
         submittedAt,
+        terminalDevice,
+        assistanceMode,
       })
 
       const session = await prisma.responseSession.create({
@@ -1373,6 +1391,9 @@ async function createItqDemoInvitations(questionnaireVersionId: string, moderato
           publicCode,
           questionnaireVersionId,
           buildingId: building.buildingId,
+          terminalDeviceId: terminalDevice?.id,
+          assistanceMode,
+          assistanceDeclaredAt: assistanceMode !== 'none' ? startedAt : undefined,
           status: 'locked',
           currentPage: 20,
           randomizationSeed: sha256(`${publicCode}:seed`),
@@ -1478,12 +1499,83 @@ async function createItqDemoInvitations(questionnaireVersionId: string, moderato
   }
 }
 
+async function createDemoTerminalDevices(organizationId: string, moderatorId: string, buildings: DemoBuildingTarget[]) {
+  const targets = [
+    { code: 'TERM-MTL-A-ACCUEIL', label: 'Tablette accueil · Montréal A', building: requireDemoBuilding(buildings, 'MTL-A') },
+    { code: 'TERM-MTL-A-SALLE', label: 'Borne salle commune · Montréal A', building: requireDemoBuilding(buildings, 'MTL-A') },
+    { code: 'TERM-PAR-C-ACCUEIL', label: 'Tablette accueil · Paris C', building: requireDemoBuilding(buildings, 'PAR-C') },
+  ]
+
+  const devices = []
+  for (const target of targets) {
+    const terminalToken = createRespondentToken(target.code)
+    const device = await (prisma as any).terminalDevice.create({
+      data: {
+        organizationId,
+        siteId: target.building.siteId,
+        buildingId: target.building.buildingId,
+        createdByUserId: moderatorId,
+        code: target.code,
+        label: target.label,
+        accessTokenHash: sha256(terminalToken),
+        status: 'active',
+        lastSeenAt: daysAgo(0, -20),
+      },
+    })
+    devices.push({ ...device, building: target.building, terminalToken })
+  }
+
+  return devices
+}
+
+async function createOnsiteTerminalInvitation(questionnaireVersionId: string, moderatorId: string, terminal: any) {
+  const publicCode = 'TERM-ITQ-001'
+  const placeholderToken = createRespondentToken(publicCode)
+
+  return prisma.invitation.create({
+    data: {
+      questionnaireVersionId,
+      buildingId: terminal.building.buildingId,
+      siteId: terminal.building.siteId,
+      createdByUserId: moderatorId,
+      publicCode,
+      tokenHash: sha256(placeholderToken),
+      status: 'sent',
+      deliveryMode: 'onsite_terminal',
+      terminalDeviceId: terminal.id,
+      terminalDispatchedAt: new Date(),
+      assistanceMode: 'none',
+      notifyModerator: true,
+      notifyAdmins: false,
+      expiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
+      sentAt: new Date(),
+      deliveryEvents: {
+        create: {
+          publicCode,
+          eventType: 'terminal_invitation_assigned',
+          metadata: {
+            seeded: true,
+            terminalDeviceId: terminal.id,
+            terminalCode: terminal.code,
+            terminalLink: `/terminal/${terminal.terminalToken}`,
+          },
+        },
+      },
+    },
+  })
+}
+
 async function createDemoInvitationRecord(params: DemoInvitationSeedParams) {
   const token = createRespondentToken(params.publicCode)
+  const isTerminal = Boolean(params.terminalDevice)
+  const deliveryMode = isTerminal ? 'onsite_terminal' : 'email_simulation'
   const metadata: Record<string, unknown> = {
     seeded: true,
     status: params.status,
     buildingCode: params.building.code,
+    deliveryMode,
+    terminalDeviceId: params.terminalDevice?.id,
+    terminalCode: params.terminalDevice?.code,
   }
 
   if (params.includeAccessLink) {
@@ -1499,6 +1591,10 @@ async function createDemoInvitationRecord(params: DemoInvitationSeedParams) {
       publicCode: params.publicCode,
       tokenHash: sha256(token),
       status: params.status,
+      deliveryMode,
+      terminalDeviceId: params.terminalDevice?.id,
+      terminalDispatchedAt: isTerminal ? params.sentAt : undefined,
+      assistanceMode: params.assistanceMode ?? 'none',
       notifyModerator: true,
       notifyAdmins: params.status === 'submitted',
       expiresAt: params.expiresAt ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
@@ -1506,7 +1602,7 @@ async function createDemoInvitationRecord(params: DemoInvitationSeedParams) {
       openedAt: params.openedAt,
       startedAt: params.startedAt,
       submittedAt: params.submittedAt,
-      identityVaultEntry: {
+      identityVaultEntry: isTerminal ? undefined : {
         create: {
           uniqueCode: params.publicCode,
           encryptedEmail: encryptEmail(params.email),
@@ -1522,7 +1618,7 @@ async function createDemoInvitationRecord(params: DemoInvitationSeedParams) {
         create: [
           {
             publicCode: params.publicCode,
-            eventType: 'dev_link_created',
+            eventType: isTerminal ? 'terminal_invitation_assigned' : 'dev_link_created',
             metadata,
             occurredAt: params.sentAt,
           },
