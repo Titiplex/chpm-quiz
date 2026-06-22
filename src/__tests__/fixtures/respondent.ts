@@ -15,6 +15,9 @@ export function makeRespondentSession(overrides: Partial<RespondentSessionRespon
       publicCode: 'ITQ-0001',
       status: 'opened',
       expiresAt: '2026-12-31T23:59:59.000Z',
+      deliveryMode: 'email_simulation',
+      assistanceMode: 'none',
+      terminalDevice: null,
       building: {
         id: 'building-1',
         code: 'B001',
