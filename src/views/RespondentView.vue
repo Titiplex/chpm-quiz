@@ -57,6 +57,7 @@ const unansweredRequiredQuestions = computed(() =>
   respondent.questions.filter((question) => question.isRequired && !hasAnswerValue(questionValue(question))),
 )
 const missingConsent = computed(() => !respondent.isLocked && !consentAccepted.value)
+const isOnsiteTerminal = computed(() => respondent.session?.invitation.deliveryMode === 'onsite_terminal')
 const canSubmit = computed(() => !respondent.isLocked && consentAccepted.value && unansweredRequiredQuestions.value.length === 0 && respondent.status !== 'saving')
 
 watch(
@@ -474,7 +475,7 @@ async function confirmSubmit(): Promise<void> {
                   <ul class="small muted mb-3 mt-2 ps-3">
                     <li>Finalité : compréhension du questionnaire et amélioration des formulations métier.</li>
                     <li>Durée estimée : quelques minutes, avec reprise possible depuis le même lien tant que la soumission finale n’est pas faite.</li>
-                    <li>Confidentialité : les réponses sont rattachées au code public ; l’email est conservé séparément dans la base identité.</li>
+                    <li>Confidentialité : les réponses sont rattachées au code public ; {{ isOnsiteTerminal ? 'aucun email n’est collecté pour cette invitation terminal.' : 'l’email est conservé séparément dans la base identité.' }}</li>
                     <li>Droits et contact : contactez le responsable de traitement ou le DPO indiqué par l’organisation pour toute demande RGPD.</li>
                   </ul>
                   <label class="form-check d-flex gap-2 align-items-start mb-0" for="respondent-consent">
@@ -490,7 +491,16 @@ async function confirmSubmit(): Promise<void> {
                 </div>
 
                 <div v-if="respondent.isLocked" class="alert alert-success rounded-4">
-                  Soumission finale reçue et verrouillée. Une deuxième soumission est impossible.
+                  <div class="d-flex flex-wrap justify-content-between gap-3 align-items-center">
+                    <span>Soumission finale reçue et verrouillée. Une deuxième soumission est impossible.</span>
+                    <RouterLink
+                      v-if="isOnsiteTerminal && respondent.terminalToken"
+                      class="btn btn-sm btn-outline-success"
+                      :to="{ name: 'terminal', params: { terminalToken: respondent.terminalToken } }"
+                    >
+                      Retour au terminal
+                    </RouterLink>
+                  </div>
                 </div>
 
                 <div class="progress rounded-pill mb-4" role="progressbar" :aria-valuenow="respondent.progress" aria-valuemin="0" aria-valuemax="100">
@@ -722,7 +732,7 @@ async function confirmSubmit(): Promise<void> {
                     </div>
                   </div>
                   <p class="small muted mb-0 mt-3">
-                    Bâtiment : {{ respondent.session.invitation.building.label }}. Expiration : {{ new Date(respondent.session.invitation.expiresAt).toLocaleDateString() }}.
+                    Bâtiment : {{ respondent.session.invitation.building.label }}. <template v-if="isOnsiteTerminal">Terminal : {{ respondent.session.invitation.terminalDevice?.label }}. </template>Expiration : {{ new Date(respondent.session.invitation.expiresAt).toLocaleDateString() }}.
                   </p>
                 </div>
 
@@ -730,7 +740,7 @@ async function confirmSubmit(): Promise<void> {
                   <p class="section-eyebrow mb-2">Confidentialité</p>
                   <h2 class="h5 fw-bold">Pseudonymisation</h2>
                   <p class="muted mb-0">
-                    Les réponses sont rattachées au code public, pas à l’email. La correspondance email-code est isolée et inaccessible depuis cette interface.
+                    Les réponses sont rattachées au code public. {{ isOnsiteTerminal ? 'Cette passation terminal ne collecte pas d’adresse email.' : 'La correspondance email-code est isolée et inaccessible depuis cette interface.' }}
                   </p>
                 </div>
               </div>

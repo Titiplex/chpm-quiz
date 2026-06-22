@@ -64,6 +64,16 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/terminal/:terminalToken?',
+    name: 'terminal',
+    component: () => import('@/views/TerminalView.vue'),
+    meta: {
+      label: 'Terminal hospitalier',
+      allowedRoles: [...allRoles],
+      requiresAuthenticatedUser: false,
+    },
+  },
+  {
     path: '/r/:token',
     name: 'respondent-token',
     component: () => import('@/views/RespondentView.vue'),

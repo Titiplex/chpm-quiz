@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { apiRequest } from '@/services/api'
+import { TERMINAL_TOKEN_STORAGE_KEY } from '@/stores/terminal'
 import type {
   RespondentSessionResponse,
   SaveAnswersResponse,
@@ -13,6 +14,7 @@ type RespondentStatus = 'idle' | 'loading' | 'ready' | 'saving' | 'submitted' | 
 
 export const useRespondentSessionStore = defineStore('respondentSession', () => {
   const token = ref<string | null>(null)
+  const terminalToken = ref<string | null>(null)
   const session = ref<RespondentSessionResponse | null>(null)
   const status = ref<RespondentStatus>('idle')
   const error = ref<string | null>(null)
@@ -30,11 +32,13 @@ export const useRespondentSessionStore = defineStore('respondentSession', () => 
 
   async function load(rawToken: string): Promise<void> {
     token.value = rawToken
+    terminalToken.value = resolveTerminalToken()
     status.value = 'loading'
     error.value = null
 
     try {
-      session.value = await apiRequest<RespondentSessionResponse>(`/respondent/session?token=${encodeURIComponent(rawToken)}`)
+      const terminalQuery = terminalToken.value ? `&terminalToken=${encodeURIComponent(terminalToken.value)}` : ''
+      session.value = await apiRequest<RespondentSessionResponse>(`/respondent/session?token=${encodeURIComponent(rawToken)}${terminalQuery}`)
       status.value = session.value.responseSession.status === 'locked' ? 'submitted' : 'ready'
     } catch (caught) {
       session.value = null
@@ -53,6 +57,7 @@ export const useRespondentSessionStore = defineStore('respondentSession', () => 
         method: 'PUT',
         body: {
           token: token.value,
+          terminalToken: terminalToken.value ?? undefined,
           answers: [{ questionId, value }],
         },
       })
@@ -71,7 +76,7 @@ export const useRespondentSessionStore = defineStore('respondentSession', () => 
     try {
       await apiRequest('/respondent/telemetry', {
         method: 'POST',
-        body: { ...payload, token: token.value },
+        body: { ...payload, token: token.value, terminalToken: terminalToken.value ?? undefined },
       })
     } catch {
       // La télémétrie ne doit jamais casser le parcours répondant.
@@ -87,7 +92,7 @@ export const useRespondentSessionStore = defineStore('respondentSession', () => 
     try {
       const response = await apiRequest<SubmitResponse>('/respondent/submit', {
         method: 'POST',
-        body: { token: token.value },
+        body: { token: token.value, terminalToken: terminalToken.value ?? undefined },
       })
       await load(token.value)
       status.value = 'submitted'
@@ -99,8 +104,14 @@ export const useRespondentSessionStore = defineStore('respondentSession', () => 
     }
   }
 
+  function resolveTerminalToken(): string | null {
+    const params = new URLSearchParams(window.location.search)
+    return params.get('terminalToken') || window.localStorage.getItem(TERMINAL_TOKEN_STORAGE_KEY)
+  }
+
   return {
     token,
+    terminalToken,
     session,
     status,
     error,
