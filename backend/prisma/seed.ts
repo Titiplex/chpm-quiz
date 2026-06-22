@@ -1191,8 +1191,7 @@ async function createDemoInvitations(questionnaireVersionId: string, moderatorId
         openedAt: daysAgo(18 - globalSubmissionIndex),
         startedAt,
         submittedAt,
-        terminalDevice,
-        assistanceMode,
+        assistanceMode: 'none',
       })
 
       const session = await prisma.responseSession.create({
@@ -1201,9 +1200,7 @@ async function createDemoInvitations(questionnaireVersionId: string, moderatorId
           publicCode,
           questionnaireVersionId,
           buildingId: building.buildingId,
-          terminalDeviceId: terminalDevice?.id,
-          assistanceMode,
-          assistanceDeclaredAt: assistanceMode !== 'none' ? startedAt : undefined,
+          assistanceMode: 'none',
           status: 'locked',
           currentPage: 4,
           randomizationSeed: sha256(`${publicCode}:seed`),
