@@ -507,11 +507,34 @@ function seededScore(value: string): number {
   return hash >>> 0
 }
 
-function likertValues(scale?: { points: number; minValue?: number } | null): number[] {
+type LikertScaleForDisplay = {
+  points: number
+  minValue?: number
+  leftAnchor?: string | null
+  rightAnchor?: string | null
+  neutralLabel?: string | null
+}
+
+function likertValues(scale?: LikertScaleForDisplay | null): number[] {
   if (!scale) return []
 
   const minValue = scale.minValue ?? 1
   return Array.from({ length: scale.points }, (_, index) => minValue + index)
+}
+
+function likertLabel(scale: LikertScaleForDisplay, value: number): string {
+  const values = likertValues(scale)
+  const index = values.indexOf(value)
+  const lastIndex = values.length - 1
+  const neutralIndex = Math.floor(lastIndex / 2)
+
+  if (index <= 0) return scale.leftAnchor || `Valeur ${value}`
+  if (index === lastIndex) return scale.rightAnchor || `Valeur ${value}`
+  if (scale.neutralLabel && index === neutralIndex) return scale.neutralLabel
+
+  return index < neutralIndex
+    ? `Vers « ${scale.leftAnchor || 'le minimum'} »`
+    : `Vers « ${scale.rightAnchor || 'le maximum'} »`
 }
 
 function questionTypeLabel(type?: QuestionType): string {
@@ -983,9 +1006,12 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                       {{ question.likertScale.leftAnchor }} · {{ question.likertScale.rightAnchor }}
                     </p>
                     <div class="likert-scale" role="group" :aria-label="`Échelle Likert ${question.likertScale.points} points`">
-                      <button v-for="value in likertValues(question.likertScale)" :key="value" class="likert-dot border-0" type="button">
-                        {{ value }}
-                      </button>
+                      <div v-for="value in likertValues(question.likertScale)" :key="value" class="likert-choice">
+                        <span class="likert-choice-label">{{ likertLabel(question.likertScale, value) }}</span>
+                        <button class="likert-dot border-0" type="button" :aria-label="`${likertLabel(question.likertScale, value)} — valeur ${value}`">
+                          {{ value }}
+                        </button>
+                      </div>
                     </div>
                   </div>
                   <div v-else-if="question.responseType === 'single_choice' || question.responseType === 'multiple_choice'" class="d-grid gap-2 mb-3">

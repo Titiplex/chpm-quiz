@@ -285,18 +285,42 @@ body {
 
 .likert-scale {
   display: grid;
-  grid-template-columns: repeat(7, minmax(34px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(86px, 1fr));
   gap: 0.55rem;
+  align-items: end;
+}
+
+.likert-choice {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.likert-choice-label {
+  min-height: 2.35rem;
+  color: var(--demo-muted);
+  font-size: 0.74rem;
+  font-weight: 750;
+  line-height: 1.15;
+  text-align: center;
 }
 
 .likert-dot {
   display: grid;
+  width: 100%;
   min-height: 44px;
   place-items: center;
   border: 1px solid #d8deea;
   border-radius: 14px;
   background: #fff;
   color: var(--demo-muted);
+  font-weight: 800;
+}
+
+.likert-extra-button {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 14px;
   font-weight: 800;
 }
 
@@ -498,7 +522,7 @@ body {
   }
 
   .likert-scale {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
