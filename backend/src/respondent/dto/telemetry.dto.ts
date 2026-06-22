@@ -5,6 +5,10 @@ export class TelemetryDto {
   token!: string
 
   @IsOptional()
+  @IsString()
+  terminalToken?: string
+
+  @IsOptional()
   @IsUUID()
   questionId?: string
 

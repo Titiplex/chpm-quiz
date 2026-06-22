@@ -23,13 +23,13 @@ export class RespondentService {
     private readonly notificationsService: NotificationsService,
   ) {}
 
-  async getSession(token: string) {
-    const { invitation, responseSession } = await this.resolveOrCreateSession(token)
+  async getSession(token: string, terminalToken?: string) {
+    const { invitation, responseSession } = await this.resolveOrCreateSession(token, terminalToken)
     return this.toRespondentSession(invitation, responseSession)
   }
 
   async saveAnswers(dto: SaveAnswersDto) {
-    const { invitation, responseSession } = await this.resolveOrCreateSession(dto.token)
+    const { invitation, responseSession } = await this.resolveOrCreateSession(dto.token, dto.terminalToken)
     this.assertWritable(responseSession)
 
     const rendered = this.renderVersion(invitation.questionnaireVersion, responseSession)
@@ -97,7 +97,7 @@ export class RespondentService {
   }
 
   async recordTelemetry(dto: TelemetryDto) {
-    const { invitation, responseSession } = await this.resolveOrCreateSession(dto.token)
+    const { invitation, responseSession } = await this.resolveOrCreateSession(dto.token, dto.terminalToken)
     this.assertWritable(responseSession)
 
     const event = await this.prisma.$transaction(async (tx: any) => {
@@ -155,8 +155,8 @@ export class RespondentService {
     return { event }
   }
 
-  async submit(token: string) {
-    const { invitation, responseSession } = await this.resolveOrCreateSession(token)
+  async submit(token: string, terminalToken?: string) {
+    const { invitation, responseSession } = await this.resolveOrCreateSession(token, terminalToken)
     this.assertWritable(responseSession)
 
     const rendered = this.renderVersion(invitation.questionnaireVersion, responseSession)
@@ -250,13 +250,14 @@ export class RespondentService {
     return { submission }
   }
 
-  private async resolveOrCreateSession(token: string) {
+  private async resolveOrCreateSession(token: string, terminalToken?: string) {
     const tokenData = this.accessTokenService.verify(token)
 
     const invitation = await this.prisma.invitation.findUnique({
       where: { publicCode: tokenData.publicCode },
       include: {
         building: true,
+        terminalDevice: { include: { building: true } },
         responseSession: {
           include: {
             answers: true,
@@ -303,6 +304,8 @@ export class RespondentService {
       throw new ForbiddenException('Invitation expirée')
     }
 
+    const terminalDevice = await this.assertTerminalAccessIfNeeded(invitation, terminalToken)
+
     if (invitation.responseSession) {
       return { invitation, responseSession: invitation.responseSession }
     }
@@ -314,6 +317,9 @@ export class RespondentService {
           publicCode: invitation.publicCode,
           questionnaireVersionId: invitation.questionnaireVersionId,
           buildingId: invitation.buildingId,
+          terminalDeviceId: terminalDevice?.id,
+          assistanceMode: invitation.assistanceMode ?? 'none',
+          assistanceDeclaredAt: invitation.assistanceMode && invitation.assistanceMode !== 'none' ? new Date() : undefined,
           status: 'draft',
           randomizationSeed: randomBytes(16).toString('hex'),
         },
@@ -358,6 +364,9 @@ export class RespondentService {
         status: invitation.status,
         expiresAt: invitation.expiresAt,
         building: invitation.building,
+        deliveryMode: invitation.deliveryMode ?? 'email_simulation',
+        assistanceMode: invitation.assistanceMode ?? 'none',
+        terminalDevice: invitation.terminalDevice ? this.toTerminalDeviceDto(invitation.terminalDevice) : null,
       },
       questionnaire: {
         id: version.questionnaire.id,
@@ -388,6 +397,49 @@ export class RespondentService {
           })),
         })),
       },
+    }
+  }
+
+  private async assertTerminalAccessIfNeeded(invitation: any, terminalToken?: string) {
+    if (invitation.deliveryMode !== 'onsite_terminal') {
+      return null
+    }
+
+    if (!terminalToken) {
+      throw new ForbiddenException('Ce questionnaire doit être ouvert depuis le terminal hospitalier affecté')
+    }
+
+    const tokenData = this.accessTokenService.verify(terminalToken)
+    const terminalDevice = await this.prisma.terminalDevice.findUnique({
+      where: { code: tokenData.publicCode },
+      include: { building: true },
+    })
+
+    if (!terminalDevice || terminalDevice.accessTokenHash !== tokenData.tokenHash || terminalDevice.status !== 'active') {
+      throw new ForbiddenException('Terminal hospitalier invalide ou désactivé')
+    }
+
+    if (invitation.terminalDeviceId !== terminalDevice.id || invitation.buildingId !== terminalDevice.buildingId) {
+      throw new ForbiddenException('Ce terminal n’est pas autorisé pour cette invitation')
+    }
+
+    await this.prisma.terminalDevice.update({
+      where: { id: terminalDevice.id },
+      data: { lastSeenAt: new Date() },
+    })
+
+    return terminalDevice
+  }
+
+  private toTerminalDeviceDto(device: any) {
+    return {
+      id: device.id,
+      code: device.code,
+      label: device.label,
+      status: device.status,
+      building: device.building,
+      lastSeenAt: device.lastSeenAt,
+      pendingInvitationCount: device.invitations?.length ?? 0,
     }
   }
 

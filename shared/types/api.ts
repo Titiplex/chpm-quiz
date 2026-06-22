@@ -1,4 +1,4 @@
-import type { BuildingScope, InvitationStatus, LanguageCode, QuestionDefinition, QuestionType, SubmissionStatus } from './domain'
+import type { AssistanceMode, BuildingScope, InvitationDeliveryMode, InvitationStatus, LanguageCode, QuestionDefinition, QuestionType, SubmissionStatus, TerminalDeviceStatus } from './domain'
 import type { Permission, UserRole } from './rbac'
 
 export interface ApiBuilding extends BuildingScope {
@@ -196,15 +196,29 @@ export interface UpdateQuestionRequest {
   popupDefinition?: PopupDefinitionRequest | null
 }
 
+export interface ApiTerminalDevice {
+  id: string
+  code: string
+  label: string
+  status: TerminalDeviceStatus
+  building: ApiBuilding
+  lastSeenAt: string | null
+  pendingInvitationCount: number
+}
+
 export interface ApiInvitation {
   id: string
   publicCode: string
   status: InvitationStatus
+  deliveryMode: InvitationDeliveryMode
+  assistanceMode: AssistanceMode
   maskedEmail: string | null
   questionnaireVersionId: string
   questionnaireTitle: string | null
   versionLabel: string | null
   building: ApiBuilding
+  terminalDevice: ApiTerminalDevice | null
+  terminalDispatchedAt: string | null
   expiresAt: string
   sentAt: string | null
   openedAt: string | null
@@ -217,18 +231,50 @@ export interface InvitationsResponse {
   invitations: ApiInvitation[]
 }
 
+
+export interface TerminalDevicesResponse {
+  terminalDevices: ApiTerminalDevice[]
+}
+
+export interface RegisterTerminalDeviceRequest {
+  buildingId: string
+  label: string
+}
+
+export interface RegisterTerminalDeviceResponse {
+  terminalDevice: ApiTerminalDevice
+  terminalAccessToken: string
+  terminalLaunchLink: string
+}
+
+export interface TerminalSessionResponse {
+  terminalDevice: ApiTerminalDevice
+  invitations: ApiInvitation[]
+}
+
+export interface OpenTerminalInvitationResponse {
+  invitation: ApiInvitation
+  accessToken: string
+  respondentAccessLink: string
+}
+
 export interface CreateInvitationRequest {
   questionnaireVersionId: string
   buildingId: string
-  email: string
+  email?: string
+  deliveryMode?: InvitationDeliveryMode
+  terminalDeviceId?: string
+  assistanceMode?: AssistanceMode
+  expiresAt?: string
   notifyModerator?: boolean
   notifyAdmins?: boolean
 }
 
 export interface CreateInvitationResponse {
   invitation: ApiInvitation
-  accessToken: string
-  devAccessLink: string
+  accessToken: string | null
+  devAccessLink: string | null
+  terminalDispatchLink?: string | null
 }
 
 export interface RespondentAnswer {
@@ -269,6 +315,9 @@ export interface RespondentSessionResponse {
     status: InvitationStatus
     expiresAt: string
     building: ApiBuilding
+    deliveryMode: InvitationDeliveryMode
+    assistanceMode: AssistanceMode
+    terminalDevice: ApiTerminalDevice | null
   }
   questionnaire: {
     id: string
@@ -284,6 +333,7 @@ export interface RespondentSessionResponse {
 
 export interface SaveAnswersRequest {
   token: string
+  terminalToken?: string
   answers: Array<{ questionId: string; value: unknown }>
 }
 
@@ -294,6 +344,7 @@ export interface SaveAnswersResponse {
 
 export interface TelemetryRequest {
   token: string
+  terminalToken?: string
   questionId?: string
   popupDefinitionId?: string
   eventType: string
@@ -350,6 +401,17 @@ export interface StatsResponse {
       completionRate: number
       abandonmentRate: number
       effectifSufficient: boolean
+    }>
+    deliveryModes: Array<{
+      mode: InvitationDeliveryMode
+      label: string
+      invited: number
+      opened: number
+      started: number
+      submitted: number
+      openingRate: number
+      startRate: number
+      submissionRate: number
     }>
     buildings: Array<{
       buildingId: string

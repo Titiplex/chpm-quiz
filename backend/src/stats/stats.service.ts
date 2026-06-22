@@ -138,6 +138,7 @@ export class StatsService {
       },
       versions: scopedVersions.map((version: any) => this.versionStats(version)),
       buildings: this.buildingBreakdown(scopedInvitations),
+      deliveryModes: this.deliveryModeBreakdown(scopedInvitations),
       groups: this.groupBreakdown(scopedVersions, visibleSessionIds),
       questions: this.questionBreakdown(scopedVersions, visibleSessionIds, user),
       submissions: this.submissionBreakdown(scopedVersions),
@@ -309,6 +310,38 @@ export class StatsService {
         displayValue: effectifSufficient ? `${row.submitted} soumis` : 'effectif insuffisant',
       }
     })
+  }
+
+  private deliveryModeBreakdown(invitations: any[]) {
+    const labels: Record<string, string> = {
+      email: 'Email réel',
+      email_simulation: 'Email simulé',
+      onsite_terminal: 'Terminal hospitalier',
+    }
+
+    const byMode = new Map<string, { invited: number; opened: number; started: number; submitted: number }>()
+
+    for (const invitation of invitations) {
+      const mode = invitation.deliveryMode ?? 'email_simulation'
+      const row = byMode.get(mode) ?? { invited: 0, opened: 0, started: 0, submitted: 0 }
+      row.invited += 1
+      if (this.isOpened(invitation)) row.opened += 1
+      if (this.isStarted(invitation)) row.started += 1
+      if (invitation.status === 'submitted') row.submitted += 1
+      byMode.set(mode, row)
+    }
+
+    return Array.from(byMode.entries()).map(([mode, row]) => ({
+      mode,
+      label: labels[mode] ?? mode,
+      invited: row.invited,
+      opened: row.opened,
+      started: row.started,
+      submitted: row.submitted,
+      openingRate: this.percent(row.opened, row.invited),
+      startRate: this.percent(row.started, row.invited),
+      submissionRate: this.percent(row.submitted, row.invited),
+    }))
   }
 
   private groupBreakdown(versions: any[], visibleSessionIds?: Set<string>) {

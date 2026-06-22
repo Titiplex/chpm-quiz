@@ -10,8 +10,8 @@ export class RespondentController {
   constructor(private readonly respondentService: RespondentService) {}
 
   @Get('session')
-  async getSession(@Query('token') token: string) {
-    return this.respondentService.getSession(token)
+  async getSession(@Query('token') token: string, @Query('terminalToken') terminalToken?: string) {
+    return this.respondentService.getSession(token, terminalToken)
   }
 
   @Put('answers')
@@ -26,6 +26,6 @@ export class RespondentController {
 
   @Post('submit')
   async submit(@Body() dto: RespondentTokenDto) {
-    return this.respondentService.submit(dto.token)
+    return this.respondentService.submit(dto.token, dto.terminalToken)
   }
 }
