@@ -8,11 +8,13 @@ import { appConfig } from '@/config/env'
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
 import { useCatalogStore } from '@/stores/catalog'
 import { useModerationStore } from '@/stores/moderation'
+import { useSessionStore } from '@/stores/session'
 import type { ApiInvitation } from '@shared/types/api'
 import type { AssistanceMode, InvitationDeliveryMode, InvitationStatus } from '@shared/types/domain'
 
 const catalog = useCatalogStore()
 const moderation = useModerationStore()
+const session = useSessionStore()
 const copiedLink = ref<'respondent' | 'terminal' | 'registered' | null>(null)
 
 const form = reactive({
@@ -45,6 +47,7 @@ const questionnaires = computed(() =>
   catalog.publishedQuestionnaires.filter((questionnaire) => isQuestionnaireOpen(questionnaire.openFrom, questionnaire.openUntil)),
 )
 const total = computed(() => moderation.totals)
+const canAdministerTerminals = computed(() => ['admin', 'technical_admin'].includes(session.currentRole))
 const responseRate = computed(() => {
   if (total.value.sent === 0) return '0 %'
   return `${Math.round((total.value.submitted / total.value.sent) * 100)} %`
@@ -310,7 +313,7 @@ function canResend(invitation: ApiInvitation): boolean {
         </div>
       </div>
 
-      <div class="row g-4 mt-1">
+      <div v-if="canAdministerTerminals" class="row g-4 mt-1">
         <div class="col-xl-5">
           <form class="demo-card h-100" @submit.prevent="registerTerminal">
             <p class="section-eyebrow mb-2">Terminaux hospitaliers</p>
@@ -355,6 +358,9 @@ function canResend(invitation: ApiInvitation): boolean {
             </div>
           </div>
         </div>
+        <div class="col-12"><NotificationPreferencesCard /></div>
+      </div>
+      <div v-else class="row g-4 mt-1">
         <div class="col-12"><NotificationPreferencesCard /></div>
       </div>
     </div>

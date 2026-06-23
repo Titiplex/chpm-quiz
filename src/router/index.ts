@@ -95,6 +95,19 @@ const routes: RouteRecordRaw[] = [
   },
 
 
+
+  {
+    path: '/terminaux',
+    name: 'terminal-admin',
+    component: () => import('@/views/TerminalAdminView.vue'),
+    meta: {
+      label: 'Terminaux hospitaliers',
+      allowedRoles: ['admin', 'technical_admin'],
+      requiresAuthenticatedUser: true,
+    },
+  },
+
+
   {
     path: '/rgpd',
     name: 'compliance',

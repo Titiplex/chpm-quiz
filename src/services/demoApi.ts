@@ -43,12 +43,15 @@ import type {
   StatsResponse,
   SubmissionDetailsResponse,
   TerminalDevicesResponse,
+  TerminalDeviceMutationResponse,
   TerminalSessionResponse,
   SubmitResponse,
   UpdateQuestionGroupRequest,
   UpdateQuestionnaireRequest,
   TechnicalRegisterResponse,
   UpdateQuestionRequest,
+  UpdateTerminalDeviceRequest,
+  RegenerateTerminalDeviceTokenResponse,
   UpsertNotificationSubscriptionRequest,
 } from '@shared/types/api'
 
@@ -253,6 +256,30 @@ export async function demoApiRequest<T>(path: string, options: DemoRequestOption
   }
   if (questionMatch?.[1] && questionMatch[2] && method === 'DELETE') {
     return asResponse<T>(archiveQuestion(questionMatch[1], questionMatch[2]))
+  }
+
+
+  if (method === 'GET' && route === '/terminal-devices') {
+    return asResponse<T>({ terminalDevices: getTerminalDevicesWithCounts() } satisfies TerminalDevicesResponse)
+  }
+
+  if (method === 'POST' && route === '/terminal-devices') {
+    return asResponse<T>(registerTerminalDevice(options.body as RegisterTerminalDeviceRequest) satisfies RegisterTerminalDeviceResponse)
+  }
+
+  const terminalDeviceMatch = route.match(/^\/terminal-devices\/([^/]+)$/)
+  if (terminalDeviceMatch?.[1] && method === 'PATCH') {
+    return asResponse<T>(updateTerminalDevice(terminalDeviceMatch[1], options.body as UpdateTerminalDeviceRequest) satisfies TerminalDeviceMutationResponse)
+  }
+
+  const terminalDeviceRevokeMatch = route.match(/^\/terminal-devices\/([^/]+)\/revoke$/)
+  if (terminalDeviceRevokeMatch?.[1] && method === 'POST') {
+    return asResponse<T>(revokeTerminalDevice(terminalDeviceRevokeMatch[1]) satisfies TerminalDeviceMutationResponse)
+  }
+
+  const terminalDeviceRegenerateMatch = route.match(/^\/terminal-devices\/([^/]+)\/regenerate-token$/)
+  if (terminalDeviceRegenerateMatch?.[1] && method === 'POST') {
+    return asResponse<T>(regenerateTerminalToken(terminalDeviceRegenerateMatch[1]) satisfies RegenerateTerminalDeviceTokenResponse)
   }
 
   if (method === 'GET' && route === '/moderation/invitations') {
@@ -781,6 +808,54 @@ function registerTerminalDevice(payload: RegisterTerminalDeviceRequest): Registe
 
   return {
     terminalDevice,
+    terminalAccessToken: token,
+    terminalLaunchLink: createTerminalLink(token),
+  }
+}
+
+
+function updateTerminalDevice(terminalDeviceId: string, payload: UpdateTerminalDeviceRequest): { terminalDevice: ApiTerminalDevice } {
+  const devices = getTerminalDevices()
+  const index = devices.findIndex((candidate) => candidate.id === terminalDeviceId)
+  if (index < 0) throw new Error('Terminal introuvable dans la démo.')
+
+  const existing = devices[index]!
+  const updated: ApiTerminalDevice = {
+    ...existing,
+    label: payload.label?.trim() || existing.label,
+    status: payload.status ?? existing.status,
+    updatedAt: nowIso(),
+  }
+  devices[index] = updated
+  saveTerminalDevices(devices)
+  appendAuditLog('terminal_device.update', 'TerminalDevice', terminalDeviceId, null, {
+    status: payload.status,
+    label: payload.label,
+    simulation: true,
+  })
+
+  return { terminalDevice: { ...updated, pendingInvitationCount: getTerminalDevicesWithCounts().find((device) => device.id === updated.id)?.pendingInvitationCount ?? updated.pendingInvitationCount } }
+}
+
+function revokeTerminalDevice(terminalDeviceId: string): { terminalDevice: ApiTerminalDevice } {
+  return updateTerminalDevice(terminalDeviceId, { status: 'revoked' })
+}
+
+function regenerateTerminalToken(terminalDeviceId: string): RegenerateTerminalDeviceTokenResponse {
+  const devices = getTerminalDevices()
+  const device = devices.find((candidate) => candidate.id === terminalDeviceId)
+  if (!device) throw new Error('Terminal introuvable dans la démo.')
+
+  const token = `${terminalDeviceId}-token-${crypto.randomUUID()}`
+  terminalTokenSeeds[terminalDeviceId] = token
+  const response = updateTerminalDevice(terminalDeviceId, { status: device.status === 'revoked' ? 'active' : device.status })
+  appendAuditLog('terminal_device.token_regenerate', 'TerminalDevice', terminalDeviceId, null, {
+    code: device.code,
+    simulation: true,
+  })
+
+  return {
+    terminalDevice: response.terminalDevice,
     terminalAccessToken: token,
     terminalLaunchLink: createTerminalLink(token),
   }

@@ -41,6 +41,15 @@ export const navigationItems: NavigationItem[] = [
   },
 
 
+
+  {
+    label: 'Terminaux',
+    to: '/terminaux',
+    roles: ['admin', 'technical_admin'],
+    description: 'Création, suspension, révocation et régénération des liens des terminaux hospitaliers.',
+  },
+
+
   {
     label: 'RGPD',
     to: '/rgpd',
@@ -70,7 +79,7 @@ export const defaultPathByRole: Record<UserRole, string> = {
   analyst: '/stats',
   dpo: '/coffre-email',
   judicial_officer: '/coffre-email',
-  technical_admin: '/architecture',
+  technical_admin: '/terminaux',
   service_account: '/',
   respondent: '/questionnaire',
 }
