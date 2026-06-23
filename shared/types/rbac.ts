@@ -33,6 +33,7 @@ export type Permission =
   | 'notification:configure'
   | 'compliance:read'
   | 'compliance:maintain'
+  | 'terminal:administer'
 
 export interface RoleProfile {
   role: UserRole
@@ -72,6 +73,7 @@ export const roleProfiles: Record<UserRole, RoleProfile> = {
       'compliance:read',
       'compliance:maintain',
       'user:administer',
+      'terminal:administer',
     ],
   },
   moderator: {
@@ -137,7 +139,7 @@ export const roleProfiles: Record<UserRole, RoleProfile> = {
     label: 'Administrateur technique',
     shortLabel: 'Tech',
     description: 'Exploite l’infrastructure avec accès applicatif limité et tracé.',
-    permissions: ['audit:read', 'architecture:read', 'compliance:read', 'compliance:maintain'],
+    permissions: ['audit:read', 'architecture:read', 'compliance:read', 'compliance:maintain', 'terminal:administer'],
   },
   service_account: {
     role: 'service_account',

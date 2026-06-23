@@ -42,7 +42,7 @@ export class ModerationController {
   }
 
   @Post('terminal-devices')
-  @Roles('admin', 'moderator', 'site_manager', 'technical_admin')
+  @Roles('admin', 'technical_admin')
   async registerTerminalDevice(@Body() dto: RegisterTerminalDeviceDto, @CurrentUser() user: AuthenticatedUser, @Req() request: Request) {
     return this.moderationService.registerTerminalDevice(user, dto, request)
   }

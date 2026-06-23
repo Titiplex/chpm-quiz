@@ -15,6 +15,7 @@ import { RespondentModule } from './respondent/respondent.module'
 import { SecurityModule } from './security/security.module'
 import { StatsModule } from './stats/stats.module'
 import { TerminalModule } from './terminal/terminal.module'
+import { TerminalAdminModule } from './terminal-admin/terminal-admin.module'
 import { VersionsModule } from './versions/versions.module'
 
 @Module({
@@ -37,6 +38,7 @@ import { VersionsModule } from './versions/versions.module'
     RespondentModule,
     StatsModule,
     TerminalModule,
+    TerminalAdminModule,
     JudicialModule,
   ],
 })

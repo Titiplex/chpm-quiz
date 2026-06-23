@@ -204,6 +204,8 @@ export interface ApiTerminalDevice {
   building: ApiBuilding
   lastSeenAt: string | null
   pendingInvitationCount: number
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface ApiInvitation {
@@ -242,6 +244,22 @@ export interface RegisterTerminalDeviceRequest {
 }
 
 export interface RegisterTerminalDeviceResponse {
+  terminalDevice: ApiTerminalDevice
+  terminalAccessToken: string
+  terminalLaunchLink: string
+}
+
+
+export interface UpdateTerminalDeviceRequest {
+  label?: string
+  status?: TerminalDeviceStatus
+}
+
+export interface TerminalDeviceMutationResponse {
+  terminalDevice: ApiTerminalDevice
+}
+
+export interface RegenerateTerminalDeviceTokenResponse {
   terminalDevice: ApiTerminalDevice
   terminalAccessToken: string
   terminalLaunchLink: string
