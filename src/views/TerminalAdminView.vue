@@ -6,11 +6,13 @@ import PageHeader from '@/components/common/PageHeader.vue'
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
 import { appConfig } from '@/config/env'
 import { useCatalogStore } from '@/stores/catalog'
+import { useSessionStore } from '@/stores/session'
 import { useTerminalAdminStore } from '@/stores/terminalAdmin'
 import type { ApiTerminalDevice } from '@shared/types/api'
 import type { TerminalDeviceStatus } from '@shared/types/domain'
 
 const catalog = useCatalogStore()
+const session = useSessionStore()
 const terminalAdmin = useTerminalAdminStore()
 const copiedLink = ref(false)
 const editedLabels = reactive<Record<string, string>>({})
@@ -22,6 +24,7 @@ const form = reactive({
 
 const activeDevices = computed(() => terminalAdmin.terminalDevices.filter((device) => device.status === 'active'))
 const inactiveDevices = computed(() => terminalAdmin.terminalDevices.filter((device) => device.status !== 'active'))
+const canAdministerTerminals = computed(() => session.hasPermission('terminal:administer'))
 
 onMounted(async () => {
   await Promise.all([catalog.fetchCatalog(), terminalAdmin.fetchTerminalDevices()])
@@ -91,7 +94,7 @@ function formatDate(value?: string | null): string {
   <section class="demo-page">
     <div class="container-fluid px-4 px-xl-5">
       <PageHeader
-        eyebrow="Administration technique"
+        eyebrow="Terminaux par périmètre"
         title="Gérer les terminaux hospitaliers de réponse"
         :description="appConfig.demoMode ? 'La démo simule la création, la suspension, la révocation et la régénération des liens terminaux.' : 'Les terminaux sont enregistrés par bâtiment, disposent d’un jeton secret non récupérable et ne donnent accès qu’à leur file d’attente répondant.'"
         badge="Terminaux par bâtiment"
@@ -102,7 +105,7 @@ function formatDate(value?: string | null): string {
         {{ terminalAdmin.error }}
       </div>
       <div v-else class="alert alert-info rounded-4" role="status">
-        Un terminal n’est pas un compte staff. Il s’agit d’un appareil appairé à un bâtiment, utilisable uniquement pour ouvrir les questionnaires qui lui sont explicitement affectés.
+        Un terminal n’est pas un compte staff. Il s’agit d’un appareil appairé à un bâtiment, utilisable uniquement pour ouvrir les questionnaires qui lui sont explicitement affectés. Les modérateurs consultent leur inventaire ; les gestionnaires de site et administrateurs peuvent administrer les terminaux dans leur périmètre.
       </div>
 
       <div class="row g-3 mb-4">
@@ -114,7 +117,7 @@ function formatDate(value?: string | null): string {
 
       <div class="row g-4">
         <div class="col-xl-5">
-          <form class="demo-card h-100" @submit.prevent="createTerminal">
+          <form v-if="canAdministerTerminals" class="demo-card h-100" @submit.prevent="createTerminal">
             <p class="section-eyebrow mb-2">Appairage</p>
             <h2 class="h4 fw-bold mb-3">Créer un terminal hospitalier</h2>
 
@@ -149,6 +152,13 @@ function formatDate(value?: string | null): string {
               </button>
             </div>
           </form>
+          <div v-else class="demo-card h-100">
+            <p class="section-eyebrow mb-2">Consultation</p>
+            <h2 class="h4 fw-bold mb-3">Inventaire des terminaux autorisés</h2>
+            <p class="muted mb-0">
+              Ce rôle peut voir les terminaux de son périmètre et les invitations en attente, mais ne peut pas créer, suspendre, révoquer ou régénérer un lien terminal.
+            </p>
+          </div>
         </div>
 
         <div class="col-xl-7">
@@ -174,14 +184,14 @@ function formatDate(value?: string | null): string {
                   </div>
                   <label class="form-label fw-bold small" :for="`label-${device.id}`">Libellé</label>
                   <div class="input-group mb-2">
-                    <input :id="`label-${device.id}`" v-model="editedLabels[device.id]" class="form-control" />
-                    <button class="btn btn-outline-primary" type="button" @click="updateLabel(device)">Renommer</button>
+                    <input :id="`label-${device.id}`" v-model="editedLabels[device.id]" class="form-control" :readonly="!canAdministerTerminals" />
+                    <button v-if="canAdministerTerminals" class="btn btn-outline-primary" type="button" @click="updateLabel(device)">Renommer</button>
                   </div>
                   <p class="muted mb-0">
                     {{ device.building.label }} · {{ device.pendingInvitationCount }} invitation(s) en attente · dernière activité : {{ formatDate(device.lastSeenAt) }}
                   </p>
                 </div>
-                <div class="d-flex flex-column gap-2">
+                <div v-if="canAdministerTerminals" class="d-flex flex-column gap-2">
                   <button class="btn btn-sm btn-outline-secondary" type="button" @click="regenerate(device)">Régénérer le lien</button>
                   <button class="btn btn-sm btn-outline-warning" type="button" @click="updateStatus(device, 'paused')">Suspendre</button>
                   <button class="btn btn-sm btn-outline-danger" type="button" @click="revoke(device)">Révoquer</button>
@@ -215,8 +225,8 @@ function formatDate(value?: string | null): string {
                 <td>{{ device.pendingInvitationCount }}</td>
                 <td>{{ formatDate(device.lastSeenAt) }}</td>
                 <td class="text-end">
-                  <button v-if="device.status === 'paused'" class="btn btn-sm btn-outline-success me-2" type="button" @click="updateStatus(device, 'active')">Réactiver</button>
-                  <button class="btn btn-sm btn-outline-primary" type="button" @click="regenerate(device)">Nouveau lien</button>
+                  <button v-if="canAdministerTerminals && device.status === 'paused'" class="btn btn-sm btn-outline-success me-2" type="button" @click="updateStatus(device, 'active')">Réactiver</button>
+                  <button v-if="canAdministerTerminals" class="btn btn-sm btn-outline-primary" type="button" @click="regenerate(device)">Nouveau lien</button>
                 </td>
               </tr>
               <tr v-if="!inactiveDevices.length">

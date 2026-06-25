@@ -74,6 +74,7 @@ interface DemoUserSeed {
   displayName: string
   role: Exclude<UserRole, 'respondent' | 'service_account'>
   buildingId?: string
+  siteId?: string
 }
 
 type RespondentSessionMap = Record<string, RespondentSessionResponse>
@@ -163,11 +164,25 @@ const demoUsers: DemoUserSeed[] = [
     role: 'admin',
   },
   {
+    email: 'site.manager@chpm.local',
+    password: 'SiteManager123!',
+    displayName: 'Sophie Responsable de site',
+    role: 'site_manager',
+    siteId: 'demo-site-mtl',
+  },
+  {
     email: 'moderateur@chpm.local',
     password: 'Moderator123!',
     displayName: 'Marc Dubois',
     role: 'moderator',
     buildingId: 'demo-building-mtl-a',
+    siteId: 'demo-site-mtl',
+  },
+  {
+    email: 'questionnaire.admin@chpm.local',
+    password: 'Questionnaire123!',
+    displayName: 'Quentin Questionnaires',
+    role: 'questionnaire_admin',
   },
   {
     email: 'analyste@chpm.local',
@@ -283,7 +298,7 @@ export async function demoApiRequest<T>(path: string, options: DemoRequestOption
   }
 
   if (method === 'GET' && route === '/moderation/invitations') {
-    return asResponse<T>({ invitations: getInvitations() } satisfies InvitationsResponse)
+    return asResponse<T>({ invitations: getVisibleInvitations() } satisfies InvitationsResponse)
   }
 
   if (method === 'GET' && route === '/moderation/terminal-devices') {
@@ -451,6 +466,10 @@ function getVisibleBuildings(): ApiBuilding[] {
     return buildingSeeds.filter((building) => building.id === currentUser.buildingId)
   }
 
+  if (currentUser?.role === 'site_manager' && currentUser.siteId) {
+    return buildingSeeds.filter((building) => building.siteId === currentUser.siteId)
+  }
+
   return buildingSeeds
 }
 
@@ -482,6 +501,21 @@ function getInvitations(): ApiInvitation[] {
   return readStorage(INVITATIONS_STORAGE_KEY, createInitialInvitations)
 }
 
+function getVisibleInvitations(): ApiInvitation[] {
+  const currentUser = safeCurrentUser()
+  const invitations = getInvitations()
+
+  if (currentUser?.role === 'moderator' && currentUser.buildingId) {
+    return invitations.filter((invitation) => invitation.building.id === currentUser.buildingId)
+  }
+
+  if (currentUser?.role === 'site_manager' && currentUser.siteId) {
+    return invitations.filter((invitation) => invitation.building.siteId === currentUser.siteId)
+  }
+
+  return invitations
+}
+
 function saveInvitations(invitations: ApiInvitation[]): void {
   window.localStorage.setItem(INVITATIONS_STORAGE_KEY, JSON.stringify(invitations))
 }
@@ -494,9 +528,24 @@ function saveTerminalDevices(devices: ApiTerminalDevice[]): void {
   window.localStorage.setItem(TERMINAL_DEVICES_STORAGE_KEY, JSON.stringify(devices))
 }
 
+function getVisibleTerminalDevices(): ApiTerminalDevice[] {
+  const currentUser = safeCurrentUser()
+  const devices = getTerminalDevices()
+
+  if (currentUser?.role === 'moderator' && currentUser.buildingId) {
+    return devices.filter((device) => device.building.id === currentUser.buildingId)
+  }
+
+  if (currentUser?.role === 'site_manager' && currentUser.siteId) {
+    return devices.filter((device) => device.building.siteId === currentUser.siteId)
+  }
+
+  return devices
+}
+
 function getTerminalDevicesWithCounts(): ApiTerminalDevice[] {
-  const invitations = getInvitations()
-  return getTerminalDevices().map((device) => ({
+  const invitations = getVisibleInvitations()
+  return getVisibleTerminalDevices().map((device) => ({
     ...device,
     pendingInvitationCount: invitations.filter((invitation) =>
       invitation.deliveryMode === 'onsite_terminal'
@@ -700,6 +749,29 @@ function toApiQuestion(payload: CreateQuestionRequest | UpdateQuestionRequest, f
   }
 }
 
+
+function assertBuildingInCurrentUserScope(building: ApiBuilding): void {
+  const currentUser = safeCurrentUser()
+
+  if (currentUser?.role === 'moderator' && currentUser.buildingId !== building.id) {
+    throw new Error('Le bâtiment sélectionné est hors de votre périmètre de modération.')
+  }
+
+  if (currentUser?.role === 'site_manager' && currentUser.siteId !== building.siteId) {
+    throw new Error('Le bâtiment sélectionné est hors de votre site.')
+  }
+}
+
+function assertCanAdministerTerminalInDemo(building: ApiBuilding): void {
+  const currentUser = safeCurrentUser()
+
+  if (!currentUser || !['admin', 'site_manager', 'technical_admin'].includes(currentUser.role)) {
+    throw new Error('Votre rôle ne permet pas d’administrer les terminaux.')
+  }
+
+  assertBuildingInCurrentUserScope(building)
+}
+
 function createInvitation(payload: CreateInvitationRequest): CreateInvitationResponse {
   const questionnaires = getQuestionnaires()
   const questionnaire = questionnaires.find((candidate) => candidate.versionId === payload.questionnaireVersionId)
@@ -708,6 +780,8 @@ function createInvitation(payload: CreateInvitationRequest): CreateInvitationRes
   if (!questionnaire || !building) {
     throw new Error('Questionnaire ou bâtiment de démonstration introuvable.')
   }
+
+  assertBuildingInCurrentUserScope(building)
 
   const deliveryMode: InvitationDeliveryMode = payload.deliveryMode ?? 'email_simulation'
   const assistanceMode: AssistanceMode = payload.assistanceMode ?? 'none'
@@ -783,6 +857,8 @@ function registerTerminalDevice(payload: RegisterTerminalDeviceRequest): Registe
   const building = buildingSeeds.find((candidate) => candidate.id === payload.buildingId)
   if (!building) throw new Error('Bâtiment introuvable pour créer le terminal.')
 
+  assertCanAdministerTerminalInDemo(building)
+
   const devices = getTerminalDevices()
   const id = createId('terminal')
   const code = `TERM-${building.code}-${String(devices.length + 1).padStart(2, '0')}`
@@ -820,6 +896,7 @@ function updateTerminalDevice(terminalDeviceId: string, payload: UpdateTerminalD
   if (index < 0) throw new Error('Terminal introuvable dans la démo.')
 
   const existing = devices[index]!
+  assertCanAdministerTerminalInDemo(existing.building)
   const updated: ApiTerminalDevice = {
     ...existing,
     label: payload.label?.trim() || existing.label,
@@ -845,6 +922,7 @@ function regenerateTerminalToken(terminalDeviceId: string): RegenerateTerminalDe
   const devices = getTerminalDevices()
   const device = devices.find((candidate) => candidate.id === terminalDeviceId)
   if (!device) throw new Error('Terminal introuvable dans la démo.')
+  assertCanAdministerTerminalInDemo(device.building)
 
   const token = `${terminalDeviceId}-token-${crypto.randomUUID()}`
   terminalTokenSeeds[terminalDeviceId] = token
