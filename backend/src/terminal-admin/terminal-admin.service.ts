@@ -10,7 +10,7 @@ import type { CreateTerminalDeviceDto } from './dto/create-terminal-device.dto'
 import type { UpdateTerminalDeviceDto } from './dto/update-terminal-device.dto'
 
 const activeInvitationStatuses = ['sent', 'opened', 'in_progress', 'draft'] as const
-const administrativeRoles = ['admin', 'technical_admin'] as const
+const administrativeRoles = ['admin', 'site_manager', 'technical_admin'] as const
 
 @Injectable()
 export class TerminalAdminService {
@@ -39,6 +39,8 @@ export class TerminalAdminService {
     if (!building) {
       throw new NotFoundException('Bâtiment introuvable')
     }
+
+    this.assertBuildingInScope(user, building)
 
     const code = await this.generateUniqueTerminalCode()
     const { token, tokenHash } = this.accessTokenService.create(code)
@@ -138,7 +140,17 @@ export class TerminalAdminService {
 
   private assertCanAdminister(user: AuthenticatedUser): void {
     if (!administrativeRoles.includes(user.role as any)) {
-      throw new ForbiddenException('Seuls les administrateurs et administrateurs techniques peuvent administrer les terminaux')
+      throw new ForbiddenException('Seuls les administrateurs globaux, gestionnaires de site et administrateurs techniques peuvent administrer les terminaux')
+    }
+  }
+
+  private assertBuildingInScope(user: AuthenticatedUser, building: { id: string; siteId: string }): void {
+    if (user.role === 'site_manager' && building.siteId !== user.siteId) {
+      throw new ForbiddenException('Le bâtiment sélectionné est hors de votre site')
+    }
+
+    if (user.role === 'moderator' && building.id !== user.buildingId) {
+      throw new ForbiddenException('Le bâtiment sélectionné est hors de votre périmètre')
     }
   }
 

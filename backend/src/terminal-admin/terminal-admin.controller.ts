@@ -23,13 +23,13 @@ export class TerminalAdminController {
   }
 
   @Post()
-  @Roles('admin', 'technical_admin')
+  @Roles('admin', 'technical_admin', 'site_manager')
   async create(@Body() dto: CreateTerminalDeviceDto, @CurrentUser() user: AuthenticatedUser, @Req() request: Request) {
     return this.terminalAdminService.create(user, dto, request)
   }
 
   @Patch(':id')
-  @Roles('admin', 'technical_admin')
+  @Roles('admin', 'technical_admin', 'site_manager')
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateTerminalDeviceDto,
@@ -40,13 +40,13 @@ export class TerminalAdminController {
   }
 
   @Post(':id/revoke')
-  @Roles('admin', 'technical_admin')
+  @Roles('admin', 'technical_admin', 'site_manager')
   async revoke(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser, @Req() request: Request) {
     return this.terminalAdminService.revoke(user, id, request)
   }
 
   @Post(':id/regenerate-token')
-  @Roles('admin', 'technical_admin')
+  @Roles('admin', 'technical_admin', 'site_manager')
   async regenerateToken(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser, @Req() request: Request) {
     return this.terminalAdminService.regenerateToken(user, id, request)
   }
