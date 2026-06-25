@@ -27,7 +27,7 @@ Cette itération remplace la simulation locale de rôle par une vraie session se
 Comptes seedés :
 
 | Rôle           | Email                   | Mot de passe     | Accès visible                                                |
-|----------------|-------------------------|------------------|--------------------------------------------------------------|
+| -------------- | ----------------------- | ---------------- | ------------------------------------------------------------ |
 | Administrateur | `admin@chpm.local`      | `Admin123!`      | Admin, modération, questionnaire, statistiques, architecture |
 | Modérateur     | `moderateur@chpm.local` | `Moderator123!`  | Modération et questionnaire ; bâtiment Montréal A uniquement |
 | Répondant      | `repondant@chpm.local`  | `Respondent123!` | Questionnaire uniquement                                     |
@@ -103,3 +103,12 @@ npm run build:backend
 - un modérateur reçoit un `403` côté API s’il tente une route admin ;
 - les bâtiments et questionnaires affichés viennent de PostgreSQL ;
 - les erreurs API sont affichées côté front via des alertes et le store de session/catalogue.
+
+## Build GitHub Pages statique
+
+Le workflow `.github/workflows/deploy.yml` active `VITE_STATIC_PAGES_DEMO=true`. Dans ce mode, le routeur ne publie que deux écrans publics :
+
+- `/moderation` : point de vue modérateur figé, avec invitation simulée et suivi statique ;
+- `/questionnaire` : questionnaire patient autonome, sans jeton serveur, sans authentification et sans appel API.
+
+Les autres modules applicatifs restent présents dans le code pour le build connecté, mais ils sont exclus du routeur GitHub Pages. Le mode statique utilise aussi `VITE_ROUTER_MODE=hash` pour éviter les erreurs 404 au rechargement d’une URL Pages.
