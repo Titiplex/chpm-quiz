@@ -109,6 +109,6 @@ npm run build:backend
 Le workflow `.github/workflows/deploy.yml` active `VITE_STATIC_PAGES_DEMO=true`. Dans ce mode, le routeur ne publie que deux écrans publics :
 
 - `/moderation` : point de vue modérateur figé, avec invitation simulée et suivi statique ;
-- `/questionnaire` : questionnaire patient autonome, sans jeton serveur, sans authentification et sans appel API.
+- `/questionnaire` : ITQ patient autonome, sans jeton serveur, sans authentification et sans appel API.
 
-Les autres modules applicatifs restent présents dans le code pour le build connecté, mais ils sont exclus du routeur GitHub Pages. Le mode statique utilise aussi `VITE_ROUTER_MODE=hash` pour éviter les erreurs 404 au rechargement d’une URL Pages.
+Le questionnaire statique publié est l’International Trauma Questionnaire (ITQ), version `1.0-cn2r`, avec les 2 questions de contexte et les 18 items cotés en pages séparées. Les autres modules applicatifs restent présents dans le code pour le build connecté, mais ils sont exclus du routeur GitHub Pages. Le mode statique utilise aussi `VITE_ROUTER_MODE=hash` pour éviter les erreurs 404 au rechargement d’une URL Pages.
