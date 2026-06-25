@@ -107,16 +107,6 @@ function createConnectedRoutes(): RouteRecordRaw[] {
       },
     },
     {
-      path: '/terminal/:terminalToken?',
-      name: 'terminal',
-      component: () => import('@/views/TerminalView.vue'),
-      meta: {
-        label: 'Terminal hospitalier',
-        allowedRoles: [...allRoles],
-        requiresAuthenticatedUser: false,
-      },
-    },
-    {
       path: '/r/:token',
       name: 'respondent-token',
       component: () => import('@/views/RespondentView.vue'),
@@ -133,16 +123,6 @@ function createConnectedRoutes(): RouteRecordRaw[] {
       meta: {
         label: 'Statistiques',
         allowedRoles: ['admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo'],
-        requiresAuthenticatedUser: true,
-      },
-    },
-    {
-      path: '/terminaux',
-      name: 'terminal-admin',
-      component: () => import('@/views/TerminalAdminView.vue'),
-      meta: {
-        label: 'Terminaux hospitaliers',
-        allowedRoles: ['admin', 'technical_admin'],
         requiresAuthenticatedUser: true,
       },
     },
