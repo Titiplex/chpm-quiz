@@ -11,8 +11,8 @@ const emailHashPepper = process.env.EMAIL_HASH_PEPPER ?? process.env.DEV_EMAIL_H
 
 type UserRole =
   | 'admin'
-  | 'moderator'
   | 'site_manager'
+  | 'moderator'
   | 'questionnaire_admin'
   | 'analyst'
   | 'dpo'
@@ -42,6 +42,12 @@ const userSeeds: Array<{
     role: 'moderator',
     buildingCode: 'MTL-A',
     siteCode: 'MTL',
+  },
+  {
+    email: 'questionnaire.admin@chpm.local',
+    password: 'Questionnaire123!',
+    displayName: 'Quentin Questionnaires',
+    role: 'questionnaire_admin',
   },
   {
     email: 'analyste@chpm.local',
