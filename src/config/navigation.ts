@@ -45,8 +45,8 @@ export const navigationItems: NavigationItem[] = [
   {
     label: 'Terminaux',
     to: '/terminaux',
-    roles: ['admin', 'technical_admin'],
-    description: 'Création, suspension, révocation et régénération des liens des terminaux hospitaliers.',
+    roles: ['admin', 'site_manager', 'moderator', 'technical_admin'],
+    description: 'Inventaire scoped des terminaux ; administration globale ou par site selon le rôle.'
   },
 
 
@@ -74,7 +74,7 @@ export const navigationItems: NavigationItem[] = [
 export const defaultPathByRole: Record<UserRole, string> = {
   admin: '/admin',
   moderator: '/moderation',
-  site_manager: '/stats',
+  site_manager: '/moderation',
   questionnaire_admin: '/admin',
   analyst: '/stats',
   dpo: '/coffre-email',

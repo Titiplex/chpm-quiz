@@ -102,7 +102,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/TerminalAdminView.vue'),
     meta: {
       label: 'Terminaux hospitaliers',
-      allowedRoles: ['admin', 'technical_admin'],
+      allowedRoles: ['admin', 'site_manager', 'moderator', 'technical_admin'],
       requiresAuthenticatedUser: true,
     },
   },
