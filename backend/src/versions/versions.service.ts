@@ -109,6 +109,48 @@ export class VersionsService {
     return this.prisma.conditionalRule.update({ where: { id: ruleId }, data: { isActive: false } })
   }
 
+  async validatePublication(versionId: string, user: AuthenticatedUser) {
+    const version = await this.prisma.questionnaireVersion.findUnique({
+      where: { id: versionId },
+      include: {
+        questionnaire: true,
+        conditionalRules: true,
+        groups: {
+          where: { isArchived: false },
+          include: {
+            questions: {
+              where: { isArchived: false },
+              include: { likertScale: true, answerOptions: true, popupDefinitions: true },
+            },
+          },
+        },
+      },
+    })
+
+    if (!version) {
+      throw new NotFoundException('Version introuvable')
+    }
+
+    assertCanAccessVersion(user, version)
+
+    try {
+      this.assertPublishable(version)
+      return { canPublish: version.status === 'draft', errors: version.status === 'draft' ? [] : ['seule une version brouillon peut être publiée'] }
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        const response = error.getResponse()
+        const message = typeof response === 'object' && response !== null && 'message' in response
+          ? String((response as { message: unknown }).message)
+          : error.message
+        return {
+          canPublish: false,
+          errors: message.replace(/^Publication impossible : /, '').split(' ; ').filter(Boolean),
+        }
+      }
+      throw error
+    }
+  }
+
   async publish(versionId: string, user: AuthenticatedUser) {
     const version = await this.prisma.questionnaireVersion.findUnique({
       where: { id: versionId },

@@ -115,6 +115,13 @@ export class VersionsController {
     return { rule }
   }
 
+  @Get('versions/:id/publication-check')
+  @Roles('admin', 'questionnaire_admin')
+  async validatePublication(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    const report = await this.versionsService.validatePublication(id, user)
+    return { report }
+  }
+
   @Post('versions/:id/publish')
   @Roles('admin', 'questionnaire_admin')
   async publish(

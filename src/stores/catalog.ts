@@ -9,8 +9,10 @@ import type {
   CreateQuestionGroupRequest,
   CreateQuestionnaireRequest,
   CreateQuestionRequest,
+  PublicationCheckResponse,
   QuestionnaireResponse,
   QuestionnairesResponse,
+  VersionResponse,
   UpdateQuestionGroupRequest,
   UpdateQuestionnaireRequest,
   UpdateQuestionRequest,
@@ -127,6 +129,16 @@ export const useCatalogStore = defineStore('catalog', () => {
     )
   }
 
+  async function validatePublication(versionId: string): Promise<PublicationCheckResponse['report']> {
+    const response = await apiRequest<PublicationCheckResponse>(`/versions/${versionId}/publication-check`)
+    return response.report
+  }
+
+  async function publishVersion(versionId: string): Promise<void> {
+    await apiRequest<VersionResponse>(`/versions/${versionId}/publish`, { method: 'POST' })
+    await fetchCatalog()
+  }
+
   async function archiveQuestion(questionnaireId: string, questionId: string): Promise<ApiQuestionnaire> {
     return saveMutation(() =>
       apiRequest<QuestionnaireResponse>(`/questionnaires/${questionnaireId}/questions/${questionId}`, {
@@ -179,5 +191,7 @@ export const useCatalogStore = defineStore('catalog', () => {
     createQuestion,
     updateQuestion,
     archiveQuestion,
+    validatePublication,
+    publishVersion,
   }
 })

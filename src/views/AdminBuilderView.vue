@@ -17,6 +17,7 @@ const editingQuestionId = ref<string | null>(null)
 const showPreview = ref(true)
 const localMessage = ref<string | null>(null)
 const localError = ref<string | null>(null)
+const publicationReport = ref<{ canPublish: boolean; errors: string[] } | null>(null)
 const previewAnswers = reactive<Record<string, string>>({ 'Q-001': 'fr' })
 
 const createQuestionnaireForm = reactive({
@@ -241,6 +242,31 @@ async function submitQuestion(): Promise<void> {
     const createdCode = payload.code
     resetQuestionForm()
     return `Question ${createdCode} ajoutée au groupe.`
+  })
+}
+
+async function validatePublication(): Promise<void> {
+  if (!selectedQuestionnaire.value) return
+
+  await performAction(async () => {
+    publicationReport.value = await catalog.validatePublication(selectedQuestionnaire.value!.versionId)
+    return publicationReport.value.canPublish
+      ? 'Validation de publication réussie : la version brouillon peut être publiée.'
+      : `Publication bloquée : ${publicationReport.value.errors.length} anomalie(s) détectée(s).`
+  })
+}
+
+async function publishSelectedVersion(): Promise<void> {
+  if (!selectedQuestionnaire.value) return
+
+  await performAction(async () => {
+    const report = await catalog.validatePublication(selectedQuestionnaire.value!.versionId)
+    publicationReport.value = report
+    if (!report.canPublish) {
+      throw new Error(`Publication impossible : ${report.errors.join(' ; ')}`)
+    }
+    await catalog.publishVersion(selectedQuestionnaire.value!.versionId)
+    return 'Version publiée et rendue immuable. Les prochaines modifications créeront un nouveau brouillon.'
   })
 }
 
@@ -578,9 +604,25 @@ async function performAction(action: () => Promise<string>): Promise<void> {
             {{ showPreview ? 'Masquer' : 'Afficher' }} l’aperçu répondant
           </button>
           <button
+            class="btn btn-outline-secondary"
+            type="button"
+            :disabled="!selectedQuestionnaire || isSaving || selectedQuestionnaire.isPublished"
+            @click="validatePublication"
+          >
+            Valider publication
+          </button>
+          <button
+            class="btn btn-success"
+            type="button"
+            :disabled="!selectedQuestionnaire || isSaving || selectedQuestionnaire.isPublished"
+            @click="publishSelectedVersion"
+          >
+            Publier version immuable
+          </button>
+          <button
             class="btn btn-primary"
             type="button"
-            :disabled="!selectedQuestionnaire || isSaving"
+            :disabled="!selectedQuestionnaire || isSaving || selectedQuestionnaire.isPublished"
             @click="saveMetadata"
           >
             Sauvegarder le brouillon
@@ -600,6 +642,12 @@ async function performAction(action: () => Promise<string>): Promise<void> {
       </div>
       <div v-if="localMessage" class="alert alert-success rounded-4" role="status">
         {{ localMessage }}
+      </div>
+      <div v-if="publicationReport" class="alert rounded-4" :class="publicationReport.canPublish ? 'alert-success' : 'alert-warning'" role="status">
+        <strong>{{ publicationReport.canPublish ? 'Publication autorisée' : 'Publication bloquée' }}</strong>
+        <ul v-if="publicationReport.errors.length" class="mb-0 mt-2">
+          <li v-for="error in publicationReport.errors" :key="error">{{ error }}</li>
+        </ul>
       </div>
 
       <div class="row g-4 align-items-start">
