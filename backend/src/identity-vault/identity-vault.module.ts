@@ -9,5 +9,6 @@ import { IdentityVaultService } from './identity-vault.service'
   imports: [AuditModule, AuthModule],
   controllers: [IdentityVaultController],
   providers: [IdentityVaultService],
+  exports: [IdentityVaultService],
 })
 export class IdentityVaultModule {}

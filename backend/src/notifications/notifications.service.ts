@@ -5,6 +5,7 @@ import type { Request } from 'express'
 import { AuditService } from '../audit/audit.service'
 import type { AuthenticatedUser } from '../auth/auth.types'
 import { assertCanAccessBuilding, assertCanAccessQuestionnaire, canAccessBuilding } from '../common/access-scope'
+import { IdentityVaultService } from '../identity-vault/identity-vault.service'
 import { PrismaService } from '../prisma/prisma.service'
 import type { UpsertNotificationSubscriptionDto } from './dto/upsert-notification-subscription.dto'
 
@@ -46,6 +47,7 @@ export class NotificationsService implements OnModuleInit {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly identityVaultService: IdentityVaultService,
     private readonly auditService: AuditService,
     private readonly config: ConfigService,
   ) {}
@@ -211,19 +213,17 @@ export class NotificationsService implements OnModuleInit {
         },
       })
 
-      await this.prisma.emailDeliveryEvent.create({
-        data: {
-          invitationId: input.invitationId,
-          publicCode: input.publicCode,
-          eventType: daily ? 'notification_digest_queued' : 'notification_submission_simulated',
-          metadata: {
-            subscriptionId: subscription.id,
-            recipientUserId: subscription.userId,
-            channel: subscription.channel,
-            frequency: subscription.frequency,
-            submittedAt: input.submittedAt.toISOString(),
-          },
-          occurredAt: now,
+      await this.identityVaultService.recordDeliveryEvent({
+        invitationId: input.invitationId,
+        publicCode: input.publicCode,
+        eventType: daily ? 'notification_digest_queued' : 'notification_submission_simulated',
+        metadata: {
+          subscriptionId: subscription.id,
+          recipientUserId: subscription.userId,
+          channel: subscription.channel,
+          frequency: subscription.frequency,
+          submittedAt: input.submittedAt.toISOString(),
+          queuedAt: now.toISOString(),
         },
       })
 
@@ -259,13 +259,7 @@ export class NotificationsService implements OnModuleInit {
 
     for (const subscription of dueSubscriptions) {
       const since = subscription.lastDeliveredAt ?? new Date(now.getTime() - 24 * 60 * 60 * 1000)
-      const queuedEvents = await this.prisma.emailDeliveryEvent.findMany({
-        where: {
-          eventType: 'notification_digest_queued',
-          occurredAt: { gt: since, lte: now },
-        },
-        orderBy: { occurredAt: 'asc' },
-      })
+      const queuedEvents = await this.identityVaultService.listDeliveryEventsForDigest(since, now)
 
       const matchingEvents = queuedEvents.filter((event: any) => {
         const metadata = event.metadata as QueuedDigestMetadata | null

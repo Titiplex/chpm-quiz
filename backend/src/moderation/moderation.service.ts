@@ -4,8 +4,9 @@ import type { Request } from 'express'
 
 import { AuditService } from '../audit/audit.service'
 import type { AuthenticatedUser } from '../auth/auth.types'
+import { assertCanAccessBuilding, assertCanAccessVersion } from '../common/access-scope'
 import { AccessTokenService } from '../security/access-token.service'
-import { EmailCryptoService } from '../security/email-crypto.service'
+import { IdentityVaultService } from '../identity-vault/identity-vault.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { CreateInvitationDto } from './dto/create-invitation.dto'
 import { RegisterTerminalDeviceDto } from './dto/register-terminal-device.dto'
@@ -18,7 +19,7 @@ export class ModerationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly accessTokenService: AccessTokenService,
-    private readonly emailCryptoService: EmailCryptoService,
+    private readonly identityVaultService: IdentityVaultService,
     private readonly auditService: AuditService,
     private readonly config: ConfigService,
   ) {}
@@ -63,6 +64,8 @@ export class ModerationService {
     if (!building) {
       throw new NotFoundException('Bâtiment introuvable')
     }
+
+    assertCanAccessBuilding(user, building)
 
     const code = await this.generateUniqueTerminalCode()
     const { token, tokenHash } = this.accessTokenService.create(code)
@@ -119,6 +122,8 @@ export class ModerationService {
       throw new BadRequestException('Le questionnaire choisi n’est pas publié')
     }
 
+    assertCanAccessVersion(user, questionnaireVersion)
+
     if (questionnaireVersion.openUntil && questionnaireVersion.openUntil < new Date()) {
       throw new BadRequestException('La période d’ouverture du questionnaire est terminée')
     }
@@ -128,6 +133,8 @@ export class ModerationService {
     if (!building) {
       throw new NotFoundException('Bâtiment introuvable')
     }
+
+    assertCanAccessBuilding(user, building)
 
     const deliveryMode = dto.deliveryMode ?? 'email_simulation'
     const assistanceMode = dto.assistanceMode ?? 'none'
@@ -170,19 +177,19 @@ export class ModerationService {
           notifyAdmins: dto.notifyAdmins ?? false,
           expiresAt,
           sentAt: new Date(),
-          deliveryEvents: {
-            create: {
-              publicCode,
-              eventType: 'terminal_invitation_assigned',
-              metadata: {
-                terminalDeviceId: terminalDevice.id,
-                terminalCode: terminalDevice.code,
-                note: 'Invitation attribuée à un terminal hospitalier enregistré',
-              },
-            },
-          },
         },
         include: this.invitationInclude(),
+      })
+
+      await this.identityVaultService.recordDeliveryEvent({
+        invitationId: invitation.id,
+        publicCode,
+        eventType: 'terminal_invitation_assigned',
+        metadata: {
+          terminalDeviceId: terminalDevice.id,
+          terminalCode: terminalDevice.code,
+          note: 'Invitation attribuée à un terminal hospitalier enregistré',
+        },
       })
 
       await this.auditService.log({
@@ -212,26 +219,13 @@ export class ModerationService {
       throw new BadRequestException('Une adresse email est requise pour ce mode d’envoi')
     }
 
-    const normalizedEmail = this.emailCryptoService.normalize(dto.email)
-    const emailHash = this.emailCryptoService.hashEmail(normalizedEmail)
-
-    const duplicate = await this.prisma.identityVaultEntry.findFirst({
-      where: {
-        questionnaireVersionId: dto.questionnaireVersionId,
-        emailHash,
-        deletedAt: null,
-        invitation: {
-          status: { in: [...activeInvitationStatuses] },
-        },
-      },
-    })
+    const duplicate = await this.identityVaultService.hasExistingIdentityForEmail(dto.questionnaireVersionId, dto.email)
 
     if (duplicate) {
       throw new BadRequestException('Une invitation active existe déjà pour cet email et cette version')
     }
 
-    const invitation = await this.prisma.$transaction(async (tx: any) => {
-      const created = await tx.invitation.create({
+    const invitation = await this.prisma.invitation.create({
         data: {
           questionnaireVersionId: dto.questionnaireVersionId,
           buildingId: dto.buildingId,
@@ -246,40 +240,31 @@ export class ModerationService {
           notifyAdmins: dto.notifyAdmins ?? false,
           expiresAt,
           sentAt: new Date(),
-          identityVaultEntry: {
-            create: {
-              uniqueCode: publicCode,
-              encryptedEmail: this.emailCryptoService.encryptEmail(normalizedEmail),
-              emailHash,
-              questionnaireVersionId: dto.questionnaireVersionId,
-              buildingId: dto.buildingId,
-              createdByUserId: user.id,
-              lastEmailSentAt: new Date(),
-            },
-          },
-          deliveryEvents: {
-            create: {
-              publicCode,
-              eventType: deliveryMode === 'email' ? 'email_queued' : 'dev_link_created',
-              metadata: { note: deliveryMode === 'email' ? 'Email prêt à être envoyé' : 'Envoi email simulé en développement' },
-            },
-          },
         },
-        include: this.invitationInclude(),
-      })
-
-      await tx.identityVaultAuditLog.create({
-        data: {
-          actorUserId: user.id,
-          action: 'email_identity.create',
-          publicCode,
-          ipAddress: request.ip,
-          metadata: { questionnaireVersionId: dto.questionnaireVersionId, buildingId: dto.buildingId },
-        },
-      })
-
-      return created
+      include: this.invitationInclude(),
     })
+
+    try {
+      await this.identityVaultService.createEmailIdentity({
+        invitationId: invitation.id,
+        publicCode,
+        email: dto.email,
+        questionnaireVersionId: dto.questionnaireVersionId,
+        buildingId: dto.buildingId,
+        createdByUserId: user.id,
+        request,
+      })
+
+      await this.identityVaultService.recordDeliveryEvent({
+        invitationId: invitation.id,
+        publicCode,
+        eventType: deliveryMode === 'email' ? 'email_queued' : 'dev_link_created',
+        metadata: { note: deliveryMode === 'email' ? 'Email prêt à être envoyé' : 'Envoi email simulé en développement' },
+      })
+    } catch (error) {
+      await this.prisma.invitation.delete({ where: { id: invitation.id } }).catch(() => undefined)
+      throw error
+    }
 
     await this.auditService.log({
       actor: user,
@@ -299,8 +284,8 @@ export class ModerationService {
 
     return {
       invitation: this.toInvitationDto(invitation),
-      accessToken: token,
-      devAccessLink: this.respondentLink(token),
+      accessToken: this.canExposeRespondentToken() ? token : null,
+      devAccessLink: this.canExposeRespondentToken() ? this.respondentLink(token) : null,
       terminalDispatchLink: null,
     }
   }
@@ -329,18 +314,18 @@ export class ModerationService {
         status: 'sent',
         sentAt: new Date(),
         terminalDispatchedAt: isTerminal ? new Date() : invitation.terminalDispatchedAt,
-        deliveryEvents: {
-          create: {
-            publicCode: invitation.publicCode,
-            eventType: isTerminal ? 'terminal_invitation_redispatched' : 'dev_resend_created',
-            metadata: {
-              note: isTerminal ? 'Invitation réattribuée au terminal hospitalier' : 'Relance email simulée en développement',
-              terminalDeviceId: invitation.terminalDeviceId ?? undefined,
-            },
-          },
-        },
       },
       include: this.invitationInclude(),
+    })
+
+    await this.identityVaultService.recordDeliveryEvent({
+      invitationId: invitation.id,
+      publicCode: invitation.publicCode,
+      eventType: isTerminal ? 'terminal_invitation_redispatched' : 'dev_resend_created',
+      metadata: {
+        note: isTerminal ? 'Invitation réattribuée au terminal hospitalier' : 'Relance email simulée en développement',
+        terminalDeviceId: invitation.terminalDeviceId ?? undefined,
+      },
     })
 
     await this.auditService.log({
@@ -394,7 +379,6 @@ export class ModerationService {
   private invitationInclude() {
     return {
       building: true,
-      identityVaultEntry: true,
       terminalDevice: { include: { building: true } },
       responseSession: {
         include: {
@@ -412,7 +396,7 @@ export class ModerationService {
       status: invitation.status,
       deliveryMode: invitation.deliveryMode ?? 'email_simulation',
       assistanceMode: invitation.assistanceMode ?? 'none',
-      maskedEmail: invitation.identityVaultEntry ? this.emailCryptoService.maskEncryptedEmail(invitation.identityVaultEntry.encryptedEmail) : null,
+      maskedEmail: null,
       questionnaireVersionId: invitation.questionnaireVersionId,
       questionnaireTitle: invitation.questionnaireVersion?.questionnaire?.title ?? null,
       versionLabel: invitation.questionnaireVersion?.versionLabel ?? null,
@@ -438,6 +422,14 @@ export class ModerationService {
       lastSeenAt: device.lastSeenAt,
       pendingInvitationCount: device.invitations?.length ?? 0,
     }
+  }
+
+  private canExposeRespondentToken(): boolean {
+    if (this.config.get<string>('NODE_ENV') === 'production') {
+      return false
+    }
+
+    return this.config.get<string>('EXPOSE_RESPONDENT_DEV_LINKS', 'true') === 'true'
   }
 
   private respondentLink(token: string): string {

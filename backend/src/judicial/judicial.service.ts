@@ -6,8 +6,8 @@ import type { Request } from 'express'
 
 import { AuditService } from '../audit/audit.service'
 import type { AuthenticatedUser } from '../auth/auth.types'
+import { IdentityVaultService } from '../identity-vault/identity-vault.service'
 import { PrismaService } from '../prisma/prisma.service'
-import { EmailCryptoService } from '../security/email-crypto.service'
 import type { CreateJudicialRequestDto } from './dto/create-judicial-request.dto'
 import type { JudicialWorkflowCommentDto, RejectJudicialRequestDto } from './dto/judicial-workflow.dto'
 
@@ -16,7 +16,7 @@ export class JudicialService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
-    private readonly emailCryptoService: EmailCryptoService,
+    private readonly identityVaultService: IdentityVaultService,
     private readonly config: ConfigService,
   ) {}
 
@@ -38,34 +38,28 @@ export class JudicialService {
 
     const requestedPublicCodes = this.normalizePublicCodes(dto.requestedPublicCodes)
 
-    const created = await this.prisma.$transaction(async (tx: any) => {
-      const judicialRequest = await tx.judicialAccessRequest.create({
-        data: {
-          requestReference: dto.requestReference,
-          legalBasisDescription: dto.legalBasisDescription,
-          courtOrderReference: dto.courtOrderReference,
-          requestedPublicCodes,
-          requestedBy: dto.requestedBy,
-          comments: dto.comments,
-          status: 'received',
-          dpoValidationUserId: user.role === 'dpo' ? user.id : undefined,
-        },
-      })
+    const created = await this.prisma.judicialAccessRequest.create({
+      data: {
+        requestReference: dto.requestReference,
+        legalBasisDescription: dto.legalBasisDescription,
+        courtOrderReference: dto.courtOrderReference,
+        requestedPublicCodes,
+        requestedBy: dto.requestedBy,
+        comments: dto.comments,
+        status: 'received',
+        dpoValidationUserId: user.role === 'dpo' ? user.id : undefined,
+      },
+    })
 
-      await tx.identityVaultAuditLog.create({
-        data: {
-          actorUserId: user.id,
-          action: 'judicial_access.request_create',
-          requestId: judicialRequest.id,
-          ipAddress: request.ip,
-          metadata: {
-            requestReference: dto.requestReference,
-            requestedPublicCodeCount: requestedPublicCodes.length,
-          },
-        },
-      })
-
-      return judicialRequest
+    await this.identityVaultService.recordVaultAudit({
+      actorUserId: user.id,
+      action: 'judicial_access.request_create',
+      requestId: created.id,
+      ipAddress: request.ip,
+      metadata: {
+        requestReference: dto.requestReference,
+        requestedPublicCodeCount: requestedPublicCodes.length,
+      },
     })
 
     await this.auditService.log({
@@ -106,26 +100,20 @@ export class JudicialService {
       throw new BadRequestException('Une demande exécutée ou clôturée ne peut plus être rejetée')
     }
 
-    const updated = await this.prisma.$transaction(async (tx: any) => {
-      const record = await tx.judicialAccessRequest.update({
-        where: { id },
-        data: {
-          status: 'rejected',
-          comments: this.appendComment(judicialRequest.comments, user, dto.reason || dto.comments || 'Rejet sans motif détaillé'),
-        },
-      })
+    const updated = await this.prisma.judicialAccessRequest.update({
+      where: { id },
+      data: {
+        status: 'rejected',
+        comments: this.appendComment(judicialRequest.comments, user, dto.reason || dto.comments || 'Rejet sans motif détaillé'),
+      },
+    })
 
-      await tx.identityVaultAuditLog.create({
-        data: {
-          actorUserId: user.id,
-          action: 'judicial_access.reject',
-          requestId: id,
-          ipAddress: request.ip,
-          metadata: { reason: dto.reason },
-        },
-      })
-
-      return record
+    await this.identityVaultService.recordVaultAudit({
+      actorUserId: user.id,
+      action: 'judicial_access.reject',
+      requestId: id,
+      ipAddress: request.ip,
+      metadata: { reason: dto.reason },
     })
 
     await this.auditService.log({
@@ -155,20 +143,7 @@ export class JudicialService {
       throw new BadRequestException('Double validation incomplète : DPO et juridique sont obligatoires')
     }
 
-    const identityVaultEntries = await this.prisma.identityVaultEntry.findMany({
-      where: {
-        uniqueCode: { in: judicialRequest.requestedPublicCodes },
-        deletedAt: null,
-      },
-      orderBy: { uniqueCode: 'asc' },
-    })
-
-    const rows = identityVaultEntries.map((identity: any) => ({
-      publicCode: identity.uniqueCode,
-      email: this.emailCryptoService.decryptEmail(identity.encryptedEmail),
-      questionnaireVersionId: identity.questionnaireVersionId,
-      buildingId: identity.buildingId,
-    }))
+    const rows = await this.identityVaultService.loadJudicialIdentityRows(judicialRequest.requestedPublicCodes)
 
     const exportPayload = {
       requestReference: judicialRequest.requestReference,
@@ -179,34 +154,28 @@ export class JudicialService {
     const encryptedExport = this.encryptExport(exportPayload)
     const exportFingerprint = createHash('sha256').update(encryptedExport.ciphertext).digest('hex')
 
-    const updated = await this.prisma.$transaction(async (tx: any) => {
-      const record = await tx.judicialAccessRequest.update({
-        where: { id },
-        data: {
-          status: 'executed',
-          executedAt: new Date(),
-          executedByUserId: user.id,
-          exportFingerprint,
-          comments: this.appendComment(judicialRequest.comments, user, `Export minimal chiffré exécuté (${rows.length} ligne(s)).`),
-        },
-      })
+    const updated = await this.prisma.judicialAccessRequest.update({
+      where: { id },
+      data: {
+        status: 'executed',
+        executedAt: new Date(),
+        executedByUserId: user.id,
+        exportFingerprint,
+        comments: this.appendComment(judicialRequest.comments, user, `Export minimal chiffré exécuté (${rows.length} ligne(s)).`),
+      },
+    })
 
-      await tx.identityVaultAuditLog.create({
-        data: {
-          actorUserId: user.id,
-          action: 'judicial_access.execute',
-          requestId: id,
-          ipAddress: request.ip,
-          metadata: {
-            requestReference: judicialRequest.requestReference,
-            requestedPublicCodeCount: judicialRequest.requestedPublicCodes.length,
-            exportedRowCount: rows.length,
-            exportFingerprint,
-          },
-        },
-      })
-
-      return record
+    await this.identityVaultService.recordVaultAudit({
+      actorUserId: user.id,
+      action: 'judicial_access.execute',
+      requestId: id,
+      ipAddress: request.ip,
+      metadata: {
+        requestReference: judicialRequest.requestReference,
+        requestedPublicCodeCount: judicialRequest.requestedPublicCodes.length,
+        exportedRowCount: rows.length,
+        exportFingerprint,
+      },
     })
 
     await this.auditService.log({
@@ -241,26 +210,20 @@ export class JudicialService {
       throw new BadRequestException('Seule une demande exécutée peut être clôturée')
     }
 
-    const updated = await this.prisma.$transaction(async (tx: any) => {
-      const record = await tx.judicialAccessRequest.update({
-        where: { id },
-        data: {
-          status: 'closed',
-          comments: this.appendComment(judicialRequest.comments, user, dto.comments || 'Clôture de la procédure.'),
-        },
-      })
+    const updated = await this.prisma.judicialAccessRequest.update({
+      where: { id },
+      data: {
+        status: 'closed',
+        comments: this.appendComment(judicialRequest.comments, user, dto.comments || 'Clôture de la procédure.'),
+      },
+    })
 
-      await tx.identityVaultAuditLog.create({
-        data: {
-          actorUserId: user.id,
-          action: 'judicial_access.close',
-          requestId: id,
-          ipAddress: request.ip,
-          metadata: { requestReference: judicialRequest.requestReference },
-        },
-      })
-
-      return record
+    await this.identityVaultService.recordVaultAudit({
+      actorUserId: user.id,
+      action: 'judicial_access.close',
+      requestId: id,
+      ipAddress: request.ip,
+      metadata: { requestReference: judicialRequest.requestReference },
     })
 
     await this.auditService.log({
@@ -296,27 +259,21 @@ export class JudicialService {
     const nextLegalId = validationType === 'legal' ? user.id : judicialRequest.legalValidationUserId
     const nextStatus = nextDpoId && nextLegalId ? 'validated' : judicialRequest.status
 
-    const updated = await this.prisma.$transaction(async (tx: any) => {
-      const record = await tx.judicialAccessRequest.update({
-        where: { id },
-        data: {
-          ...data,
-          status: nextStatus,
-          comments: this.appendComment(judicialRequest.comments, user, dto.comments || `Validation ${validationType}.`),
-        },
-      })
+    const updated = await this.prisma.judicialAccessRequest.update({
+      where: { id },
+      data: {
+        ...data,
+        status: nextStatus,
+        comments: this.appendComment(judicialRequest.comments, user, dto.comments || `Validation ${validationType}.`),
+      },
+    })
 
-      await tx.identityVaultAuditLog.create({
-        data: {
-          actorUserId: user.id,
-          action: `judicial_access.validate_${validationType}`,
-          requestId: id,
-          ipAddress: request.ip,
-          metadata: { requestReference: judicialRequest.requestReference },
-        },
-      })
-
-      return record
+    await this.identityVaultService.recordVaultAudit({
+      actorUserId: user.id,
+      action: `judicial_access.validate_${validationType}`,
+      requestId: id,
+      ipAddress: request.ip,
+      metadata: { requestReference: judicialRequest.requestReference },
     })
 
     await this.auditService.log({
