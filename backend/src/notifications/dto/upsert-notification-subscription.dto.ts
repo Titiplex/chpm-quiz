@@ -9,8 +9,8 @@ const notificationEvents = [
   'judicial_access_executed',
 ] as const
 
-const notificationChannels = ['email', 'internal'] as const
-const notificationFrequencies = ['immediate', 'daily'] as const
+const notificationChannels = ['email', 'internal', 'simulation'] as const
+const notificationFrequencies = ['none', 'immediate', 'daily'] as const
 
 export class UpsertNotificationSubscriptionDto {
   @IsIn(notificationEvents)

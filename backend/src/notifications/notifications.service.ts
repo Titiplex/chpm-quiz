@@ -6,6 +6,7 @@ import { AuditService } from '../audit/audit.service'
 import type { AuthenticatedUser } from '../auth/auth.types'
 import { assertCanAccessBuilding, assertCanAccessQuestionnaire, canAccessBuilding } from '../common/access-scope'
 import { IdentityVaultService } from '../identity-vault/identity-vault.service'
+import { MailQueueService } from '../mail/mail-queue.service'
 import { PrismaService } from '../prisma/prisma.service'
 import type { UpsertNotificationSubscriptionDto } from './dto/upsert-notification-subscription.dto'
 
@@ -48,6 +49,7 @@ export class NotificationsService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly identityVaultService: IdentityVaultService,
+    private readonly mailQueue: MailQueueService,
     private readonly auditService: AuditService,
     private readonly config: ConfigService,
   ) {}
@@ -98,10 +100,11 @@ export class NotificationsService implements OnModuleInit {
       },
     })
 
+    const frequency = normalizedDto.frequency ?? 'immediate'
     const data = {
       channel: normalizedDto.channel ?? 'email',
-      isEnabled: normalizedDto.isEnabled ?? true,
-      frequency: normalizedDto.frequency ?? 'immediate',
+      isEnabled: frequency === 'none' ? false : (normalizedDto.isEnabled ?? true),
+      frequency,
       digestHour: normalizedDto.digestHour ?? 8,
     }
 
@@ -191,7 +194,28 @@ export class NotificationsService implements OnModuleInit {
       }
 
       const daily = subscription.frequency === 'daily'
-      const auditAction = daily ? 'notification.digest_queued' : 'notification.submission_sent'
+      const emailChannel = subscription.channel === 'email' || subscription.channel === 'simulation'
+      const auditAction = daily ? 'notification.digest_queued' : 'notification.submission_queued'
+      const emailJobId = !daily && emailChannel
+        ? this.mailQueue.enqueue({
+            template: 'submission_notification',
+            to: { email: subscription.user.email, name: subscription.user.displayName },
+            subject: 'Nouvelle soumission questionnaire CHPM',
+            text: [
+              'Bonjour,',
+              'Une nouvelle soumission pseudonymisée a été reçue.',
+              `Code opérationnel : ${input.publicCode}.`,
+              `Nombre de réponses : ${input.answerCount}.`,
+              'Aucun email répondant n’est inclus dans cette notification.',
+            ].join('\n'),
+            metadata: {
+              subscriptionId: subscription.id,
+              recipientUserId: subscription.userId,
+              publicCode: input.publicCode,
+              submissionId: input.submissionId,
+            },
+          })
+        : null
 
       await this.prisma.auditLog.create({
         data: {
@@ -206,7 +230,8 @@ export class NotificationsService implements OnModuleInit {
             recipientRole: subscription.user.role,
             submissionId: input.submissionId,
             answerCount: input.answerCount,
-            simulated: true,
+            queuedEmail: Boolean(emailJobId),
+            jobId: emailJobId,
             digestHour: subscription.digestHour,
           },
           occurredAt: now,
@@ -216,7 +241,7 @@ export class NotificationsService implements OnModuleInit {
       await this.identityVaultService.recordDeliveryEvent({
         invitationId: input.invitationId,
         publicCode: input.publicCode,
-        eventType: daily ? 'notification_digest_queued' : 'notification_submission_simulated',
+        eventType: daily ? 'notification_digest_queued' : 'notification_submission_queued',
         metadata: {
           subscriptionId: subscription.id,
           recipientUserId: subscription.userId,
@@ -224,6 +249,7 @@ export class NotificationsService implements OnModuleInit {
           frequency: subscription.frequency,
           submittedAt: input.submittedAt.toISOString(),
           queuedAt: now.toISOString(),
+          jobId: emailJobId ?? undefined,
         },
       })
 
@@ -286,6 +312,26 @@ export class NotificationsService implements OnModuleInit {
         continue
       }
 
+      const emailJobId = subscription.channel === 'email' || subscription.channel === 'simulation'
+        ? this.mailQueue.enqueue({
+            template: 'daily_digest',
+            to: { email: subscription.user.email, name: subscription.user.displayName },
+            subject: 'Résumé quotidien CHPM — soumissions questionnaires',
+            text: [
+              'Bonjour,',
+              `${matchingEvents.length} événement(s) questionnaire nécessitent votre attention.`,
+              `Codes pseudonymisés : ${publicCodes.join(', ')}.`,
+              'Aucun email répondant n’est inclus dans ce résumé.',
+            ].join('\n'),
+            metadata: {
+              subscriptionId: subscription.id,
+              recipientUserId: subscription.userId,
+              queuedEventCount: matchingEvents.length,
+              publicCodes: publicCodes.join(','),
+            },
+          })
+        : null
+
       await this.prisma.auditLog.create({
         data: {
           actorUserId: subscription.userId,
@@ -296,7 +342,8 @@ export class NotificationsService implements OnModuleInit {
             channel: subscription.channel,
             frequency: subscription.frequency,
             recipientRole: subscription.user.role,
-            simulated: true,
+            queuedEmail: Boolean(emailJobId),
+            jobId: emailJobId,
             queuedEventCount: matchingEvents.length,
             publicCodes,
             deliveredAt: now.toISOString(),
@@ -320,6 +367,41 @@ export class NotificationsService implements OnModuleInit {
     }
   }
 
+
+  async notifySubmissionConfirmation(input: SubmissionNotificationInput): Promise<void> {
+    const identity = await this.identityVaultService.loadOutboundEmailForInvitation(input.invitationId)
+    if (!identity) {
+      return
+    }
+
+    const jobId = this.mailQueue.enqueue({
+      template: 'submission_confirmation',
+      to: { email: identity.email },
+      subject: 'Confirmation de réception de votre questionnaire',
+      text: [
+        'Bonjour,',
+        'Votre questionnaire a bien été soumis et verrouillé.',
+        `Code opérationnel : ${input.publicCode}.`,
+        'Vous ne pouvez plus modifier vos réponses après cette confirmation.',
+        'Les traitements statistiques utilisent ce code pseudonymisé, pas votre adresse email.',
+      ].join('\n'),
+      invitationId: input.invitationId,
+      publicCode: input.publicCode,
+      metadata: {
+        submissionId: input.submissionId,
+        questionnaireVersionId: input.questionnaireVersionId,
+        submittedAt: input.submittedAt.toISOString(),
+      },
+    })
+
+    await this.identityVaultService.recordDeliveryEvent({
+      invitationId: input.invitationId,
+      publicCode: input.publicCode,
+      eventType: 'submission_confirmation_queued',
+      metadata: { jobId },
+    })
+  }
+
   private async normalizeAndAssertScope(user: AuthenticatedUser, dto: UpsertNotificationSubscriptionDto): Promise<UpsertNotificationSubscriptionDto> {
     const allowedRoles = notificationEventPolicy[dto.eventType] ?? []
     if (!allowedRoles.includes(user.role)) {
@@ -327,6 +409,10 @@ export class NotificationsService implements OnModuleInit {
     }
 
     const normalized: UpsertNotificationSubscriptionDto = { ...dto }
+
+    if (normalized.channel === 'simulation' && this.config.get<string>('NODE_ENV') === 'production') {
+      throw new ForbiddenException('Le canal simulation est interdit en production')
+    }
 
     if (user.role === 'moderator') {
       if (!user.buildingId) {

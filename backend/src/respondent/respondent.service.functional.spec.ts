@@ -130,10 +130,11 @@ function makeService(invitation: any) {
   }
   const notifications = {
     notifySubmissionReceived: vi.fn(async () => undefined),
+    notifySubmissionConfirmation: vi.fn(async () => undefined),
   }
 
   return {
-    service: new RespondentService(prisma as any, accessToken as any, audit as any, notifications as any),
+    service: new RespondentService(prisma as any, accessToken as any, audit as any, notifications as any, { get: vi.fn((_: string, fallback?: string) => fallback) } as any),
     prisma,
     tx,
     audit,

@@ -196,6 +196,23 @@ export interface UpdateQuestionRequest {
   popupDefinition?: PopupDefinitionRequest | null
 }
 
+export interface PublicationCheckResponse {
+  report: {
+    canPublish: boolean
+    errors: string[]
+  }
+}
+
+export interface VersionResponse {
+  version: {
+    id: string
+    versionLabel: string
+    status: string
+    publishedAt?: string | null
+    immutableAt?: string | null
+  }
+}
+
 export interface ApiTerminalDevice {
   id: string
   code: string
@@ -328,6 +345,13 @@ export interface RespondentSessionResponse {
     submittedAt: string | null
     lockedAt: string | null
   }
+  legalNotice?: {
+    finality: string
+    estimatedDurationMinutes: number
+    rights: string
+    dpoContact: string
+    pseudonymizationStatus: string
+  }
   invitation: {
     publicCode: string
     status: InvitationStatus
@@ -443,6 +467,39 @@ export interface StatsResponse {
       startRate: number | null
       submissionRate: number | null
       completionRate: number | null
+      displayValue: string
+    }>
+    sites?: Array<{
+      siteId: string
+      label: string
+      invited: number
+      opened: number
+      started: number
+      submitted: number
+      openingRate: number
+      startRate: number
+      submissionRate: number
+    }>
+    languages?: Array<{
+      language: string
+      versionCount: number
+      invited: number
+      submitted: number
+      submissionRate: number
+    }>
+    popups?: Array<{
+      id: string
+      termKey: string
+      title: string
+      questionId: string
+      questionCode: string
+      groupId: string
+      groupTitle: string
+      versionId: string
+      versionLabel: string
+      openedCount: number | null
+      respondentCount: number | null
+      effectifSufficient: boolean
       displayValue: string
     }>
     groups: Array<{
@@ -581,8 +638,8 @@ export interface JudicialAccessRequestResponse {
 
 
 
-export type NotificationFrequency = 'immediate' | 'daily'
-export type NotificationChannel = 'email' | 'internal'
+export type NotificationFrequency = 'none' | 'immediate' | 'daily'
+export type NotificationChannel = 'email' | 'internal' | 'simulation'
 export type NotificationEventType =
   | 'submission_received'
   | 'difficult_question'

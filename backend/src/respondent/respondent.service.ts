@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 
 import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 
 import { AuditService } from '../audit/audit.service'
 import { NotificationsService } from '../notifications/notifications.service'
@@ -21,6 +22,7 @@ export class RespondentService {
     private readonly accessTokenService: AccessTokenService,
     private readonly auditService: AuditService,
     private readonly notificationsService: NotificationsService,
+    private readonly config: ConfigService,
   ) {}
 
   async getSession(token: string, terminalToken?: string) {
@@ -237,7 +239,7 @@ export class RespondentService {
       metadata: { answerCount, pathFingerprint },
     })
 
-    await this.notificationsService.notifySubmissionReceived({
+    const notificationInput = {
       submissionId: submission.id,
       invitationId: invitation.id,
       publicCode: responseSession.publicCode,
@@ -245,7 +247,10 @@ export class RespondentService {
       buildingId: responseSession.buildingId,
       answerCount,
       submittedAt,
-    })
+    }
+
+    await this.notificationsService.notifySubmissionReceived(notificationInput)
+    await this.notificationsService.notifySubmissionConfirmation(notificationInput)
 
     return { submission }
   }
@@ -368,6 +373,13 @@ export class RespondentService {
         assistanceMode: invitation.assistanceMode ?? 'none',
         terminalDevice: invitation.terminalDevice ? this.toTerminalDeviceDto(invitation.terminalDevice) : null,
       },
+      legalNotice: {
+        finality: version.finality ?? version.questionnaire.finality ?? 'Recueillir des réponses pseudonymisées pour améliorer le service.',
+        estimatedDurationMinutes: this.estimatedDurationMinutes(rendered.pathQuestionIds.length),
+        rights: 'Vous pouvez exercer vos droits auprès du DPO. Les réponses statistiques restent pseudonymisées et séparées de votre email.',
+        dpoContact: this.config.get<string>('DPO_CONTACT', 'dpo@chpm.local'),
+        pseudonymizationStatus: 'Email conservé dans le coffre identité séparé ; questionnaire exploité via code public pseudonymisé.',
+      },
       questionnaire: {
         id: version.questionnaire.id,
         versionId: version.id,
@@ -398,6 +410,10 @@ export class RespondentService {
         })),
       },
     }
+  }
+
+  private estimatedDurationMinutes(questionCount: number): number {
+    return Math.max(3, Math.ceil(questionCount * 0.75))
   }
 
   private async assertTerminalAccessIfNeeded(invitation: any, terminalToken?: string) {
