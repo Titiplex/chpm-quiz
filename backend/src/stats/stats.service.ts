@@ -25,7 +25,7 @@ export class StatsService {
           include: {
             submissions: {
               include: {
-                building: true,
+                building: { include: { site: true } },
                 responseSession: {
                   include: {
                     telemetryEvents: true,
@@ -35,7 +35,7 @@ export class StatsService {
             },
             invitations: {
               include: {
-                building: true,
+                building: { include: { site: true } },
                 responseSession: {
                   include: {
                     telemetryEvents: true,
@@ -138,8 +138,11 @@ export class StatsService {
       },
       versions: scopedVersions.map((version: any) => this.versionStats(version)),
       buildings: this.buildingBreakdown(scopedInvitations),
+      sites: this.siteBreakdown(scopedInvitations),
+      languages: this.languageBreakdown(scopedVersions),
       deliveryModes: this.deliveryModeBreakdown(scopedInvitations),
       groups: this.groupBreakdown(scopedVersions, visibleSessionIds),
+      popups: this.popupBreakdown(scopedVersions, visibleSessionIds),
       questions: this.questionBreakdown(scopedVersions, visibleSessionIds, user),
       submissions: this.submissionBreakdown(scopedVersions),
     }
@@ -199,7 +202,7 @@ export class StatsService {
             telemetryEvents: true,
           },
         },
-        building: true,
+        building: { include: { site: true } },
         questionnaireVersion: { include: { questionnaire: true } },
       },
     })
@@ -310,6 +313,84 @@ export class StatsService {
         displayValue: effectifSufficient ? `${row.submitted} soumis` : 'effectif insuffisant',
       }
     })
+  }
+
+  private siteBreakdown(invitations: any[]) {
+    const bySite = new Map<string, { label: string; invited: number; opened: number; started: number; submitted: number }>()
+
+    for (const invitation of invitations) {
+      const siteId = invitation.building?.site?.id ?? invitation.siteId ?? 'unknown'
+      const label = invitation.building?.site?.name ?? 'Site inconnu'
+      const row = bySite.get(siteId) ?? { label, invited: 0, opened: 0, started: 0, submitted: 0 }
+      row.invited += 1
+      if (this.isOpened(invitation)) row.opened += 1
+      if (this.isStarted(invitation)) row.started += 1
+      if (invitation.status === 'submitted') row.submitted += 1
+      bySite.set(siteId, row)
+    }
+
+    return Array.from(bySite.entries()).map(([siteId, row]) => ({
+      siteId,
+      label: row.label,
+      invited: row.invited,
+      opened: row.opened,
+      started: row.started,
+      submitted: row.submitted,
+      openingRate: this.percent(row.opened, row.invited),
+      startRate: this.percent(row.started, row.invited),
+      submissionRate: this.percent(row.submitted, row.invited),
+    }))
+  }
+
+  private languageBreakdown(versions: any[]) {
+    const byLanguage = new Map<string, { invited: number; submitted: number; versionCount: number }>()
+
+    for (const version of versions) {
+      const language = version.language ?? 'unknown'
+      const row = byLanguage.get(language) ?? { invited: 0, submitted: 0, versionCount: 0 }
+      row.versionCount += 1
+      row.invited += version.invitations?.length ?? 0
+      row.submitted += version.submissions?.length ?? 0
+      byLanguage.set(language, row)
+    }
+
+    return Array.from(byLanguage.entries()).map(([language, row]) => ({
+      language,
+      versionCount: row.versionCount,
+      invited: row.invited,
+      submitted: row.submitted,
+      submissionRate: this.percent(row.submitted, row.invited),
+    }))
+  }
+
+  private popupBreakdown(versions: any[], visibleSessionIds?: Set<string>) {
+    const scopedSessionIds = visibleSessionIds ?? new Set<string>()
+    const hasScope = scopedSessionIds.size > 0
+
+    return versions.flatMap((version: any) => version.groups.flatMap((group: any) =>
+      group.questions.flatMap((question: any) => (question.popupDefinitions ?? []).map((popup: any) => {
+        const events = (popup.telemetryEvents ?? []).filter((event: any) => !hasScope || scopedSessionIds.has(event.responseSessionId))
+        const openEvents = events.filter((event: any) => event.eventType === 'popup_open')
+        const sessions = new Set(openEvents.map((event: any) => event.responseSessionId).filter(Boolean))
+        const effectifSufficient = Math.max(sessions.size, openEvents.length) >= this.threshold()
+
+        return {
+          id: popup.id,
+          termKey: popup.termKey,
+          title: popup.title,
+          questionId: question.id,
+          questionCode: question.code,
+          groupId: group.id,
+          groupTitle: group.title,
+          versionId: version.id,
+          versionLabel: version.versionLabel,
+          openedCount: effectifSufficient ? openEvents.length : null,
+          respondentCount: effectifSufficient ? sessions.size : null,
+          effectifSufficient,
+          displayValue: effectifSufficient ? `${openEvents.length} ouverture(s)` : 'effectif insuffisant',
+        }
+      })),
+    ))
   }
 
   private deliveryModeBreakdown(invitations: any[]) {

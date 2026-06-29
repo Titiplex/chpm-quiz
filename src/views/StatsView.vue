@@ -189,6 +189,64 @@ function formatAnswer(value: unknown): string {
 
           <div class="col-xl-6">
             <div class="demo-card h-100">
+              <p class="section-eyebrow mb-2">Sites</p>
+              <h2 class="h4 fw-bold mb-4">Ventilation par site</h2>
+              <div class="table-card">
+                <table class="table align-middle">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Site</th>
+                      <th>Invités</th>
+                      <th>Ouverture</th>
+                      <th>Démarrage</th>
+                      <th>Soumission</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="site in statsStore.stats.sites ?? []" :key="site.siteId">
+                      <td class="fw-semibold">{{ site.label }}</td>
+                      <td>{{ site.invited }}</td>
+                      <td>{{ site.openingRate }} %</td>
+                      <td>{{ site.startRate }} %</td>
+                      <td><span class="badge-soft success">{{ site.submissionRate }} %</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-xl-6">
+            <div class="demo-card h-100">
+              <p class="section-eyebrow mb-2">Langues</p>
+              <h2 class="h4 fw-bold mb-4">Versions et réponses par langue</h2>
+              <div class="table-card">
+                <table class="table align-middle">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Langue</th>
+                      <th>Versions</th>
+                      <th>Invités</th>
+                      <th>Soumis</th>
+                      <th>Taux</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="language in statsStore.stats.languages ?? []" :key="language.language">
+                      <td class="fw-semibold text-uppercase">{{ language.language }}</td>
+                      <td>{{ language.versionCount }}</td>
+                      <td>{{ language.invited }}</td>
+                      <td>{{ language.submitted }}</td>
+                      <td><span class="badge-soft success">{{ language.submissionRate }} %</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-xl-6">
+            <div class="demo-card h-100">
               <p class="section-eyebrow mb-2">Bâtiments</p>
               <h2 class="h4 fw-bold mb-4">Ventilation seuillée</h2>
               <div class="table-card">
@@ -287,6 +345,49 @@ function formatAnswer(value: unknown): string {
               <p v-if="!canReadSubmissions" class="small muted mt-3 mb-0">
                 Votre rôle voit les indicateurs agrégés mais pas le détail individuel des soumissions.
               </p>
+            </div>
+          </div>
+
+          <div class="col-12">
+            <div class="demo-card">
+              <div class="d-flex flex-wrap justify-content-between gap-2 mb-4">
+                <div>
+                  <p class="section-eyebrow mb-2">Popups</p>
+                  <h2 class="h4 fw-bold mb-0">Compréhension des termes métier</h2>
+                </div>
+                <span class="badge-soft warning">Seuil n ≥ {{ statsStore.stats.threshold }}</span>
+              </div>
+              <div class="table-card">
+                <table class="table align-middle">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Terme</th>
+                      <th>Question</th>
+                      <th>Groupe</th>
+                      <th>Version</th>
+                      <th>Ouvertures</th>
+                      <th>Répondants</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="popup in statsStore.stats.popups ?? []" :key="popup.id">
+                      <td>
+                        <strong>{{ popup.title }}</strong>
+                        <div class="small muted">{{ popup.termKey }}</div>
+                      </td>
+                      <td>{{ popup.questionCode }}</td>
+                      <td>{{ popup.groupTitle }}</td>
+                      <td>{{ popup.versionLabel }}</td>
+                      <td>{{ popup.openedCount ?? popup.displayValue }}</td>
+                      <td>
+                        <span class="badge-soft" :class="{ success: popup.effectifSufficient, warning: !popup.effectifSufficient }">
+                          {{ popup.respondentCount ?? popup.displayValue }}
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
