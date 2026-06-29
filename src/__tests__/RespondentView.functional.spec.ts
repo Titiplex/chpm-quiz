@@ -64,6 +64,13 @@ describe('RespondentView functional flow', () => {
     expect(wrapper.text()).toContain('International Trauma Questionnaire')
     expect(wrapper.text()).toContain('Avoir des rêves perturbants ?')
     expect(wrapper.text()).toContain('Page 1 / 2')
+    expect(wrapper.findAll('.likert-choice-label').map((label) => label.text())).toEqual([
+      'Pas du tout',
+      'Vers « Pas du tout »',
+      'Modérément',
+      'Vers « Extrêmement »',
+      'Extrêmement',
+    ])
 
     const pageViewCall = calls.find((call) => call.url.endsWith('/respondent/telemetry') && (call.body as any)?.eventType === 'page_view')
     expect(pageViewCall?.body).toMatchObject({ token: 'token-demo', eventType: 'page_view', currentPage: 1 })

@@ -36,6 +36,7 @@ jobs:
         env:
           VITE_APP_NAME: CHPM Quiz – Démo
           VITE_DEMO_MODE: 'true'
+          VITE_STATIC_PAGES_DEMO: 'true'
           VITE_ROUTER_MODE: hash
 
       - name: Setup Pages
