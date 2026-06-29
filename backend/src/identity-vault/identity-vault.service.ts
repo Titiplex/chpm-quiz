@@ -138,7 +138,6 @@ export class IdentityVaultService {
           questionnaireVersionId: input.questionnaireVersionId,
           buildingId: input.buildingId,
           createdByUserId: input.createdByUserId,
-          lastEmailSentAt: new Date(),
         },
       })
 
@@ -155,6 +154,31 @@ export class IdentityVaultService {
         },
       })
     })
+  }
+
+  async loadOutboundEmailForInvitation(invitationId: string): Promise<{ email: string; maskedEmail: string; publicCode: string } | null> {
+    const identity = await this.identityPrisma.identityVaultEntry.findUnique({
+      where: { invitationId },
+      select: { encryptedEmail: true, uniqueCode: true, deletedAt: true },
+    })
+
+    if (!identity || identity.deletedAt) {
+      return null
+    }
+
+    const email = this.emailCryptoService.decryptEmail(identity.encryptedEmail)
+    return {
+      email,
+      maskedEmail: this.emailCryptoService.maskEmail(email),
+      publicCode: identity.uniqueCode,
+    }
+  }
+
+  async markOutboundEmailSent(invitationId: string, sentAt = new Date()): Promise<void> {
+    await this.identityPrisma.identityVaultEntry.update({
+      where: { invitationId },
+      data: { lastEmailSentAt: sentAt },
+    }).catch(() => undefined)
   }
 
   async recordDeliveryEvent(input: CreateDeliveryEventInput): Promise<void> {

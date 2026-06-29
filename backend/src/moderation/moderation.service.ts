@@ -7,6 +7,7 @@ import type { AuthenticatedUser } from '../auth/auth.types'
 import { assertCanAccessBuilding, assertCanAccessVersion } from '../common/access-scope'
 import { AccessTokenService } from '../security/access-token.service'
 import { IdentityVaultService } from '../identity-vault/identity-vault.service'
+import { MailQueueService } from '../mail/mail-queue.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { CreateInvitationDto } from './dto/create-invitation.dto'
 import { RegisterTerminalDeviceDto } from './dto/register-terminal-device.dto'
@@ -20,6 +21,7 @@ export class ModerationService {
     private readonly prisma: PrismaService,
     private readonly accessTokenService: AccessTokenService,
     private readonly identityVaultService: IdentityVaultService,
+    private readonly mailQueue: MailQueueService,
     private readonly auditService: AuditService,
     private readonly config: ConfigService,
   ) {}
@@ -136,7 +138,7 @@ export class ModerationService {
 
     assertCanAccessBuilding(user, building)
 
-    const deliveryMode = dto.deliveryMode ?? 'email_simulation'
+    const deliveryMode = this.resolveDeliveryMode(dto.deliveryMode)
     const assistanceMode = dto.assistanceMode ?? 'none'
     const publicCode = await this.generateUniquePublicCode()
     const { token, tokenHash } = this.accessTokenService.create(publicCode)
@@ -255,11 +257,21 @@ export class ModerationService {
         request,
       })
 
+      const emailJobId = this.mailQueue.enqueue(this.buildInvitationMail({
+        invitation,
+        recipientEmail: dto.email,
+        token,
+        template: 'invitation',
+      }))
+
       await this.identityVaultService.recordDeliveryEvent({
         invitationId: invitation.id,
         publicCode,
-        eventType: deliveryMode === 'email' ? 'email_queued' : 'dev_link_created',
-        metadata: { note: deliveryMode === 'email' ? 'Email prêt à être envoyé' : 'Envoi email simulé en développement' },
+        eventType: deliveryMode === 'email' ? 'invitation_email_queued' : 'dev_invitation_email_queued',
+        metadata: {
+          note: deliveryMode === 'email' ? 'Invitation transmise à la queue email' : 'Invitation email simulée en développement',
+          jobId: emailJobId,
+        },
       })
     } catch (error) {
       await this.prisma.invitation.delete({ where: { id: invitation.id } }).catch(() => undefined)
@@ -308,23 +320,40 @@ export class ModerationService {
     }
 
     const isTerminal = invitation.deliveryMode === 'onsite_terminal'
+    const refreshedToken = isTerminal ? null : this.accessTokenService.create(invitation.publicCode)
     const updated = await this.prisma.invitation.update({
       where: { id: invitation.id },
       data: {
         status: 'sent',
         sentAt: new Date(),
+        ...(refreshedToken ? { tokenHash: refreshedToken.tokenHash } : {}),
         terminalDispatchedAt: isTerminal ? new Date() : invitation.terminalDispatchedAt,
       },
       include: this.invitationInclude(),
     })
 
+    let emailJobId: string | null = null
+    if (!isTerminal && refreshedToken) {
+      const identity = await this.identityVaultService.loadOutboundEmailForInvitation(invitation.id)
+      if (!identity) {
+        throw new BadRequestException('Relance impossible : identité email introuvable ou supprimée')
+      }
+      emailJobId = this.mailQueue.enqueue(this.buildInvitationMail({
+        invitation: updated,
+        recipientEmail: identity.email,
+        token: refreshedToken.token,
+        template: 'reminder',
+      }))
+    }
+
     await this.identityVaultService.recordDeliveryEvent({
       invitationId: invitation.id,
       publicCode: invitation.publicCode,
-      eventType: isTerminal ? 'terminal_invitation_redispatched' : 'dev_resend_created',
+      eventType: isTerminal ? 'terminal_invitation_redispatched' : 'invitation_reminder_queued',
       metadata: {
-        note: isTerminal ? 'Invitation réattribuée au terminal hospitalier' : 'Relance email simulée en développement',
+        note: isTerminal ? 'Invitation réattribuée au terminal hospitalier' : 'Relance email transmise à la queue',
         terminalDeviceId: invitation.terminalDeviceId ?? undefined,
+        jobId: emailJobId ?? undefined,
       },
     })
 
@@ -354,14 +383,45 @@ export class ModerationService {
   }
 
   private async expireOverdueInvitationsForScope(user: AuthenticatedUser): Promise<void> {
-    await this.prisma.invitation.updateMany({
+    const overdue = await this.prisma.invitation.findMany({
       where: {
         ...this.scopedWhere(user),
         status: { in: [...activeInvitationStatuses] },
         expiresAt: { lt: new Date() },
       },
+      include: this.invitationInclude(),
+      take: 100,
+    })
+
+    if (!overdue.length) {
+      return
+    }
+
+    await this.prisma.invitation.updateMany({
+      where: { id: { in: overdue.map((invitation: any) => invitation.id) } },
       data: { status: 'expired' },
     })
+
+    for (const invitation of overdue) {
+      await this.identityVaultService.recordDeliveryEvent({
+        invitationId: invitation.id,
+        publicCode: invitation.publicCode,
+        eventType: 'invitation_expired',
+        metadata: { expiredAt: new Date().toISOString() },
+      })
+
+      if (invitation.deliveryMode !== 'onsite_terminal') {
+        const identity = await this.identityVaultService.loadOutboundEmailForInvitation(invitation.id)
+        if (identity) {
+          this.mailQueue.enqueue(this.buildInvitationMail({
+            invitation: { ...invitation, status: 'expired' },
+            recipientEmail: identity.email,
+            token: null,
+            template: 'expiration',
+          }))
+        }
+      }
+    }
   }
 
   private scopedWhere(user: AuthenticatedUser) {
@@ -421,6 +481,69 @@ export class ModerationService {
       building: device.building,
       lastSeenAt: device.lastSeenAt,
       pendingInvitationCount: device.invitations?.length ?? 0,
+    }
+  }
+
+
+  private resolveDeliveryMode(deliveryMode?: string): 'email' | 'email_simulation' | 'onsite_terminal' {
+    const resolved = deliveryMode ?? (this.config.get<string>('NODE_ENV') === 'production' ? 'email' : 'email_simulation')
+
+    if (resolved === 'email_simulation' && this.config.get<string>('NODE_ENV') === 'production') {
+      throw new BadRequestException('Le mode email_simulation est interdit en production')
+    }
+
+    if (resolved === 'email' || resolved === 'email_simulation' || resolved === 'onsite_terminal') {
+      return resolved
+    }
+
+    throw new BadRequestException('Mode de livraison invalide')
+  }
+
+  private buildInvitationMail(input: { invitation: any; recipientEmail: string; token: string | null; template: 'invitation' | 'reminder' | 'expiration' }) {
+    const questionnaireTitle = input.invitation.questionnaireVersion?.questionnaire?.title ?? 'questionnaire CHPM'
+    const link = input.token ? this.respondentLink(input.token) : null
+    const subjectByTemplate = {
+      invitation: `Invitation à répondre au questionnaire ${questionnaireTitle}`,
+      reminder: `Relance — questionnaire ${questionnaireTitle}`,
+      expiration: `Invitation expirée — questionnaire ${questionnaireTitle}`,
+    }
+
+    const textByTemplate = {
+      invitation: [
+        'Bonjour,',
+        `Vous êtes invité(e) à répondre au questionnaire : ${questionnaireTitle}.`,
+        `Code unique : ${input.invitation.publicCode}.`,
+        link ? `Lien sécurisé à usage unique : ${link}` : 'Cette invitation est expirée ou indisponible.',
+        `Expiration : ${new Date(input.invitation.expiresAt).toLocaleString('fr-FR')}.`,
+        'Vos réponses sont pseudonymisées ; votre email est conservé dans le coffre identité séparé.',
+      ],
+      reminder: [
+        'Bonjour,',
+        `Rappel : le questionnaire ${questionnaireTitle} est encore en attente.`,
+        `Code unique : ${input.invitation.publicCode}.`,
+        link ? `Lien sécurisé renouvelé : ${link}` : 'Lien indisponible.',
+        `Expiration : ${new Date(input.invitation.expiresAt).toLocaleString('fr-FR')}.`,
+      ],
+      expiration: [
+        'Bonjour,',
+        `L'invitation au questionnaire ${questionnaireTitle} est expirée.`,
+        `Code unique : ${input.invitation.publicCode}.`,
+        'Aucune action supplémentaire n’est possible avec ce lien.',
+      ],
+    }
+
+    return {
+      template: input.template,
+      to: { email: input.recipientEmail },
+      subject: subjectByTemplate[input.template],
+      text: textByTemplate[input.template].join('\n'),
+      invitationId: input.invitation.id,
+      publicCode: input.invitation.publicCode,
+      metadata: {
+        questionnaireVersionId: input.invitation.questionnaireVersionId,
+        deliveryMode: input.invitation.deliveryMode,
+        expiresAt: input.invitation.expiresAt?.toISOString?.() ?? String(input.invitation.expiresAt),
+      },
     }
   }
 
