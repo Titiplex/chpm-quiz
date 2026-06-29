@@ -496,10 +496,10 @@ async function confirmSubmit(): Promise<void> {
                 <div class="question-help mb-4" role="note">
                   <strong>Notice d’information avant démarrage</strong>
                   <ul class="small muted mb-3 mt-2 ps-3">
-                    <li>Finalité : compréhension du questionnaire et amélioration des formulations métier.</li>
-                    <li>Durée estimée : quelques minutes, avec reprise possible depuis le même lien tant que la soumission finale n’est pas faite.</li>
-                    <li>Confidentialité : les réponses sont rattachées au code public ; {{ isOnsiteTerminal ? 'aucun email n’est collecté pour cette invitation terminal.' : 'l’email est conservé séparément dans la base identité.' }}</li>
-                    <li>Droits et contact : contactez le responsable de traitement ou le DPO indiqué par l’organisation pour toute demande RGPD.</li>
+                    <li>Finalité : {{ respondent.session.legalNotice?.finality ?? respondent.session.questionnaire.finality }}</li>
+                    <li>Durée estimée : {{ respondent.session.legalNotice?.estimatedDurationMinutes ?? 'quelques' }} minute(s), avec reprise possible depuis le même lien tant que la soumission finale n’est pas faite.</li>
+                    <li>Confidentialité : {{ respondent.session.legalNotice?.pseudonymizationStatus ?? (isOnsiteTerminal ? 'aucun email n’est collecté pour cette invitation terminal.' : 'l’email est conservé séparément dans la base identité.') }}</li>
+                    <li>Droits et contact : {{ respondent.session.legalNotice?.rights ?? 'Contactez le DPO pour toute demande RGPD.' }} Contact : {{ respondent.session.legalNotice?.dpoContact ?? 'DPO' }}.</li>
                   </ul>
                   <label class="form-check d-flex gap-2 align-items-start mb-0" for="respondent-consent">
                     <input
