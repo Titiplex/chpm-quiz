@@ -34,7 +34,10 @@ export class QuestionnairesService {
     const canSeeDrafts = this.canConfigureQuestionnaires(user.role)
 
     const questionnaires = await this.prisma.questionnaire.findMany({
-      where: canSeeDrafts ? undefined : { versions: { some: { status: publishedStatus } } },
+      where: {
+        ...(canSeeDrafts ? {} : { versions: { some: { status: publishedStatus } } }),
+        ...(user.organizationId ? { organizationId: user.organizationId } : {}),
+      },
       orderBy: [{ updatedAt: 'desc' }],
       include: {
         versions: {
@@ -65,6 +68,8 @@ export class QuestionnairesService {
     if (!questionnaire) {
       throw new NotFoundException('Questionnaire introuvable')
     }
+
+    assertCanAccessQuestionnaire(user, questionnaire)
 
     const version = this.selectVersionForUser(questionnaire.versions, canSeeDrafts)
 

@@ -1,9 +1,9 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common'
 import { Reflector } from '@nestjs/core'
-import type { UserRole } from '../../auth/role-permissions'
 import type { Request } from 'express'
 
 import type { AuthenticatedUser } from '../../auth/auth.types'
+import type { UserRole } from '../../auth/role-permissions'
 import { ROLES_KEY } from '../decorators/roles.decorator'
 
 type AuthenticatedRequest = Request & {
@@ -21,7 +21,7 @@ export class RolesGuard implements CanActivate {
     ])
 
     if (!requiredRoles?.length) {
-      return true
+      throw new ForbiddenException('Route protégée sans autorisation explicite : refus par défaut')
     }
 
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>()

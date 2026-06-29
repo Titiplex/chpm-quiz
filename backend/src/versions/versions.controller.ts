@@ -21,8 +21,8 @@ export class VersionsController {
 
   @Get('questionnaires/:id/versions')
   @Roles('admin', 'questionnaire_admin')
-  async list(@Param('id') id: string) {
-    const versions = await this.versionsService.list(id)
+  async list(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    const versions = await this.versionsService.list(id, user)
     return { versions }
   }
 
@@ -34,7 +34,7 @@ export class VersionsController {
     @CurrentUser() user: AuthenticatedUser,
     @Req() request: Request,
   ) {
-    const version = await this.versionsService.create(id, dto)
+    const version = await this.versionsService.create(id, dto, user)
     await this.auditService.log({
       actor: user,
       action: 'questionnaire_version.create',
@@ -49,8 +49,8 @@ export class VersionsController {
 
   @Get('versions/:id/rules')
   @Roles('admin', 'questionnaire_admin')
-  async listRules(@Param('id') id: string) {
-    const rules = await this.versionsService.listRules(id)
+  async listRules(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    const rules = await this.versionsService.listRules(id, user)
     return { rules }
   }
 
@@ -62,7 +62,7 @@ export class VersionsController {
     @CurrentUser() user: AuthenticatedUser,
     @Req() request: Request,
   ) {
-    const rule = await this.versionsService.createRule(id, dto)
+    const rule = await this.versionsService.createRule(id, dto, user)
     await this.auditService.log({
       actor: user,
       action: 'conditional_rule.create',
@@ -83,7 +83,7 @@ export class VersionsController {
     @CurrentUser() user: AuthenticatedUser,
     @Req() request: Request,
   ) {
-    const rule = await this.versionsService.updateRule(id, ruleId, dto)
+    const rule = await this.versionsService.updateRule(id, ruleId, dto, user)
     await this.auditService.log({
       actor: user,
       action: 'conditional_rule.update',
@@ -103,7 +103,7 @@ export class VersionsController {
     @CurrentUser() user: AuthenticatedUser,
     @Req() request: Request,
   ) {
-    const rule = await this.versionsService.archiveRule(id, ruleId)
+    const rule = await this.versionsService.archiveRule(id, ruleId, user)
     await this.auditService.log({
       actor: user,
       action: 'conditional_rule.archive',
@@ -122,7 +122,7 @@ export class VersionsController {
     @CurrentUser() user: AuthenticatedUser,
     @Req() request: Request,
   ) {
-    const version = await this.versionsService.publish(id)
+    const version = await this.versionsService.publish(id, user)
     await this.auditService.log({
       actor: user,
       action: 'questionnaire_version.publish',

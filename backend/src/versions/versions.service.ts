@@ -1,5 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
 
+import type { AuthenticatedUser } from '../auth/auth.types'
+import { assertCanAccessQuestionnaire, assertCanAccessVersion } from '../common/access-scope'
 import { PrismaService } from '../prisma/prisma.service'
 import type { CreateVersionDto } from './dto/create-version.dto'
 import type { CreateConditionalRuleDto, UpdateConditionalRuleDto } from './dto/conditional-rule.dto'
@@ -8,7 +10,13 @@ import type { CreateConditionalRuleDto, UpdateConditionalRuleDto } from './dto/c
 export class VersionsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(questionnaireId: string) {
+  async list(questionnaireId: string, user: AuthenticatedUser) {
+    const questionnaire = await this.prisma.questionnaire.findUnique({ where: { id: questionnaireId } })
+    if (!questionnaire) {
+      throw new NotFoundException('Questionnaire introuvable')
+    }
+    assertCanAccessQuestionnaire(user, questionnaire)
+
     return this.prisma.questionnaireVersion.findMany({
       where: { questionnaireId },
       orderBy: [{ createdAt: 'desc' }],
@@ -21,12 +29,14 @@ export class VersionsService {
     })
   }
 
-  async create(questionnaireId: string, dto: CreateVersionDto) {
+  async create(questionnaireId: string, dto: CreateVersionDto, user: AuthenticatedUser) {
     const questionnaire = await this.prisma.questionnaire.findUnique({ where: { id: questionnaireId } })
 
     if (!questionnaire) {
       throw new NotFoundException('Questionnaire introuvable')
     }
+
+    assertCanAccessQuestionnaire(user, questionnaire)
 
     const existing = await this.prisma.questionnaireVersion.findUnique({
       where: {
@@ -56,16 +66,16 @@ export class VersionsService {
   }
 
 
-  async listRules(versionId: string) {
-    await this.assertDraftOrPublishedVersionExists(versionId)
+  async listRules(versionId: string, user: AuthenticatedUser) {
+    await this.assertCanAccessExistingVersion(versionId, user)
     return this.prisma.conditionalRule.findMany({
       where: { questionnaireVersionId: versionId },
       orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
     })
   }
 
-  async createRule(versionId: string, dto: CreateConditionalRuleDto) {
-    await this.assertDraftVersion(versionId)
+  async createRule(versionId: string, dto: CreateConditionalRuleDto, user: AuthenticatedUser) {
+    await this.assertDraftVersion(versionId, user)
     return this.prisma.conditionalRule.create({
       data: {
         questionnaireVersionId: versionId,
@@ -78,8 +88,8 @@ export class VersionsService {
     })
   }
 
-  async updateRule(versionId: string, ruleId: string, dto: UpdateConditionalRuleDto) {
-    await this.assertDraftVersion(versionId)
+  async updateRule(versionId: string, ruleId: string, dto: UpdateConditionalRuleDto, user: AuthenticatedUser) {
+    await this.assertDraftVersion(versionId, user)
     await this.assertRuleInVersion(versionId, ruleId)
     return this.prisma.conditionalRule.update({
       where: { id: ruleId },
@@ -93,13 +103,13 @@ export class VersionsService {
     })
   }
 
-  async archiveRule(versionId: string, ruleId: string) {
-    await this.assertDraftVersion(versionId)
+  async archiveRule(versionId: string, ruleId: string, user: AuthenticatedUser) {
+    await this.assertDraftVersion(versionId, user)
     await this.assertRuleInVersion(versionId, ruleId)
     return this.prisma.conditionalRule.update({ where: { id: ruleId }, data: { isActive: false } })
   }
 
-  async publish(versionId: string) {
+  async publish(versionId: string, user: AuthenticatedUser) {
     const version = await this.prisma.questionnaireVersion.findUnique({
       where: { id: versionId },
       include: {
@@ -124,6 +134,8 @@ export class VersionsService {
     if (!version) {
       throw new NotFoundException('Version introuvable')
     }
+
+    assertCanAccessVersion(user, version)
 
     if (version.status !== 'draft') {
       throw new BadRequestException('Seule une version brouillon peut être publiée')
@@ -151,18 +163,20 @@ export class VersionsService {
   }
 
 
-  private async assertDraftOrPublishedVersionExists(versionId: string): Promise<void> {
-    const version = await this.prisma.questionnaireVersion.findUnique({ where: { id: versionId } })
+  private async assertCanAccessExistingVersion(versionId: string, user: AuthenticatedUser): Promise<void> {
+    const version = await this.prisma.questionnaireVersion.findUnique({ where: { id: versionId }, include: { questionnaire: true } })
     if (!version) {
       throw new NotFoundException('Version introuvable')
     }
+    assertCanAccessVersion(user, version)
   }
 
-  private async assertDraftVersion(versionId: string): Promise<void> {
-    const version = await this.prisma.questionnaireVersion.findUnique({ where: { id: versionId } })
+  private async assertDraftVersion(versionId: string, user: AuthenticatedUser): Promise<void> {
+    const version = await this.prisma.questionnaireVersion.findUnique({ where: { id: versionId }, include: { questionnaire: true } })
     if (!version) {
       throw new NotFoundException('Version introuvable')
     }
+    assertCanAccessVersion(user, version)
     if (version.status !== 'draft') {
       throw new BadRequestException('Les règles ne peuvent être modifiées que sur une version brouillon')
     }

@@ -14,20 +14,31 @@ export type ScopedQuestionnaire = {
   ownerUserId?: string | null
 }
 
-export function canAccessBuilding(user: AuthenticatedUser, building: ScopedBuilding): boolean {
-  if (user.role === 'admin' || user.role === 'dpo' || user.role === 'technical_admin' || user.role === 'judicial_officer') {
-    return sameOrganizationOrUnscoped(user, building.organizationId)
-  }
+export type ScopedVersion = {
+  id: string
+  questionnaire?: ScopedQuestionnaire | null
+}
 
+export type ScopedInvitation = {
+  id: string
+  organizationId?: string | null
+  siteId?: string | null
+  buildingId?: string | null
+  questionnaireVersion?: ScopedVersion | null
+}
+
+const organizationWideRoles = new Set(['admin', 'dpo', 'technical_admin', 'judicial_officer', 'questionnaire_admin', 'analyst'])
+
+export function canAccessBuilding(user: AuthenticatedUser, building: ScopedBuilding): boolean {
   if (user.role === 'moderator') {
     return Boolean(user.buildingId) && user.buildingId === building.id
   }
 
   if (user.role === 'site_manager') {
-    return Boolean(user.siteId) && user.siteId === building.siteId
+    return Boolean(user.siteId) && user.siteId === building.siteId && sameOrganizationOrUnscoped(user, building.organizationId)
   }
 
-  if (user.role === 'questionnaire_admin' || user.role === 'analyst') {
+  if (organizationWideRoles.has(user.role)) {
     return sameOrganizationOrUnscoped(user, building.organizationId)
   }
 
@@ -53,6 +64,10 @@ export function canAccessQuestionnaire(user: AuthenticatedUser, questionnaire: S
     return sameOrganizationOrUnscoped(user, questionnaire.organizationId)
   }
 
+  if (user.role === 'site_manager' || user.role === 'moderator') {
+    return sameOrganizationOrUnscoped(user, questionnaire.organizationId)
+  }
+
   return false
 }
 
@@ -62,9 +77,27 @@ export function assertCanAccessQuestionnaire(user: AuthenticatedUser, questionna
   }
 }
 
+export function canAccessVersion(user: AuthenticatedUser, version: ScopedVersion): boolean {
+  if (!version.questionnaire) {
+    return false
+  }
+
+  return canAccessQuestionnaire(user, version.questionnaire)
+}
+
+export function assertCanAccessVersion(user: AuthenticatedUser, version: ScopedVersion): void {
+  if (!canAccessVersion(user, version)) {
+    throw new NotFoundException('Version de questionnaire introuvable dans votre périmètre')
+  }
+}
+
 export function sameOrganizationOrUnscoped(user: AuthenticatedUser, organizationId?: string | null): boolean {
-  if (!organizationId || !user.organizationId) {
+  if (!organizationId) {
     return true
+  }
+
+  if (!user.organizationId) {
+    return false
   }
 
   return user.organizationId === organizationId

@@ -1,11 +1,27 @@
-import { IsDateString, IsInt, IsObject, IsOptional, IsString, IsUUID, Min } from 'class-validator'
+import { IsDateString, IsIn, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator'
+
+const respondentTelemetryEvents = [
+  'session_open',
+  'questionnaire_resume',
+  'answer_change',
+  'popup_open',
+  'popup_close',
+  'forward_navigation',
+  'backward_navigation',
+  'questionnaire_total_time',
+  'questionnaire_abandon',
+] as const
 
 export class TelemetryDto {
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(512)
   token!: string
 
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(512)
   terminalToken?: string
 
   @IsOptional()
@@ -17,6 +33,7 @@ export class TelemetryDto {
   popupDefinitionId?: string
 
   @IsString()
+  @IsIn(respondentTelemetryEvents)
   eventType!: string
 
   @IsOptional()
