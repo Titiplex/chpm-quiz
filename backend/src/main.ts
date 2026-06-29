@@ -8,6 +8,7 @@ import type { NextFunction, Request, Response } from 'express'
 import cookieParser = require('cookie-parser')
 
 import { AppModule } from './app.module'
+import { ApiExceptionFilter } from './common/filters/api-exception.filter'
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule)
@@ -62,6 +63,7 @@ async function bootstrap() {
 
   app.use(cookieParser())
   app.setGlobalPrefix(config.get<string>('API_PREFIX', 'api'))
+  app.useGlobalFilters(new ApiExceptionFilter())
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,

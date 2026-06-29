@@ -156,7 +156,7 @@ describe('RespondentService functional flow', () => {
       }),
     }))
     expect(response.responseSession.publicCode).toBe('CODE-1')
-    expect(response.questionnaire.groups[0].questions.map((question: any) => question.id)).toEqual(['q1', 'q2'])
+    expect(response.questionnaire.groups[0]!.questions.map((question: any) => question.id)).toEqual(['q1', 'q2'])
   })
 
   it('refuses to save an answer for a question hidden by the active conditional path', async () => {

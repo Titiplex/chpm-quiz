@@ -8,6 +8,6 @@ export class IdentityVaultAccessAttemptDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(2000)
+  @MaxLength(2_000)
   justification?: string
 }

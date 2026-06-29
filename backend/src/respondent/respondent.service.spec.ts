@@ -14,7 +14,7 @@ describe('RespondentService unit rules', () => {
     const service = makeService()
     const context = {
       answerByQuestionId: new Map([['q1', 3]]),
-      answersByCode: new Map([['P1', 3], ['LANGUE', 'fr']]),
+      answersByCode: new Map<string, unknown>([['P1', 3], ['LANGUE', 'fr']]),
     }
 
     expect(service.evaluateCondition({ questionCode: 'p1', operator: 'gte', value: 2 }, context)).toBe(true)

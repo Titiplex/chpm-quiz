@@ -1,4 +1,4 @@
-import { IsBoolean, IsDateString, IsEmail, IsIn, IsOptional, IsString, IsUUID, ValidateIf } from 'class-validator'
+import { IsBoolean, IsDateString, IsEmail, IsIn, IsOptional, IsUUID, MaxLength, ValidateIf } from 'class-validator'
 
 export const invitationDeliveryModes = ['email', 'email_simulation', 'onsite_terminal'] as const
 export const assistanceModes = ['none', 'technical_help', 'full_assisted_entry'] as const
@@ -14,6 +14,7 @@ export class CreateInvitationDto {
 
   @ValidateIf((dto: CreateInvitationDto) => dto.deliveryMode !== 'onsite_terminal')
   @IsEmail()
+  @MaxLength(254)
   email?: string
 
   @IsOptional()

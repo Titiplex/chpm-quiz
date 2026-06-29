@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { apiRequest, ApiError } from '@/services/api'
+import { apiRequest } from '@/services/api'
 
 describe('apiRequest', () => {
   it('serializes JSON bodies and attaches correlation headers', async () => {

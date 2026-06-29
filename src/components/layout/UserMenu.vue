@@ -2,7 +2,6 @@
 import { computed } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
-import { defaultPathByRole } from '@/config/navigation'
 import { useSessionStore } from '@/stores/session'
 
 const router = useRouter()

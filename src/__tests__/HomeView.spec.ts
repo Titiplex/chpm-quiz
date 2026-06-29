@@ -102,6 +102,6 @@ describe('HomeView', () => {
     expect(wrapper.text()).toContain('Questionnaire adaptatif')
     expect(wrapper.text()).toContain('Administration no-code')
     expect(wrapper.text()).toContain('Pilotage statistique')
-    expect(wrapper.text()).toContain('Session backend')
+    expect(wrapper.text()).toContain('Backend actif')
   })
 })

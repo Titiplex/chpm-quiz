@@ -1,7 +1,6 @@
 import { roleProfiles, type UserRole } from '@shared/types/rbac'
 import type { AssistanceMode, InvitationDeliveryMode, InvitationStatus, QuestionType, SubmissionStatus } from '@shared/types/domain'
 import type {
-  ApiAnswerOption,
   ApiBuilding,
   ApiInvitation,
   ApiLikertScale,
