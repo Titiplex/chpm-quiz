@@ -157,6 +157,38 @@ function formatAnswer(value: unknown): string {
 
           <div class="col-xl-6">
             <div class="demo-card h-100">
+              <p class="section-eyebrow mb-2">Canaux de passation</p>
+              <h2 class="h4 fw-bold mb-4">Email vs terminal hospitalier</h2>
+              <div class="table-card">
+                <table class="table align-middle">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Canal</th>
+                      <th>Invités</th>
+                      <th>Ouverts</th>
+                      <th>Démarrés</th>
+                      <th>Soumis</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="mode in statsStore.stats.deliveryModes" :key="mode.mode">
+                      <td class="fw-semibold">{{ mode.label }}</td>
+                      <td>{{ mode.invited }}</td>
+                      <td>{{ mode.openingRate }} %</td>
+                      <td>{{ mode.startRate }} %</td>
+                      <td><span class="badge-soft success">{{ mode.submissionRate }} %</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="small muted mt-3 mb-0">
+                Le canal terminal permet d’inclure les répondants sans email ni appareil personnel, sans exposer une session staff.
+              </p>
+            </div>
+          </div>
+
+          <div class="col-xl-6">
+            <div class="demo-card h-100">
               <p class="section-eyebrow mb-2">Bâtiments</p>
               <h2 class="h4 fw-bold mb-4">Ventilation seuillée</h2>
               <div class="table-card">

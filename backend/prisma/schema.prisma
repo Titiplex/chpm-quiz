@@ -71,6 +71,27 @@ enum ResponseSessionStatus {
   @@schema("public")
 }
 
+enum InvitationDeliveryMode {
+  email
+  email_simulation
+  onsite_terminal
+  @@schema("public")
+}
+
+enum AssistanceMode {
+  none
+  technical_help
+  full_assisted_entry
+  @@schema("public")
+}
+
+enum TerminalDeviceStatus {
+  active
+  paused
+  revoked
+  @@schema("public")
+}
+
 enum JudicialAccessStatus {
   received
   validated
@@ -105,9 +126,10 @@ model Site {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  buildings   Building[]
-  users       User[]
-  invitations Invitation[]
+  buildings       Building[]
+  users           User[]
+  invitations     Invitation[]
+  terminalDevices TerminalDevice[]
 
   @@index([organizationId])
   @@schema("public")
@@ -131,6 +153,7 @@ model Building {
   invitations      Invitation[]
   responseSessions ResponseSession[]
   submissions      Submission[]
+  terminalDevices  TerminalDevice[]
 
   @@index([organizationId])
   @@index([siteId])
@@ -390,9 +413,14 @@ model Invitation {
   building               Building             @relation(fields: [buildingId], references: [id], onDelete: Restrict)
   createdByUserId        String?              @db.Uuid
   createdBy              User?                @relation("InvitationCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  publicCode             String               @unique
-  tokenHash              String               @unique
-  status                 InvitationStatus     @default(sent)
+  publicCode             String                 @unique
+  tokenHash              String                 @unique
+  status                 InvitationStatus       @default(sent)
+  deliveryMode           InvitationDeliveryMode @default(email_simulation)
+  terminalDeviceId       String?                @db.Uuid
+  terminalDevice         TerminalDevice?        @relation(fields: [terminalDeviceId], references: [id], onDelete: SetNull)
+  terminalDispatchedAt   DateTime?
+  assistanceMode         AssistanceMode         @default(none)
   notifyModerator        Boolean              @default(false)
   notifyAdmins           Boolean              @default(false)
   expiresAt              DateTime
@@ -414,6 +442,8 @@ model Invitation {
   @@index([createdByUserId])
   @@index([status])
   @@index([expiresAt])
+  @@index([deliveryMode])
+  @@index([terminalDeviceId])
   @@schema("public")
 }
 
@@ -436,6 +466,32 @@ model IdentityVaultEntry {
   @@index([emailHash])
   @@index([uniqueCode])
   @@schema("identity")
+}
+
+model TerminalDevice {
+  id              String               @id @default(uuid()) @db.Uuid
+  organizationId  String?              @db.Uuid
+  siteId          String?              @db.Uuid
+  site            Site?                @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  buildingId      String               @db.Uuid
+  building        Building             @relation(fields: [buildingId], references: [id], onDelete: Restrict)
+  createdByUserId String?              @db.Uuid
+  code            String               @unique
+  label           String
+  accessTokenHash String               @unique
+  status          TerminalDeviceStatus @default(active)
+  lastSeenAt      DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  invitations      Invitation[]
+  responseSessions ResponseSession[]
+
+  @@index([organizationId])
+  @@index([siteId])
+  @@index([buildingId])
+  @@index([status])
+  @@schema("public")
 }
 
 model EmailDeliveryEvent {
@@ -480,6 +536,11 @@ model ResponseSession {
   questionnaireVersionId String                @db.Uuid
   buildingId             String                @db.Uuid
   building               Building              @relation(fields: [buildingId], references: [id], onDelete: Restrict)
+  terminalDeviceId       String?               @db.Uuid
+  terminalDevice         TerminalDevice?       @relation(fields: [terminalDeviceId], references: [id], onDelete: SetNull)
+  assistanceMode         AssistanceMode        @default(none)
+  assistedByUserId       String?               @db.Uuid
+  assistanceDeclaredAt   DateTime?
   status                 ResponseSessionStatus @default(draft)
   currentPage            Int                   @default(1)
   randomizationSeed      String
@@ -496,6 +557,8 @@ model ResponseSession {
   @@index([publicCode])
   @@index([questionnaireVersionId])
   @@index([buildingId])
+  @@index([terminalDeviceId])
+  @@index([assistanceMode])
   @@index([status])
   @@schema("public")
 }

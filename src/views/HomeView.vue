@@ -4,8 +4,9 @@ import { RouterLink } from 'vue-router'
 
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
 import { appConfig } from '@/config/env'
+import { defaultPathByRole } from '@/config/navigation'
 import { useSessionStore } from '@/stores/session'
-import { hasRoleAccess, type UserRole } from '@shared/types/rbac'
+import { activeRoleHierarchy, hasRoleAccess, type UserRole } from '@shared/types/rbac'
 
 const session = useSessionStore()
 
@@ -55,10 +56,12 @@ const canOpenAdmin = computed(() => hasRoleAccess(session.currentRole, ['admin',
 const canOpenVault = computed(() => hasRoleAccess(session.currentRole, ['dpo', 'judicial_officer']))
 const canOpenArchitecture = computed(() => hasRoleAccess(session.currentRole, ['admin', 'questionnaire_admin', 'dpo', 'technical_admin', 'judicial_officer']))
 const canOpenStats = computed(() => hasRoleAccess(session.currentRole, ['admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo']))
+const defaultAuthorizedPath = computed(() => defaultPathByRole[session.currentRole])
 
 const principles = [
   appConfig.demoMode ? 'Mode démo navigateur, sans backend ni données personnelles réelles' : 'Serveur central NestJS connecté à PostgreSQL',
   'Cookie HTTP-only comme preuve de session',
+  'Hiérarchie active : administrateur global → gestionnaire de site → modérateur bâtiment',
   'Contrôle des rôles côté routeur et côté API',
   'Invitations, sessions répondant et statistiques servies par la base',
 ]
@@ -96,11 +99,35 @@ const principles = [
             <RouterLink v-if="!canOpenAdmin && canOpenStats" class="btn btn-primary btn-lg" to="/stats">
               Ouvrir mon espace autorisé
             </RouterLink>
-            <RouterLink v-else-if="!canOpenAdmin" class="btn btn-primary btn-lg" to="/architecture">
+            <RouterLink v-else-if="!canOpenAdmin" class="btn btn-primary btn-lg" :to="defaultAuthorizedPath">
               Ouvrir mon espace autorisé
             </RouterLink>
           </div>
         </div>
+      </div>
+
+
+      <div class="demo-card mb-4">
+        <div class="d-flex flex-wrap justify-content-between gap-3 mb-4">
+          <div>
+            <p class="section-eyebrow mb-2">Rôles actifs</p>
+            <h2 class="h3 fw-bold mb-0">Hiérarchie opérationnelle claire</h2>
+          </div>
+          <span class="badge-soft success align-self-start">Global → site → bâtiment</span>
+        </div>
+        <div class="row g-3">
+          <div v-for="(profile, index) in activeRoleHierarchy" :key="profile.role" class="col-md-4">
+            <article class="flow-step h-100">
+              <span class="step-number">{{ index + 1 }}</span>
+              <h3 class="h6 fw-bold">{{ profile.label }}</h3>
+              <p class="small muted mb-2">{{ profile.description }}</p>
+              <span class="badge-soft">{{ profile.scopeLabel }}</span>
+            </article>
+          </div>
+        </div>
+        <p class="small muted mt-3 mb-0">
+          Les rôles DPO, judiciaire, technique, analyste et administrateur questionnaire restent transverses : ils ne sont pas dans la chaîne opérationnelle active et n’héritent pas automatiquement des droits métier.
+        </p>
       </div>
 
       <div class="row g-4 mb-4">
@@ -140,7 +167,7 @@ const principles = [
                   <span class="step-number">2</span>
                   <h3 class="h6 fw-bold">Inviter</h3>
                   <p class="small muted mb-0">
-                    Le modérateur saisit un email et déclenche un lien à usage unique.
+                    Le gestionnaire de site ou le modérateur saisit un email et déclenche un lien à usage unique dans son périmètre.
                   </p>
                 </div>
               </div>
@@ -158,7 +185,7 @@ const principles = [
                   <span class="step-number">4</span>
                   <h3 class="h6 fw-bold">Analyser</h3>
                   <p class="small muted mb-0">
-                    Les admins consultent stats, temps, popups et soumissions pseudonymisées.
+                    Les rôles autorisés consultent stats, temps, popups et soumissions pseudonymisées selon leur périmètre.
                   </p>
                 </div>
               </div>

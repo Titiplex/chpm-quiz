@@ -21,6 +21,9 @@ export type InvitationStatus =
   | 'blocked'
   | 'cancelled'
 export type LanguageCode = 'fr' | 'en' | 'es'
+export type InvitationDeliveryMode = 'email' | 'email_simulation' | 'onsite_terminal'
+export type AssistanceMode = 'none' | 'technical_help' | 'full_assisted_entry'
+export type TerminalDeviceStatus = 'active' | 'paused' | 'revoked'
 
 export interface BuildingScope {
   id: string

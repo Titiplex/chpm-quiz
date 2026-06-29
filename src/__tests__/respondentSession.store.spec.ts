@@ -7,6 +7,7 @@ import { makeRespondentSession } from './fixtures/respondent'
 describe('useRespondentSessionStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    window.localStorage.clear()
   })
 
   it('loads a respondent session and computes progress from saved answers', async () => {

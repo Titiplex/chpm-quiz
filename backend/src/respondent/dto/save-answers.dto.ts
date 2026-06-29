@@ -1,4 +1,4 @@
-import { IsArray, IsString, IsUUID, ValidateNested } from 'class-validator'
+import { IsArray, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator'
 import { Type } from 'class-transformer'
 
 export class SaveAnswerItemDto {
@@ -11,6 +11,10 @@ export class SaveAnswerItemDto {
 export class SaveAnswersDto {
   @IsString()
   token!: string
+
+  @IsOptional()
+  @IsString()
+  terminalToken?: string
 
   @IsArray()
   @ValidateNested({ each: true })

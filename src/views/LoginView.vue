@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { appConfig } from '@/config/env'
 import { defaultPathByRole } from '@/config/navigation'
 import { useSessionStore } from '@/stores/session'
-import type { UserRole } from '@shared/types/rbac'
+import { activeOperationalRoles, roleProfiles, specializedStaffRoles, type UserRole } from '@shared/types/rbac'
 
 const route = useRoute()
 const router = useRouter()
@@ -20,47 +20,73 @@ const demoAccounts: Array<{
 }> = [
   {
     role: 'admin',
-    label: 'Administrateur',
+    label: 'Administrateur global',
     email: 'admin@chpm.local',
     password: 'Admin123!',
-    description: 'Accès complet : administration, statistiques, architecture, modération.',
+    description: 'Niveau 1 : accès global projet, sites, bâtiments, questionnaires, statistiques et terminaux.',
+  },
+  {
+    role: 'site_manager',
+    label: 'Gestionnaire de site',
+    email: 'site.manager@chpm.local',
+    password: 'SiteManager123!',
+    description: 'Niveau 2 : gère son site, ses bâtiments, ses invitations, ses terminaux et ses indicateurs agrégés.',
   },
   {
     role: 'moderator',
-    label: 'Modérateur',
+    label: 'Modérateur bâtiment',
     email: 'moderateur@chpm.local',
     password: 'Moderator123!',
-    description: 'Accès limité : invitations et suivi sur le bâtiment Montréal A.',
+    description: 'Niveau 3 : invitations et suivi opérationnel uniquement sur le bâtiment Montréal A.',
+  },
+  {
+    role: 'questionnaire_admin',
+    label: 'Administrateur questionnaire',
+    email: 'questionnaire.admin@chpm.local',
+    password: 'Questionnaire123!',
+    description: 'Rôle spécialisé : création, versionnement et publication des questionnaires, sans table email.',
   },
   {
     role: 'analyst',
     label: 'Analyste',
     email: 'analyste@chpm.local',
     password: 'Analyst123!',
-    description: 'Accès aux statistiques pseudonymisées, sans table email.',
+    description: 'Rôle spécialisé : statistiques pseudonymisées, seuils anti-réidentification, sans table email.',
   },
   {
     role: 'dpo',
     label: 'DPO',
     email: 'dpo@chpm.local',
     password: 'Dpo12345!',
-    description: 'Accès conformité, audit et demandes d’accès judiciaire.',
+    description: 'Rôle spécialisé : conformité, audit, registre RGPD et validation DPO du workflow judiciaire.',
   },
   {
     role: 'judicial_officer',
     label: 'Responsable accès judiciaire',
     email: 'judiciaire@chpm.local',
     password: 'Judiciaire123!',
-    description: 'Validation juridique et exécution du workflow coffre email.',
+    description: 'Rôle spécialisé : validation juridique et exécution contrôlée du coffre email.',
   },
   {
     role: 'technical_admin',
     label: 'Administrateur technique',
     email: 'tech@chpm.local',
     password: 'Tech12345!',
-    description: 'Maintenance conformité, audit technique et registre RGPD.',
+    description: 'Rôle spécialisé : maintenance, audit technique, terminaux globaux et registre technique.',
   },
 ]
+
+const operationalAccounts = computed(() =>
+  activeOperationalRoles
+    .map((role) => demoAccounts.find((account) => account.role === role))
+    .filter((account): account is (typeof demoAccounts)[number] => Boolean(account)),
+)
+
+const specializedAccounts = computed(() =>
+  specializedStaffRoles
+    .map((role) => demoAccounts.find((account) => account.role === role))
+    .filter((account): account is (typeof demoAccounts)[number] => Boolean(account)),
+)
 
 const form = reactive({
   email: demoAccounts[0]?.email ?? '',
@@ -106,14 +132,28 @@ async function submit(): Promise<void> {
                   : 'Les comptes internes utilisent une session serveur HTTP-only. Les répondants, eux, accèdent au questionnaire par lien signé généré dans la modération.' }}
               </p>
 
-              <div class="d-grid gap-3">
+              <div class="demo-card bg-white border-0 mb-4">
+                <p class="section-eyebrow mb-2">Hiérarchie des rôles actifs</p>
+                <h2 class="h5 fw-bold mb-3">Global → site → bâtiment</h2>
+                <div class="row g-3">
+                  <div v-for="(role, index) in activeOperationalRoles" :key="role" class="col-md-4">
+                    <div class="border rounded-4 p-3 h-100">
+                      <span class="badge-soft success">Niveau {{ index + 1 }}</span>
+                      <h3 class="h6 fw-bold mt-2 mb-1">{{ roleProfiles[role].label }}</h3>
+                      <p class="small muted mb-0">{{ roleProfiles[role].scopeLabel }}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="d-grid gap-3 mb-4">
                 <article
-                  v-for="account in demoAccounts"
+                  v-for="account in operationalAccounts"
                   :key="account.email"
                   class="demo-account-card"
                 >
                   <div>
-                    <span class="badge-soft">{{ account.label }}</span>
+                    <span class="badge-soft success">{{ account.label }}</span>
                     <h2 class="h5 fw-bold mt-2 mb-1">{{ account.email }}</h2>
                     <p class="small muted mb-0">{{ account.description }}</p>
                   </div>
@@ -126,6 +166,30 @@ async function submit(): Promise<void> {
                   </button>
                 </article>
               </div>
+
+              <details class="demo-card bg-white border-0">
+                <summary class="fw-bold">Afficher les rôles spécialisés de contrôle</summary>
+                <div class="d-grid gap-3 mt-3">
+                  <article
+                    v-for="account in specializedAccounts"
+                    :key="account.email"
+                    class="demo-account-card"
+                  >
+                    <div>
+                      <span class="badge-soft">{{ account.label }}</span>
+                      <h2 class="h5 fw-bold mt-2 mb-1">{{ account.email }}</h2>
+                      <p class="small muted mb-0">{{ account.description }}</p>
+                    </div>
+                    <button
+                      class="btn btn-outline-primary"
+                      type="button"
+                      @click="fillDemoAccount(account)"
+                    >
+                      Utiliser
+                    </button>
+                  </article>
+                </div>
+              </details>
             </div>
           </div>
         </div>
