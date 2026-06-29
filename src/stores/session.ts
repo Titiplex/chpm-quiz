@@ -1,7 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
-import { appConfig } from '@/config/env'
 import { getVisibleNavigation } from '@/config/navigation'
 import { apiRequest, ApiError } from '@/services/api'
 import { roleProfiles, type Permission, type UserRole } from '@shared/types/rbac'
@@ -16,7 +15,7 @@ export const useSessionStore = defineStore('session', () => {
   const isBootstrapped = ref(false)
 
   const isAuthenticated = computed(() => Boolean(user.value))
-  const currentRole = computed<UserRole>(() => user.value?.role ?? appConfig.defaultRole)
+  const currentRole = computed<UserRole>(() => user.value?.role ?? 'respondent')
   const currentProfile = computed(() => roleProfiles[currentRole.value])
   const visibleNavigation = computed(() =>
     user.value ? getVisibleNavigation(user.value.role) : [],

@@ -85,6 +85,6 @@ describe('App', () => {
     expect(wrapper.text()).toContain('CHPM Survey')
     expect(wrapper.text()).toContain('Produit connecté')
     expect(wrapper.text()).toContain('Connexion réelle à l’API centrale')
-    expect(wrapper.text()).toContain('admin@chpm.local')
+    expect(wrapper.text()).not.toContain('admin@chpm.local')
   })
 })

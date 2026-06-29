@@ -89,8 +89,8 @@ const specializedAccounts = computed(() =>
 )
 
 const form = reactive({
-  email: demoAccounts[0]?.email ?? '',
-  password: demoAccounts[0]?.password ?? '',
+  email: appConfig.demoMode ? demoAccounts[0]?.email ?? '' : '',
+  password: appConfig.demoMode ? demoAccounts[0]?.password ?? '' : '',
 })
 const isSubmitting = ref(false)
 
@@ -132,7 +132,7 @@ async function submit(): Promise<void> {
                   : 'Les comptes internes utilisent une session serveur HTTP-only. Les répondants, eux, accèdent au questionnaire par lien signé généré dans la modération.' }}
               </p>
 
-              <div class="demo-card bg-white border-0 mb-4">
+              <div v-if="appConfig.demoMode" class="demo-card bg-white border-0 mb-4">
                 <p class="section-eyebrow mb-2">Hiérarchie des rôles actifs</p>
                 <h2 class="h5 fw-bold mb-3">Global → site → bâtiment</h2>
                 <div class="row g-3">
@@ -146,7 +146,7 @@ async function submit(): Promise<void> {
                 </div>
               </div>
 
-              <div class="d-grid gap-3 mb-4">
+              <div v-if="appConfig.demoMode" class="d-grid gap-3 mb-4">
                 <article
                   v-for="account in operationalAccounts"
                   :key="account.email"
@@ -167,7 +167,7 @@ async function submit(): Promise<void> {
                 </article>
               </div>
 
-              <details class="demo-card bg-white border-0">
+              <details v-if="appConfig.demoMode" class="demo-card bg-white border-0">
                 <summary class="fw-bold">Afficher les rôles spécialisés de contrôle</summary>
                 <div class="d-grid gap-3 mt-3">
                   <article
