@@ -32,6 +32,17 @@ Comptes seedés :
 | Modérateur     | `moderateur@chpm.local` | `Moderator123!`  | Modération et questionnaire ; bâtiment Montréal A uniquement |
 | Répondant      | `repondant@chpm.local`  | `Respondent123!` | Questionnaire uniquement                                     |
 
+## Prérequis Node.js
+
+Le projet est verrouillé sur Node `22.18.x` et npm `10.9.x`. Vérifier la version active avant d’installer les dépendances :
+
+```sh
+node -v
+npm -v
+```
+
+Sous Windows, la commande `nvm` n’existe que si `nvm-windows` a été installé séparément. Sans gestionnaire de versions, installer directement Node.js `22.18.0` depuis l’installateur Windows officiel, puis rouvrir PowerShell. Avec un gestionnaire, sélectionner la version indiquée par `.node-version` / `.nvmrc`.
+
 ## Installation
 
 Front :
@@ -47,6 +58,8 @@ cd backend
 npm install
 cp .env.example .env
 ```
+
+La configuration locale fournie dans `backend/.env.example` est alignée avec `backend/docker-compose.yml` : PostgreSQL démarre avec la base `chpm_quiz` et l’utilisateur `chpm` / `chpm`. Les variables `OPERATIONAL_DATABASE_URL` et `IDENTITY_DATABASE_URL` utilisent donc ces mêmes identifiants en développement, avec une séparation par schéma PostgreSQL (`public` et `identity`). En production, remplacer ces URLs par des comptes séparés et des mots de passe forts.
 
 ## Base PostgreSQL
 
