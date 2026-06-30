@@ -21,7 +21,9 @@
     "prisma:migrate:test": "node scripts/prisma.mjs migrate reset --force --skip-generate && npm run prisma:generate && npm run db:seed",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "node scripts/prisma.mjs migrate reset --force",
-    "postinstall": "npm run prisma:generate"
+    "postinstall": "npm run prisma:generate",
+    "user:console": "tsx scripts/user-console.ts",
+    "preuser:console": "npm run prisma:generate"
   },
   "dependencies": {
     "@nestjs/common": "11.1.26",
