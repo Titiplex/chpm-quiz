@@ -53,6 +53,63 @@ npm run dev
 
 L’API écoute par défaut sur `http://localhost:3000/api`.
 
+
+## Console locale de gestion des comptes internes
+
+Les comptes à responsabilité (admin global, gestionnaire de site, modérateur, DPO, analyste, responsable judiciaire, administrateur technique) se créent côté serveur avec une console interactive locale. Elle n’expose aucune route HTTP, ne crée pas de comptes répondants et journalise les créations, mises à jour, désactivations et resets de mot de passe dans `audit_logs`.
+
+Démarrer depuis `backend` :
+
+```powershell
+npm run user:console
+```
+
+La console ouvre un prompt :
+
+```text
+chpm-users>>
+```
+
+Commandes disponibles :
+
+```text
+create          créer ou mettre à jour un compte interne
+disable         désactiver un compte et révoquer ses sessions
+reset-password  réinitialiser le mot de passe et révoquer ses sessions
+list            lister les comptes internes sans afficher de secret
+help            afficher l’aide
+exit            quitter
+```
+
+Sécurité appliquée par la console :
+
+- exécution uniquement dans un terminal interactif local ;
+- blocage par défaut en `NODE_ENV=production` / `APP_ENV=production` ;
+- confirmation textuelle supplémentaire si la base PostgreSQL ne pointe pas vers `localhost` ;
+- rôles humains explicitement autorisés, sans `respondent` ni `service_account` ;
+- périmètre obligatoire pour les rôles locaux : bâtiment pour `moderator`, site pour `site_manager` ;
+- mot de passe saisi masqué ou généré automatiquement ;
+- politique minimale : 12 caractères, majuscule, minuscule, chiffre et caractère spécial ;
+- hash bcrypt avec 12 rounds minimum ;
+- révocation des sessions après création/mise à jour, reset ou désactivation ;
+- impossibilité de désactiver le dernier administrateur global actif ;
+- confirmation textuelle avant toute mutation ;
+- audit systématique avec source `local-user-console`.
+
+Exemple d’utilisation :
+
+```text
+chpm-users>> create
+Email : admin.site@chpm.local
+Nom affiché : Admin Site
+Rôle : 2
+Site : 1
+Générer un mot de passe temporaire fort automatiquement ? [O/n]
+Tapez "CREER" pour appliquer : CREER
+```
+
+Le mot de passe généré est affiché une seule fois et doit être transmis par un canal sûr.
+
 ## Comptes seedés
 
 - `admin@chpm.local` / `Admin123!`
