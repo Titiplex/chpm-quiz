@@ -715,3 +715,34 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* WCAG 2.2 AA hardening: visible keyboard focus without relying on color alone. */
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 3px solid currentColor;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.likert-choice-label {
+  min-height: 2.5rem;
+}
+
+@media (max-width: 576px) {
+  .likert-scale {
+    grid-template-columns: 1fr;
+  }
+
+  .likert-choice {
+    align-items: stretch;
+  }
+
+  .likert-dot,
+  .likert-extra-button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .table-card {
+    overflow-x: auto;
+  }
+}

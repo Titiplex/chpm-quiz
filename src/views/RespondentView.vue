@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
 import KpiCard from '@/components/common/KpiCard.vue'
+import { t } from '@/i18n'
 import { useRespondentSessionStore } from '@/stores/respondentSession'
 import type { ApiPopupDefinition, RespondentQuestion, RespondentQuestionGroup } from '@shared/types/api'
 
@@ -242,6 +243,18 @@ function likertLabel(scale: LikertScaleForDisplay, value: number): string {
   return index < neutralIndex
     ? `Vers « ${scale.leftAnchor || 'le minimum'} »`
     : `Vers « ${scale.rightAnchor || 'le maximum'} »`
+}
+
+function questionDomId(question: RespondentQuestion, suffix: string): string {
+  return `question-${question.id}-${suffix}`
+}
+
+function questionHelpIds(question: RespondentQuestion): string {
+  return [
+    question.helperText ? questionDomId(question, 'help') : null,
+    question.isRequired ? questionDomId(question, 'required') : null,
+    question.responseType.includes('free_text') ? questionDomId(question, 'free-text-help') : null,
+  ].filter(Boolean).join(' ')
 }
 
 async function previousPage(): Promise<void> {
@@ -494,7 +507,7 @@ async function confirmSubmit(): Promise<void> {
                 </div>
 
                 <div class="question-help mb-4" role="note">
-                  <strong>Notice d’information avant démarrage</strong>
+                  <strong>{{ t('respondent.notice.title') }}</strong>
                   <ul class="small muted mb-3 mt-2 ps-3">
                     <li>Finalité : {{ respondent.session.legalNotice?.finality ?? respondent.session.questionnaire.finality }}</li>
                     <li>Durée estimée : {{ respondent.session.legalNotice?.estimatedDurationMinutes ?? 'quelques' }} minute(s), avec reprise possible depuis le même lien tant que la soumission finale n’est pas faite.</li>
@@ -509,7 +522,7 @@ async function confirmSubmit(): Promise<void> {
                       type="checkbox"
                       :disabled="respondent.isLocked"
                     />
-                    <span class="small">J’ai lu la notice d’information et je comprends que la soumission finale verrouille mes réponses pseudonymisées.</span>
+                    <span class="small">{{ t('respondent.notice.consent') }}</span>
                   </label>
                 </div>
 
@@ -544,10 +557,10 @@ async function confirmSubmit(): Promise<void> {
                     </div>
                     <div class="d-flex gap-2">
                       <button class="btn btn-sm btn-outline-primary" type="button" :disabled="isFirstPage" @click="previousPage">
-                        Précédent
+                        {{ t('respondent.actions.previous') }}
                       </button>
                       <button class="btn btn-sm btn-outline-primary" type="button" :disabled="isLastPage" @click="nextPage">
-                        Suivant
+                        {{ t('respondent.actions.next') }}
                       </button>
                     </div>
                   </div>
@@ -556,13 +569,14 @@ async function confirmSubmit(): Promise<void> {
                   <div v-for="question in currentPage.questions" :key="question.id" class="question-row mb-3">
                     <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
                       <span class="badge-soft">{{ question.code }} · {{ question.responseType }}</span>
-                      <span v-if="question.isRequired" class="badge-soft warning">obligatoire</span>
+                      <span v-if="question.isRequired" class="badge-soft warning">{{ t('respondent.required') }}</span>
                       <span v-if="question.popupDefinitions?.length" class="badge-soft warning">
                         {{ question.popupDefinitions.length }} terme(s) expliqué(s)
                       </span>
                     </div>
-                    <h2 class="h5 fw-bold">{{ question.label }}</h2>
-                    <p v-if="question.helperText" class="muted">{{ question.helperText }}</p>
+                    <h2 :id="questionDomId(question, 'label')" class="h5 fw-bold">{{ question.label }}</h2>
+                    <p v-if="question.helperText" :id="questionDomId(question, 'help')" class="muted">{{ question.helperText }}</p>
+                    <span v-if="question.isRequired" :id="questionDomId(question, 'required')" class="visually-hidden">{{ t('respondent.required') }}</span>
 
                     <div v-if="question.popupDefinitions?.length" class="info-bubble-list mb-3" aria-label="Termes expliqués pour cette question">
                       <button
@@ -599,13 +613,16 @@ async function confirmSubmit(): Promise<void> {
                       <p class="small muted mb-2">
                         {{ question.likertScale.leftAnchor }} · {{ question.likertScale.rightAnchor }}
                       </p>
-                      <div class="likert-scale" role="group" :aria-label="`Échelle Likert ${question.likertScale.points} points`">
+                      <div class="likert-scale" role="radiogroup" :aria-labelledby="questionDomId(question, 'label')" :aria-describedby="questionHelpIds(question)" :aria-label="t('respondent.likert.group', { points: question.likertScale.points, label: question.label })">
                         <div v-for="value in likertValues(question.likertScale)" :key="value" class="likert-choice">
                           <span class="likert-choice-label">{{ likertLabel(question.likertScale, value) }}</span>
                           <button
                             class="likert-dot border-0"
+                            role="radio"
+                            :aria-checked="Number(questionValue(question)) === value"
                             :class="{ active: Number(questionValue(question)) === value }"
                             type="button"
+                            :aria-describedby="questionHelpIds(question)"
                             :aria-label="`${likertLabel(question.likertScale, value)} — valeur ${value}`"
                             :disabled="respondent.isLocked"
                             @click="save(question, value)"
@@ -635,6 +652,8 @@ async function confirmSubmit(): Promise<void> {
                         class="btn text-start"
                         :class="questionValue(question) === option.value ? 'btn-primary' : 'btn-outline-primary'"
                         type="button"
+                        :aria-pressed="questionValue(question) === option.value"
+                        :aria-describedby="questionHelpIds(question)"
                         :disabled="respondent.isLocked"
                         @click="save(question, option.value)"
                       >
@@ -649,6 +668,8 @@ async function confirmSubmit(): Promise<void> {
                         class="btn text-start"
                         :class="isOptionSelected(question, option.value) ? 'btn-primary' : 'btn-outline-primary'"
                         type="button"
+                        :aria-pressed="isOptionSelected(question, option.value)"
+                        :aria-describedby="questionHelpIds(question)"
                         :disabled="respondent.isLocked"
                         @click="toggleMultipleChoice(question, option.value)"
                       >
@@ -656,39 +677,50 @@ async function confirmSubmit(): Promise<void> {
                       </button>
                     </div>
 
-                    <input
-                      v-else-if="question.responseType === 'number'"
-                      class="form-control mb-3"
-                      type="number"
-                      :disabled="respondent.isLocked"
-                      :value="String(questionValue(question) ?? '')"
-                      @change="save(question, Number(($event.target as HTMLInputElement).value))"
-                    />
+                    <div v-else-if="question.responseType === 'number'" class="mb-3">
+                      <label class="visually-hidden" :for="questionDomId(question, 'input')">{{ question.label }}</label>
+                      <input
+                        :id="questionDomId(question, 'input')"
+                        class="form-control"
+                        type="number"
+                        :aria-describedby="questionHelpIds(question)"
+                        :disabled="respondent.isLocked"
+                        :value="String(questionValue(question) ?? '')"
+                        @change="save(question, Number(($event.target as HTMLInputElement).value))"
+                      />
+                    </div>
 
-                    <input
-                      v-else-if="question.responseType === 'date'"
-                      class="form-control mb-3"
-                      type="date"
-                      :disabled="respondent.isLocked"
-                      :value="String(questionValue(question) ?? '')"
-                      @change="save(question, ($event.target as HTMLInputElement).value)"
-                    />
+                    <div v-else-if="question.responseType === 'date'" class="mb-3">
+                      <label class="visually-hidden" :for="questionDomId(question, 'input')">{{ question.label }}</label>
+                      <input
+                        :id="questionDomId(question, 'input')"
+                        class="form-control"
+                        type="date"
+                        :aria-describedby="questionHelpIds(question)"
+                        :disabled="respondent.isLocked"
+                        :value="String(questionValue(question) ?? '')"
+                        @change="save(question, ($event.target as HTMLInputElement).value)"
+                      />
+                    </div>
 
                     <div v-else-if="question.responseType === 'information'" class="alert alert-info rounded-4 mb-3">
                       Information affichée, aucune réponse attendue.
                     </div>
 
                     <div v-else-if="question.responseType === 'free_text' || question.responseType === 'free_text_long' || question.responseType === 'free_text_short'">
+                      <label class="visually-hidden" :for="questionDomId(question, 'textarea')">{{ question.label }}</label>
                       <textarea
+                        :id="questionDomId(question, 'textarea')"
                         class="form-control mb-2"
+                        :aria-describedby="questionHelpIds(question)"
                         rows="4"
                         :disabled="respondent.isLocked"
                         :value="String(questionValue(question) ?? '')"
                         @input="queueTextAutosave(question, ($event.target as HTMLTextAreaElement).value)"
                         @blur="flushQuestionAutosave(question)"
                       ></textarea>
-                      <p class="small muted mb-3">
-                        Sauvegarde automatique après saisie. Évitez les noms, emails, téléphones et détails directement identifiants.
+                      <p :id="questionDomId(question, 'free-text-help')" class="small muted mb-3">
+                        {{ t('respondent.freeText.help') }}
                       </p>
                     </div>
                   </div>
@@ -711,10 +743,10 @@ async function confirmSubmit(): Promise<void> {
 
                   <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
                     <button class="btn btn-outline-primary" type="button" :disabled="isFirstPage" @click="previousPage">
-                      Précédent
+                      {{ t('respondent.actions.previous') }}
                     </button>
                     <button v-if="!isLastPage" class="btn btn-primary" type="button" @click="nextPage">
-                      Question suivante
+                      {{ t('respondent.actions.next') }}
                     </button>
                     <button
                       v-else
@@ -723,21 +755,21 @@ async function confirmSubmit(): Promise<void> {
                       :disabled="!canSubmit"
                       @click="openSubmitConfirmation"
                     >
-                      Préparer la soumission finale
+                      {{ t('respondent.actions.prepareSubmit') }}
                     </button>
                   </div>
 
-                  <div v-if="showSubmitConfirmation" class="question-help mt-4" role="alertdialog" aria-modal="false" aria-labelledby="submit-confirm-title">
-                    <h2 id="submit-confirm-title" class="h5 fw-bold">Confirmer la soumission définitive</h2>
+                  <div v-if="showSubmitConfirmation" class="question-help mt-4" role="alertdialog" aria-modal="true" aria-labelledby="submit-confirm-title">
+                    <h2 id="submit-confirm-title" class="h5 fw-bold">{{ t('respondent.submit.title') }}</h2>
                     <p class="muted">
-                      Après confirmation, la session sera verrouillée : tu pourras consulter l’accusé de réception, mais tu ne pourras plus modifier ni soumettre une deuxième fois.
+                      {{ t('respondent.submit.body') }}
                     </p>
                     <div class="d-flex flex-wrap gap-2">
                       <button class="btn btn-primary" type="button" :disabled="isSubmitting" @click="confirmSubmit">
-                        {{ isSubmitting ? 'Soumission…' : 'Je confirme et je verrouille mes réponses' }}
+                        {{ isSubmitting ? 'Soumission…' : t('respondent.submit.confirm') }}
                       </button>
                       <button class="btn btn-outline-primary" type="button" :disabled="isSubmitting" @click="showSubmitConfirmation = false">
-                        Revenir au questionnaire
+                        {{ t('respondent.submit.back') }}
                       </button>
                     </div>
                   </div>
