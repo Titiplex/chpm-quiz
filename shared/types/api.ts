@@ -592,6 +592,19 @@ export interface IdentityVaultStatusResponse {
   }
 }
 
+export interface SecureDocumentDescriptor {
+  id: string
+  documentType: string
+  storageRef: string
+  algorithm: string
+  keyRef: string
+  fingerprint: string
+  sizeBytes: number
+  expiresAt: string
+  status: string
+  warning: string
+}
+
 export interface JudicialAccessRequestRecord {
   id: string
   requestReference: string
@@ -604,8 +617,15 @@ export interface JudicialAccessRequestRecord {
   legalValidationUserId: string | null
   executedByUserId: string | null
   status: 'received' | 'validated' | 'rejected' | 'executed' | 'closed'
+  dpoValidatedAt?: string | null
+  legalValidatedAt?: string | null
   executedAt: string | null
+  closedAt?: string | null
   exportFingerprint: string | null
+  secureDocumentId?: string | null
+  exportExpiresAt?: string | null
+  exportSizeBytes?: number | null
+  closureReport?: string | null
   comments: string | null
 }
 
@@ -624,16 +644,7 @@ export interface CreateJudicialAccessRequest {
 
 export interface JudicialAccessRequestResponse {
   judicialRequest: JudicialAccessRequestRecord
-  encryptedExport?: {
-    algorithm: string
-    keyRef: string
-    iv: string
-    authTag: string
-    ciphertext: string
-    fingerprint: string
-    expiresInMinutes: number
-    warning: string
-  }
+  secureDocument?: SecureDocumentDescriptor
 }
 
 
@@ -711,8 +722,10 @@ export interface TechnicalRegisterResponse {
       dataCategories: string[]
       recipients: string[]
       storage: string
+      retention?: string
     }>
     safeguards: string[]
+    jobs?: string[]
   }
 }
 
@@ -720,6 +733,7 @@ export interface RetentionPolicyResponse {
   policy: {
     generatedAt: string
     rules: Array<{ object: string; retention: string; action: string; endpoint: string }>
+    parameters?: Record<string, number>
     knownLimitations: string[]
   }
 }
@@ -728,6 +742,10 @@ export interface ComplianceMaintenanceResponse {
   result: {
     expiredCount?: number
     deletedDraftSessionCount?: number
+    purgedTokenCount?: number
+    purgedCount?: number
+    deletedResponseSessionCount?: number
+    purgedStorageRefs?: string[]
     cutoff?: string
     executedAt: string
   }
@@ -744,8 +762,11 @@ export interface PseudonymizedExportResponse {
     suppressedByThreshold?: boolean
     displayValue?: string
     containsDirectEmail: false
+    containsEmailHash?: false
+    containsEncryptedEmail?: false
     identityVaultExcluded: true
     fingerprint: string
+    secureDocument?: SecureDocumentDescriptor
     rows: Array<{
       publicCode: string
       questionnaireId: string
@@ -766,10 +787,14 @@ export interface AuditLogsResponse {
   logs: Array<{
     id: string
     actorUserId: string | null
+    actorRole?: string | null
     action: string
     entityType: string
     entityId: string | null
+    targetLabel?: string | null
     publicCode: string | null
+    justification?: string | null
+    correlationId?: string | null
     metadata: Record<string, unknown> | null
     ipAddress: string | null
     userAgent: string | null

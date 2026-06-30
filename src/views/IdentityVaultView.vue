@@ -18,7 +18,7 @@ const status = ref<IdentityVaultStatusResponse['status'] | null>(null)
 const requests = ref<JudicialAccessRequestRecord[]>([])
 const message = ref<string | null>(null)
 const error = ref<string | null>(null)
-const encryptedExport = ref<JudicialAccessRequestResponse['encryptedExport'] | null>(null)
+const secureDocument = ref<JudicialAccessRequestResponse['secureDocument'] | null>(null)
 const isLoading = ref(false)
 
 const form = reactive({
@@ -98,8 +98,8 @@ async function executeRequest(id: string): Promise<void> {
     const response = await apiRequest<JudicialAccessRequestResponse>(`/judicial-access/requests/${id}/execute`, {
       method: 'POST',
     })
-    encryptedExport.value = response.encryptedExport ?? null
-    message.value = `Export chiffré exécuté pour ${response.judicialRequest.requestReference}. Aucun email en clair n’est affiché.`
+    secureDocument.value = response.secureDocument ?? null
+    message.value = `Export chiffré placé dans le coffre documentaire pour ${response.judicialRequest.requestReference}. Aucun email ni ciphertext n’est affiché.`
   })
 }
 
@@ -107,7 +107,7 @@ async function closeRequest(id: string): Promise<void> {
   await runWorkflow(async () => {
     const response = await apiRequest<JudicialAccessRequestResponse>(`/judicial-access/requests/${id}/close`, {
       method: 'POST',
-      body: { comments: 'Clôture après transmission sécurisée.' },
+      body: { closureReport: 'Clôture après transmission sécurisée et vérification de l’empreinte en coffre documentaire.' },
     })
     message.value = `Demande ${response.judicialRequest.requestReference} clôturée.`
   })
@@ -138,6 +138,11 @@ async function runWorkflow(action: () => Promise<void>, refreshAfter = true): Pr
   } finally {
     isLoading.value = false
   }
+}
+
+function formatDate(value: string | null | undefined): string {
+  if (!value) return '—'
+  return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
 }
 
 function statusLabel(value: string): string {
@@ -256,7 +261,10 @@ function statusLabel(value: string): string {
                       <div class="small">DPO : {{ request.dpoValidationUserId ? 'oui' : 'non' }}</div>
                       <div class="small">Juridique : {{ request.legalValidationUserId ? 'oui' : 'non' }}</div>
                     </td>
-                    <td class="small muted">{{ request.exportFingerprint ?? '—' }}</td>
+                    <td class="small muted">
+                      <div>{{ request.exportFingerprint ?? '—' }}</div>
+                      <div v-if="request.secureDocumentId">coffre : {{ request.secureDocumentId }}</div>
+                    </td>
                     <td>
                       <div class="d-flex flex-wrap gap-2">
                         <button class="btn btn-sm btn-outline-primary rounded-pill" type="button" :disabled="!canValidateDpo || isLoading" @click="validateDpo(request.id)">
@@ -280,12 +288,12 @@ function statusLabel(value: string): string {
           </div>
         </div>
 
-        <div v-if="encryptedExport" class="col-12">
+        <div v-if="secureDocument" class="col-12">
           <div class="demo-card border border-warning">
-            <p class="section-eyebrow mb-2">Export minimal chiffré</p>
-            <h2 class="h5 fw-bold">Empreinte {{ encryptedExport.fingerprint }}</h2>
-            <p class="muted mb-2">{{ encryptedExport.warning }}</p>
-            <code class="small d-block text-break">{{ encryptedExport.algorithm }} · {{ encryptedExport.keyRef }} · expiration {{ encryptedExport.expiresInMinutes }} min</code>
+            <p class="section-eyebrow mb-2">Coffre documentaire sécurisé</p>
+            <h2 class="h5 fw-bold">Empreinte {{ secureDocument.fingerprint }}</h2>
+            <p class="muted mb-2">{{ secureDocument.warning }}</p>
+            <code class="small d-block text-break">{{ secureDocument.algorithm }} · {{ secureDocument.keyRef }} · {{ secureDocument.storageRef }} · expiration {{ formatDate(secureDocument.expiresAt) }}</code>
           </div>
         </div>
       </div>

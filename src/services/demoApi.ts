@@ -2407,6 +2407,9 @@ function updateJudicialRequest(id: string, action: string): JudicialAccessReques
     request.executedAt = nowIso()
     request.executedByUserId = `demo-user-${currentUser?.role ?? 'judicial_officer'}`
     request.exportFingerprint = `demo-sha256-${Math.random().toString(16).slice(2).padEnd(16, '0')}`
+    request.secureDocumentId = `demo-secure-doc-${request.id}`
+    request.exportExpiresAt = addMinutesIso(15)
+    request.exportSizeBytes = 256
   }
 
   if (action === 'close') {
@@ -2424,15 +2427,17 @@ function updateJudicialRequest(id: string, action: string): JudicialAccessReques
   return {
     judicialRequest: request,
     ...(action === 'execute' ? {
-      encryptedExport: {
+      secureDocument: {
+        id: request.secureDocumentId ?? `demo-secure-doc-${request.id}`,
+        documentType: 'judicial_identity_export',
+        storageRef: `secure-document:judicial_identity_export:${request.id}`,
         algorithm: 'aes-256-gcm',
-        keyRef: 'demo:JUDICIAL_EXPORT_KEY_B64',
-        iv: 'demo-iv',
-        authTag: 'demo-auth-tag',
-        ciphertext: 'demo-export-chiffre-sans-email-en-clair-dans-interface',
+        keyRef: 'demo:SECURE_DOCUMENT_KEY_B64',
         fingerprint: request.exportFingerprint ?? 'demo-fingerprint',
-        expiresInMinutes: 15,
-        warning: 'Export fictif chiffré : aucun email en clair n’est affiché dans l’interface de démonstration.',
+        sizeBytes: request.exportSizeBytes ?? 256,
+        expiresAt: request.exportExpiresAt ?? addMinutesIso(15),
+        status: 'available',
+        warning: 'Export fictif conservé dans le coffre documentaire ; aucun ciphertext n’est renvoyé.',
       },
     } : {}),
   }
