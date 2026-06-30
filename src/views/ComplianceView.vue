@@ -99,6 +99,15 @@ function formatDate(value: string | null | undefined): string {
               <button class="btn btn-outline-danger rounded-pill" type="button" :disabled="compliance.status === 'saving'" @click="compliance.cleanupDrafts">
                 Nettoyer les brouillons expirés
               </button>
+              <button class="btn btn-outline-danger rounded-pill" type="button" :disabled="compliance.status === 'saving'" @click="compliance.purgeExpiredTokens">
+                Purger les tokens expirés
+              </button>
+              <button class="btn btn-outline-danger rounded-pill" type="button" :disabled="compliance.status === 'saving'" @click="compliance.purgeExpiredExports">
+                Purger les exports expirés
+              </button>
+              <button class="btn btn-outline-danger rounded-pill" type="button" :disabled="compliance.status === 'saving'" @click="compliance.purgeOutOfRetentionData">
+                Purger les données hors conservation
+              </button>
             </div>
             <p v-else class="small muted mt-4 mb-0">
               Votre rôle peut consulter la conformité mais pas exécuter les traitements de maintenance.
@@ -119,7 +128,10 @@ function formatDate(value: string | null | undefined): string {
 
             <div v-if="compliance.exportPayload" class="mt-4 p-3 rounded-4 border bg-white">
               <strong>{{ compliance.exportPayload.questionnaire.title }}</strong>
-              <div class="small muted">{{ compliance.exportPayload.displayValue ?? `${compliance.exportPayload.rowCount} ligne(s)` }} · empreinte {{ compliance.exportPayload.fingerprint }}</div>
+              <div class="small muted">{{ compliance.exportPayload.displayValue ?? `${compliance.exportPayload.rowCount} ligne(s)` }} · empreinte fichier {{ compliance.exportPayload.fingerprint }}</div>
+              <div v-if="compliance.exportPayload.secureDocument" class="small muted mt-1">
+                Coffre : {{ compliance.exportPayload.secureDocument.storageRef }} · expiration {{ formatDate(compliance.exportPayload.secureDocument.expiresAt) }}
+              </div>
               <div v-if="compliance.exportPayload.suppressedByThreshold" class="alert alert-warning rounded-4 py-2 mt-2 mb-0">
                 Export détaillé masqué : effectif inférieur au seuil anti-réidentification ({{ compliance.exportPayload.threshold }}).
               </div>
@@ -150,6 +162,8 @@ function formatDate(value: string | null | undefined): string {
                     <th>Entité</th>
                     <th>Code</th>
                     <th>Acteur</th>
+                    <th>Justification</th>
+                    <th>Correlation</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -158,10 +172,12 @@ function formatDate(value: string | null | undefined): string {
                     <td><span class="badge-soft warning">{{ log.action }}</span></td>
                     <td>{{ log.entityType }}</td>
                     <td class="fw-semibold">{{ log.publicCode ?? '—' }}</td>
-                    <td class="small muted">{{ log.actor?.displayName ?? log.actorUserId ?? 'système' }}</td>
+                    <td class="small muted">{{ log.actor?.displayName ?? log.actorUserId ?? 'système' }} <span v-if="log.actorRole">({{ log.actorRole }})</span></td>
+                    <td class="small muted">{{ log.justification ?? '—' }}</td>
+                    <td class="small muted">{{ log.correlationId ?? '—' }}</td>
                   </tr>
                   <tr v-if="!compliance.auditLogs.length">
-                    <td colspan="5" class="text-center muted py-4">Aucun événement d’audit consultable.</td>
+                    <td colspan="7" class="text-center muted py-4">Aucun événement d’audit consultable.</td>
                   </tr>
                 </tbody>
               </table>

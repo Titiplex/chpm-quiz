@@ -57,6 +57,24 @@ export const useComplianceStore = defineStore('compliance', () => {
     })
   }
 
+  async function purgeExpiredTokens(): Promise<void> {
+    await runMaintenance('/compliance/maintenance/purge-expired-tokens', (response) => {
+      message.value = `${response.result.purgedTokenCount ?? 0} token(s) expiré(s) neutralisé(s).`
+    })
+  }
+
+  async function purgeExpiredExports(): Promise<void> {
+    await runMaintenance('/compliance/maintenance/purge-expired-exports', (response) => {
+      message.value = `${response.result.purgedCount ?? 0} export(s) expiré(s) purgé(s).`
+    })
+  }
+
+  async function purgeOutOfRetentionData(): Promise<void> {
+    await runMaintenance('/compliance/maintenance/purge-out-of-retention-data', (response) => {
+      message.value = `${response.result.deletedResponseSessionCount ?? 0} session(s) hors conservation supprimée(s).`
+    })
+  }
+
   async function fetchPseudonymizedExport(questionnaireId?: string): Promise<void> {
     status.value = 'saving'
     error.value = null
@@ -115,6 +133,9 @@ export const useComplianceStore = defineStore('compliance', () => {
     fetchAll,
     expireInvitations,
     cleanupDrafts,
+    purgeExpiredTokens,
+    purgeExpiredExports,
+    purgeOutOfRetentionData,
     fetchPseudonymizedExport,
   }
 })
