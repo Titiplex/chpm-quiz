@@ -38,7 +38,8 @@
     "prisma:validate": "npm --prefix backend run prisma:validate",
     "prisma:migrate": "npm --prefix backend run prisma:migrate",
     "prisma:migrate:test": "npm --prefix backend run prisma:migrate:test",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:a11y": "vitest run src/__tests__/accessibility.static.spec.ts"
   },
   "dependencies": {
     "bootstrap": "5.3.8",
