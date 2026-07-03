@@ -7,6 +7,7 @@ import type { Request } from 'express'
 import { AuditService } from '../audit/audit.service'
 import { assertCanAccessQuestionnaire } from '../common/access-scope'
 import type { AuthenticatedUser } from '../auth/auth.types'
+import { ObservabilityService } from '../observability/observability.service'
 import { PrismaService } from '../prisma/prisma.service'
 
 const activeInvitationStatuses = ['sent', 'opened', 'in_progress', 'draft'] as const
@@ -18,6 +19,7 @@ export class ComplianceService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly config: ConfigService,
+    private readonly observability: ObservabilityService,
   ) {}
 
   technicalRegister(user: AuthenticatedUser) {
@@ -251,6 +253,15 @@ export class ComplianceService {
           buildingId: user.buildingId,
         },
       },
+    })
+
+    this.observability.recordPseudonymizedExport({
+      actorRole: user.role,
+      rowCount: rows.length,
+      sourceRowCount: submissions.length,
+      suppressedByThreshold,
+      questionnaireId: questionnaire.id,
+      fingerprint,
     })
 
     return {
