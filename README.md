@@ -125,3 +125,24 @@ Le workflow `.github/workflows/deploy.yml` active `VITE_STATIC_PAGES_DEMO=true`.
 - `/questionnaire` : ITQ patient autonome, sans jeton serveur, sans authentification et sans appel API.
 
 Le questionnaire statique publié est l’International Trauma Questionnaire (ITQ), version `1.0-cn2r`, avec les 2 questions de contexte et les 18 items cotés en pages séparées. Les autres modules applicatifs restent présents dans le code pour le build connecté, mais ils sont exclus du routeur GitHub Pages. Le mode statique utilise aussi `VITE_ROUTER_MODE=hash` pour éviter les erreurs 404 au rechargement d’une URL Pages.
+
+## Préproduction containerisée
+
+Les passes production ajoutent une stack reproductible :
+
+```sh
+cp .env.preprod.example .env.preprod
+# renseigner secrets, TLS_CERT_DIR, URLs DB et provider email
+npm run preprod:up
+curl -k https://<host>/healthz
+```
+
+Fichiers clés :
+
+- `backend/Dockerfile` : image API NestJS avec healthcheck ;
+- `Dockerfile.frontend` : build statique Vue servi par Nginx ;
+- `docker-compose.preprod.yml` : Postgres, migrator Prisma, backend, frontend, reverse proxy TLS ;
+- `ops/nginx/reverse-proxy.conf` : terminaison TLS, HSTS, logs JSON ;
+- `docs/production/` et `docs/recette/` : procédures et matrices go/no-go.
+
+Le go production réel reste conditionné à la validation DPO, au test de restauration, à la recette sécurité/accessibilité et à l'authentification interne définitive.
