@@ -40,7 +40,11 @@
     "prisma:migrate:test": "npm --prefix backend run prisma:migrate:test",
     "test:watch": "vitest",
     "test:a11y": "vitest run src/__tests__/accessibility.static.spec.ts",
-    "user:console": "npm --prefix backend run user:console"
+    "test:e2e": "run-s test:frontend:functional test:backend:functional",
+    "preprod:up": "docker compose -f docker-compose.preprod.yml --env-file .env.preprod up --build -d",
+    "preprod:down": "docker compose -f docker-compose.preprod.yml --env-file .env.preprod down",
+    "preprod:logs": "docker compose -f docker-compose.preprod.yml --env-file .env.preprod logs -f --tail=200",
+    "backup:encrypted": "docker compose -f docker-compose.preprod.yml --env-file .env.preprod run --rm encrypted-backup"
   },
   "dependencies": {
     "bootstrap": "5.3.8",
