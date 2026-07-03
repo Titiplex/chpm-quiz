@@ -4,7 +4,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import bcrypt = require('bcryptjs')
-import type { Request, Response } from 'express'
+import type { CookieOptions, Request, Response } from 'express'
 
 import { PrismaService } from '../prisma/prisma.service'
 import { roleProfiles } from './role-permissions'
@@ -74,11 +74,8 @@ export class AuthService {
     })
 
     response.cookie(this.cookieName, rawToken, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: this.config.get<string>('COOKIE_SECURE', 'false') === 'true',
+      ...this.cookieOptions(),
       maxAge: this.sessionTtlMs(),
-      path: '/',
     })
 
     return this.toPublicProfile(user)
@@ -118,7 +115,7 @@ export class AuthService {
 
   async logout(sessionId: string, response: Response): Promise<void> {
     await this.prisma.session.delete({ where: { id: sessionId } }).catch(() => undefined)
-    response.clearCookie(this.cookieName, { path: '/' })
+    response.clearCookie(this.cookieName, this.cookieOptions())
   }
 
   toPublicProfile(
@@ -140,6 +137,17 @@ export class AuthService {
             timezone: user.building.timezone,
           }
         : null,
+    }
+  }
+
+  private cookieOptions(): CookieOptions {
+    const sameSite = (this.config.get<string>('COOKIE_SAMESITE', 'lax') ?? 'lax').toLowerCase()
+
+    return {
+      httpOnly: true,
+      sameSite: sameSite === 'strict' ? 'strict' : sameSite === 'none' ? 'none' : 'lax',
+      secure: this.config.get<boolean>('COOKIE_SECURE', false) === true || this.config.get<string>('COOKIE_SECURE') === 'true',
+      path: '/',
     }
   }
 

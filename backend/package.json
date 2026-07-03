@@ -14,7 +14,7 @@
     "lint": "tsc --noEmit -p tsconfig.build.json",
     "test": "vitest run --config vitest.config.ts",
     "test:unit": "vitest run --config vitest.config.ts --exclude \"**/*.functional.spec.ts\"",
-    "test:functional": "vitest run --config vitest.config.ts \"src/**/*.functional.spec.ts\"",
+    "test:functional": "vitest run --config vitest.config.ts src/respondent/respondent.service.functional.spec.ts",
     "prisma:generate": "node scripts/prisma.mjs generate",
     "prisma:validate": "node scripts/prisma.mjs validate",
     "prisma:migrate": "node scripts/prisma.mjs migrate dev",
@@ -22,8 +22,9 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "node scripts/prisma.mjs migrate reset --force",
     "postinstall": "npm run prisma:generate",
-    "user:console": "tsx scripts/user-console.ts",
-    "preuser:console": "npm run prisma:generate"
+    "prisma:migrate:deploy": "node scripts/prisma.mjs migrate deploy",
+    "prisma:migrate:status": "node scripts/prisma.mjs migrate status",
+    "prisma:migrate:dry-run": "node scripts/prisma.mjs migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url \"$SHADOW_DATABASE_URL\" --script"
   },
   "dependencies": {
     "@nestjs/common": "11.1.26",

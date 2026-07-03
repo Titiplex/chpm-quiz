@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
 
+import { validateEnvironment } from './config/env.validation'
+
 import { AuditModule } from './audit/audit.module'
 import { AuthModule } from './auth/auth.module'
 import { BuildingsModule } from './buildings/buildings.module'
@@ -9,6 +11,7 @@ import { IdentityVaultModule } from './identity-vault/identity-vault.module'
 import { JudicialModule } from './judicial/judicial.module'
 import { ModerationModule } from './moderation/moderation.module'
 import { NotificationsModule } from './notifications/notifications.module'
+import { ObservabilityModule } from './observability/observability.module'
 import { PrismaModule } from './prisma/prisma.module'
 import { QuestionnairesModule } from './questionnaires/questionnaires.module'
 import { RespondentModule } from './respondent/respondent.module'
@@ -23,6 +26,7 @@ import { VersionsModule } from './versions/versions.module'
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env'],
+      validate: validateEnvironment,
     }),
     PrismaModule,
     SecurityModule,
@@ -35,6 +39,7 @@ import { VersionsModule } from './versions/versions.module'
     VersionsModule,
     ModerationModule,
     NotificationsModule,
+    ObservabilityModule,
     RespondentModule,
     StatsModule,
     TerminalModule,
