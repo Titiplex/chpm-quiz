@@ -1,0 +1,258 @@
+openapi: 3.1.0
+info:
+  title: CHPM Survey API
+  version: 0.9.0-preprod
+  description: API REST JSON pour questionnaires adaptatifs, invitations, passation répondant, statistiques, conformité et accès judiciaire.
+servers:
+  - url: /api
+security:
+  - sessionCookie: []
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: chpm_session
+    respondentToken:
+      type: apiKey
+      in: query
+      name: token
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [statusCode, error, path, timestamp]
+      properties:
+        statusCode: { type: integer }
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details:
+              type: array
+              items: { type: string }
+        path: { type: string }
+        timestamp: { type: string, format: date-time }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+    PublicUser:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        displayName: { type: string }
+        role:
+          type: string
+          enum: [admin, moderator, site_manager, questionnaire_admin, analyst, dpo, judicial_officer, technical_admin, service_account, respondent]
+        permissions:
+          type: array
+          items: { type: string }
+    PseudonymizedExport:
+      type: object
+      properties:
+        generatedAt: { type: string, format: date-time }
+        containsDirectEmail: { type: boolean, const: false }
+        identityVaultExcluded: { type: boolean, const: true }
+        threshold: { type: integer }
+        suppressedByThreshold: { type: boolean }
+        fingerprint: { type: string }
+        rows:
+          type: array
+          items: { type: object }
+paths:
+  /health/live:
+    get:
+      summary: Sonde de vie conteneur
+      security: []
+      responses:
+        '200': { description: API process alive }
+  /health/ready:
+    get:
+      summary: Sonde de readiness avec bases opérationnelle et identité
+      security: []
+      responses:
+        '200': { description: API ready }
+        '503': { description: Base indisponible }
+  /metrics:
+    get:
+      summary: Métriques JSON techniques
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Métriques API, erreurs, latence, autosave, jetons invalides et exports inhabituels }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /metrics/prometheus:
+    get:
+      summary: Métriques Prometheus
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Flux text/plain Prometheus }
+  /auth/login:
+    post:
+      summary: Connexion utilisateur interne et pose du cookie HttpOnly
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '201': { description: Profil connecté }
+        '401': { description: Identifiants invalides }
+  /auth/me:
+    get:
+      summary: Profil connecté
+      responses:
+        '200': { description: Profil et permissions }
+        '401': { description: Session absente ou expirée }
+  /auth/logout:
+    post:
+      summary: Déconnexion et suppression du cookie
+      responses:
+        '201': { description: Session supprimée }
+  /me:
+    get:
+      summary: Alias profil utilisateur authentifié
+      responses:
+        '200': { description: Profil courant }
+  /buildings:
+    get:
+      summary: Bâtiments filtrés par périmètre
+      responses:
+        '200': { description: Liste des bâtiments accessibles }
+  /questionnaires:
+    get:
+      summary: Liste des questionnaires accessibles
+      responses:
+        '200': { description: Questionnaires avec versions et groupes selon rôle }
+    post:
+      summary: Création questionnaire brouillon
+      responses:
+        '201': { description: Questionnaire créé }
+  /questionnaires/{id}:
+    get:
+      summary: Détail questionnaire
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Questionnaire }
+    patch:
+      summary: Mise à jour questionnaire brouillon
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Questionnaire mis à jour }
+  /questionnaires/{id}/versions:
+    get:
+      summary: Versions d'un questionnaire
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Versions }
+    post:
+      summary: Création version brouillon
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '201': { description: Version créée }
+  /versions/{id}/publish:
+    post:
+      summary: Publication immutable après validation
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '201': { description: Version publiée }
+  /moderation/invitations:
+    get:
+      summary: Suivi des invitations du périmètre
+      responses:
+        '200': { description: Invitations }
+    post:
+      summary: Création invitation avec code unique et jeton signé
+      responses:
+        '201': { description: Invitation créée }
+  /moderation/invitations/{id}/resend:
+    post:
+      summary: Relance d'une invitation non soumise
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '201': { description: Relance exécutée ou simulée }
+  /respondent/session:
+    get:
+      summary: Résolution du jeton répondant
+      security: [{ respondentToken: [] }]
+      responses:
+        '200': { description: Session répondant et questionnaire rendu }
+        '401': { description: Jeton invalide }
+        '403': { description: Jeton expiré ou invitation bloquée }
+  /respondent/answers:
+    put:
+      summary: Sauvegarde autosave des réponses brouillon
+      security: [{ respondentToken: [] }]
+      responses:
+        '200': { description: Réponses sauvegardées }
+  /respondent/telemetry:
+    post:
+      summary: Enregistrement télémétrie popup/navigation/temps
+      security: [{ respondentToken: [] }]
+      responses:
+        '201': { description: Evénement enregistré }
+  /respondent/submit:
+    post:
+      summary: Soumission finale verrouillée
+      security: [{ respondentToken: [] }]
+      responses:
+        '201': { description: Soumission créée et verrouillée }
+  /stats/questionnaires/{id}:
+    get:
+      summary: Statistiques agrégées seuillées
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Volumes, durées, completion, seuil anti-réidentification }
+  /stats/submissions/{publicCode}:
+    get:
+      summary: Soumission pseudonymisée par code public
+      parameters: [{ name: publicCode, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Soumission sans email }
+  /notifications/subscriptions:
+    get:
+      summary: Préférences de notification
+      responses: { '200': { description: Subscriptions } }
+    post:
+      summary: Création préférence notification
+      responses: { '201': { description: Subscription créée } }
+  /audit-logs:
+    get:
+      summary: Journaux d'audit selon habilitation
+      responses:
+        '200': { description: Audit logs }
+  /compliance/technical-register:
+    get:
+      summary: Registre technique RGPD simplifié
+      responses:
+        '200': { description: Registre }
+  /compliance/retention-policy:
+    get:
+      summary: Politique de conservation et purge
+      responses:
+        '200': { description: Politique }
+  /compliance/exports/pseudonymized:
+    get:
+      summary: Export pseudonymisé sans base identité
+      responses:
+        '200': { description: Export, empreinte et seuils, schema: { $ref: '#/components/schemas/PseudonymizedExport' } }
+  /judicial-access/requests:
+    get:
+      summary: Liste des demandes judiciaires habilitées
+      responses:
+        '200': { description: Demandes }
+    post:
+      summary: Création demande judiciaire exceptionnelle
+      responses:
+        '201': { description: Demande créée }
+components:
+  responses:
+    Forbidden:
+      description: Droits insuffisants
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
