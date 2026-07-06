@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
+import { t } from '@/i18n'
 import { useSessionStore } from '@/stores/session'
 
 const router = useRouter()
@@ -25,10 +26,10 @@ async function logout(): Promise<void> {
       </div>
     </div>
     <button class="btn btn-sm btn-outline-primary" type="button" @click="logout">
-      Déconnexion
+      {{ t('auth.logout') }}
     </button>
   </div>
   <RouterLink v-else class="btn btn-primary" to="/login">
-    Connexion
+    {{ t('auth.login') }}
   </RouterLink>
 </template>

@@ -2,13 +2,14 @@
 import { RouterLink, RouterView } from 'vue-router'
 
 import { appConfig } from '@/config/env'
+import { t } from '@/i18n'
 import { useSessionStore } from '@/stores/session'
 import UserMenu from './UserMenu.vue'
 
 const session = useSessionStore()
 const staticPagesNavigation = [
-  { label: 'Vue modérateur', to: '/moderation' },
-  { label: 'Questionnaire patient', to: '/questionnaire' },
+  { label: t('nav.static.moderator'), to: '/moderation' },
+  { label: t('nav.static.questionnaire'), to: '/questionnaire' },
 ]
 </script>
 
@@ -24,7 +25,7 @@ const staticPagesNavigation = [
             <span class="brand-dot">CH</span>
             <span>
               <strong>{{ appConfig.appName }}</strong>
-              <small>{{ appConfig.staticPagesDemo ? 'Démo statique' : 'Produit connecté' }}</small>
+              <small>{{ appConfig.staticPagesDemo ? t('app.mode.static') : t('app.mode.connected') }}</small>
             </span>
           </RouterLink>
 
@@ -49,7 +50,7 @@ const staticPagesNavigation = [
                 </RouterLink>
               </li>
             </ul>
-            <span v-if="appConfig.staticPagesDemo" class="badge-soft success">GitHub Pages</span>
+            <span v-if="appConfig.staticPagesDemo" class="badge-soft success">{{ t('app.githubPages') }}</span>
             <UserMenu v-else />
           </div>
         </div>

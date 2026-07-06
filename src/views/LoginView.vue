@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 
 import { appConfig } from '@/config/env'
 import { defaultPathByRole } from '@/config/navigation'
+import { t } from '@/i18n'
 import { useSessionStore } from '@/stores/session'
 import { activeOperationalRoles, roleProfiles, specializedStaffRoles, type UserRole } from '@shared/types/rbac'
 
@@ -13,66 +14,66 @@ const session = useSessionStore()
 
 const demoAccounts: Array<{
   role: UserRole
-  label: string
+  labelKey: string
   email: string
   password: string
-  description: string
+  descriptionKey: string
 }> = [
   {
     role: 'admin',
-    label: 'Administrateur global',
+    labelKey: 'auth.role.admin.label',
     email: 'admin@chpm.local',
     password: 'Admin123!',
-    description: 'Niveau 1 : accès global projet, sites, bâtiments, questionnaires, statistiques et terminaux.',
+    descriptionKey: 'auth.role.admin.description',
   },
   {
     role: 'site_manager',
-    label: 'Gestionnaire de site',
+    labelKey: 'auth.role.siteManager.label',
     email: 'site.manager@chpm.local',
     password: 'SiteManager123!',
-    description: 'Niveau 2 : gère son site, ses bâtiments, ses invitations, ses terminaux et ses indicateurs agrégés.',
+    descriptionKey: 'auth.role.siteManager.description',
   },
   {
     role: 'moderator',
-    label: 'Modérateur bâtiment',
+    labelKey: 'auth.role.moderator.label',
     email: 'moderateur@chpm.local',
     password: 'Moderator123!',
-    description: 'Niveau 3 : invitations et suivi opérationnel uniquement sur le bâtiment Montréal A.',
+    descriptionKey: 'auth.role.moderator.description',
   },
   {
     role: 'questionnaire_admin',
-    label: 'Administrateur questionnaire',
+    labelKey: 'auth.role.questionnaireAdmin.label',
     email: 'questionnaire.admin@chpm.local',
     password: 'Questionnaire123!',
-    description: 'Rôle spécialisé : création, versionnement et publication des questionnaires, sans table email.',
+    descriptionKey: 'auth.role.questionnaireAdmin.description',
   },
   {
     role: 'analyst',
-    label: 'Analyste',
+    labelKey: 'auth.role.analyst.label',
     email: 'analyste@chpm.local',
     password: 'Analyst123!',
-    description: 'Rôle spécialisé : statistiques pseudonymisées, seuils anti-réidentification, sans table email.',
+    descriptionKey: 'auth.role.analyst.description',
   },
   {
     role: 'dpo',
-    label: 'DPO',
+    labelKey: 'auth.role.dpo.label',
     email: 'dpo@chpm.local',
     password: 'Dpo12345!',
-    description: 'Rôle spécialisé : conformité, audit, registre RGPD et validation DPO du workflow judiciaire.',
+    descriptionKey: 'auth.role.dpo.description',
   },
   {
     role: 'judicial_officer',
-    label: 'Responsable accès judiciaire',
+    labelKey: 'auth.role.judicial.label',
     email: 'judiciaire@chpm.local',
     password: 'Judiciaire123!',
-    description: 'Rôle spécialisé : validation juridique et exécution contrôlée du coffre email.',
+    descriptionKey: 'auth.role.judicial.description',
   },
   {
     role: 'technical_admin',
-    label: 'Administrateur technique',
+    labelKey: 'auth.role.technical.label',
     email: 'tech@chpm.local',
     password: 'Tech12345!',
-    description: 'Rôle spécialisé : maintenance, audit technique, terminaux globaux et registre technique.',
+    descriptionKey: 'auth.role.technical.description',
   },
 ]
 
@@ -122,23 +123,26 @@ async function submit(): Promise<void> {
         <div class="col-xl-7">
           <div class="hero-card p-4 p-lg-5 h-100">
             <div class="position-relative z-1">
-              <p class="hero-eyebrow mb-3">Authentification interne</p>
+              <p class="hero-eyebrow mb-3">{{ t('auth.internal') }}</p>
               <h1 class="hero-title fw-black mb-4">
-                {{ appConfig.demoMode ? 'Connexion simulée pour GitHub Pages.' : 'Connexion réelle à l’API centrale.' }}
+                {{ appConfig.demoMode ? t('auth.demo.title') : t('auth.connected.title') }}
               </h1>
               <p class="hero-text mb-4">
-                {{ appConfig.demoMode
-                  ? 'Cette démo publique fonctionne sans backend : comptes, questionnaires, invitations et réponses sont simulés dans le navigateur.'
-                  : 'Les comptes internes utilisent une session serveur HTTP-only. Les répondants, eux, accèdent au questionnaire par lien signé généré dans la modération.' }}
+                {{ appConfig.demoMode ? t('auth.demo.body') : t('auth.connected.body') }}
               </p>
 
+              <div v-if="appConfig.demoMode" class="alert alert-warning rounded-4 mb-4" role="alert">
+                <strong>{{ t('auth.demo.warning.title') }}</strong>
+                <p class="small mb-0 mt-1">{{ t('auth.demo.warning.body') }}</p>
+              </div>
+
               <div v-if="appConfig.demoMode" class="demo-card bg-white border-0 mb-4">
-                <p class="section-eyebrow mb-2">Hiérarchie des rôles actifs</p>
-                <h2 class="h5 fw-bold mb-3">Global → site → bâtiment</h2>
+                <p class="section-eyebrow mb-2">{{ t('auth.hierarchy.eyebrow') }}</p>
+                <h2 class="h5 fw-bold mb-3">{{ t('auth.hierarchy.title') }}</h2>
                 <div class="row g-3">
                   <div v-for="(role, index) in activeOperationalRoles" :key="role" class="col-md-4">
                     <div class="border rounded-4 p-3 h-100">
-                      <span class="badge-soft success">Niveau {{ index + 1 }}</span>
+                      <span class="badge-soft success">{{ t('auth.level', { level: index + 1 }) }}</span>
                       <h3 class="h6 fw-bold mt-2 mb-1">{{ roleProfiles[role].label }}</h3>
                       <p class="small muted mb-0">{{ roleProfiles[role].scopeLabel }}</p>
                     </div>
@@ -153,22 +157,22 @@ async function submit(): Promise<void> {
                   class="demo-account-card"
                 >
                   <div>
-                    <span class="badge-soft success">{{ account.label }}</span>
+                    <span class="badge-soft success">{{ t(account.labelKey) }}</span>
                     <h2 class="h5 fw-bold mt-2 mb-1">{{ account.email }}</h2>
-                    <p class="small muted mb-0">{{ account.description }}</p>
+                    <p class="small muted mb-0">{{ t(account.descriptionKey) }}</p>
                   </div>
                   <button
                     class="btn btn-outline-primary"
                     type="button"
                     @click="fillDemoAccount(account)"
                   >
-                    Utiliser
+                    {{ t('auth.useAccount') }}
                   </button>
                 </article>
               </div>
 
               <details v-if="appConfig.demoMode" class="demo-card bg-white border-0">
-                <summary class="fw-bold">Afficher les rôles spécialisés de contrôle</summary>
+                <summary class="fw-bold">{{ t('auth.specializedRoles') }}</summary>
                 <div class="d-grid gap-3 mt-3">
                   <article
                     v-for="account in specializedAccounts"
@@ -176,16 +180,16 @@ async function submit(): Promise<void> {
                     class="demo-account-card"
                   >
                     <div>
-                      <span class="badge-soft">{{ account.label }}</span>
+                      <span class="badge-soft">{{ t(account.labelKey) }}</span>
                       <h2 class="h5 fw-bold mt-2 mb-1">{{ account.email }}</h2>
-                      <p class="small muted mb-0">{{ account.description }}</p>
+                      <p class="small muted mb-0">{{ t(account.descriptionKey) }}</p>
                     </div>
                     <button
                       class="btn btn-outline-primary"
                       type="button"
                       @click="fillDemoAccount(account)"
                     >
-                      Utiliser
+                      {{ t('auth.useAccount') }}
                     </button>
                   </article>
                 </div>
@@ -196,11 +200,11 @@ async function submit(): Promise<void> {
 
         <div class="col-xl-5">
           <div class="demo-card h-100">
-            <p class="section-eyebrow mb-2">Compte interne</p>
-            <h2 class="h3 fw-bold mb-4">Se connecter</h2>
+            <p class="section-eyebrow mb-2">{{ t('auth.internalAccount') }}</p>
+            <h2 class="h3 fw-bold mb-4">{{ t('auth.signIn') }}</h2>
 
             <form @submit.prevent="submit">
-              <label class="form-label fw-bold" for="email">Email</label>
+              <label class="form-label fw-bold" for="email">{{ t('auth.email') }}</label>
               <input
                 id="email"
                 v-model="form.email"
@@ -209,7 +213,7 @@ async function submit(): Promise<void> {
                 type="email"
               />
 
-              <label class="form-label fw-bold" for="password">Mot de passe</label>
+              <label class="form-label fw-bold" for="password">{{ t('auth.password') }}</label>
               <input
                 id="password"
                 v-model="form.password"
@@ -223,15 +227,13 @@ async function submit(): Promise<void> {
               </div>
 
               <button class="btn btn-primary w-100 btn-lg" type="submit" :disabled="isSubmitting">
-                {{ isSubmitting ? 'Connexion…' : 'Connexion' }}
+                {{ isSubmitting ? t('auth.submitting') : t('auth.login') }}
               </button>
             </form>
 
             <hr class="my-4" />
             <p class="small muted mb-0">
-              {{ appConfig.demoMode
-                ? 'Mode GitHub Pages : aucune donnée réelle n’est envoyée à un serveur. Les actions sont conservées localement dans le navigateur pour la démonstration.'
-                : 'Le cookie de session n’est pas lisible par JavaScript. Les pages privées interrogent `/me` au chargement, puis le routeur applique les permissions retournées par le serveur.' }}
+              {{ appConfig.demoMode ? t('auth.demo.note') : t('auth.production.note') }}
             </p>
           </div>
         </div>

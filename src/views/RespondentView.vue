@@ -766,7 +766,7 @@ async function confirmSubmit(): Promise<void> {
                     </p>
                     <div class="d-flex flex-wrap gap-2">
                       <button class="btn btn-primary" type="button" :disabled="isSubmitting" @click="confirmSubmit">
-                        {{ isSubmitting ? 'Soumission…' : t('respondent.submit.confirm') }}
+                        {{ isSubmitting ? t('respondent.submit.loading') : t('respondent.submit.confirm') }}
                       </button>
                       <button class="btn btn-outline-primary" type="button" :disabled="isSubmitting" @click="showSubmitConfirmation = false">
                         {{ t('respondent.submit.back') }}

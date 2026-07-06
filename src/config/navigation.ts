@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import type { UserRole } from '@shared/types/rbac'
 import { hasRoleAccess } from '@shared/types/rbac'
 
@@ -10,64 +11,58 @@ export interface NavigationItem {
 
 export const navigationItems: NavigationItem[] = [
   {
-    label: 'Accueil',
+    label: t('nav.home'),
     to: '/',
     roles: ['admin', 'moderator', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo', 'technical_admin', 'judicial_officer'],
-    description: 'Vue produit et parcours de démonstration.',
+    description: t('nav.home.description'),
   },
   {
-    label: 'Admin',
+    label: t('nav.admin'),
     to: '/admin',
     roles: ['admin', 'questionnaire_admin'],
-    description: 'Construction du questionnaire, versions, groupes, questions, popups et règles.',
+    description: t('nav.admin.description'),
   },
   {
-    label: 'Modération',
+    label: t('nav.moderation'),
     to: '/moderation',
     roles: ['admin', 'moderator', 'site_manager'],
-    description: 'Invitations, jetons répondants et suivi par bâtiment.',
+    description: t('nav.moderation.description'),
   },
   {
-    label: 'Prévisualisation répondant',
+    label: t('nav.respondentPreview'),
     to: '/questionnaire',
     roles: ['admin', 'moderator', 'questionnaire_admin'],
-    description: 'Rappel du parcours répondant par lien signé.',
+    description: t('nav.respondentPreview.description'),
   },
   {
-    label: 'Statistiques',
+    label: t('nav.stats'),
     to: '/stats',
     roles: ['admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo'],
-    description: 'Analyse pseudonymisée, seuils anti-réidentification, temps et popups.',
+    description: t('nav.stats.description'),
   },
-
-
-
   {
-    label: 'Terminaux',
+    label: t('nav.terminals'),
     to: '/terminaux',
     roles: ['admin', 'site_manager', 'moderator', 'technical_admin'],
-    description: 'Inventaire scoped des terminaux ; administration globale ou par site selon le rôle.'
+    description: t('nav.terminals.description'),
   },
-
-
   {
-    label: 'RGPD',
+    label: t('nav.rgpd'),
     to: '/rgpd',
     roles: ['admin', 'analyst', 'dpo', 'technical_admin', 'judicial_officer'],
-    description: 'Registre technique, conservation, export pseudonymisé, audit et maintenance.',
+    description: t('nav.rgpd.description'),
   },
-
   {
-    label: 'Coffre email',
+    label: t('nav.identityVault'),
     to: '/coffre-email',
     roles: ['dpo', 'judicial_officer'],
-    description: 'Workflow judiciaire, double validation et audit du coffre identité.',
+    description: t('nav.identityVault.description'),
   },
   {
-    label: 'Architecture / sécurité',
+    label: t('nav.architecture'),
     to: '/architecture',
     roles: ['admin', 'questionnaire_admin', 'dpo', 'technical_admin', 'judicial_officer'],
-    description: 'Séparation des données, audit et procédure judiciaire.',
+    description: t('nav.architecture.description'),
   },
 ]
 
