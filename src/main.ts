@@ -5,11 +5,18 @@ import 'bootstrap/dist/css/bootstrap.min.css'
 import './assets/demo.css'
 
 import App from './App.vue'
+import { initializeI18n } from './i18n'
 import router from './router'
 
-const app = createApp(App)
+async function bootstrap(): Promise<void> {
+  await initializeI18n()
 
-app.use(createPinia())
-app.use(router)
+  const app = createApp(App)
 
-app.mount('#app')
+  app.use(createPinia())
+  app.use(router)
+
+  app.mount('#app')
+}
+
+void bootstrap()

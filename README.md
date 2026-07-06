@@ -1,10 +1,6 @@
-# Survey App
+# CHPM Survey
 
-Prototype Vue 3 + Vite pour une plateforme de questionnaires adaptatifs, anonymisés et
-administrables sans compétence informatique.
-
-Prototype Vue 3 + Vite + API NestJS illustrant le cahier des charges pour une plateforme de questionnaires adaptatifs,
-anonymisés et administrables sans compétence informatique.
+Application Vue 3 + Vite + API NestJS pour une plateforme de questionnaires adaptatifs, pseudonymisés et administrables sans compétence informatique.
 
 ## Backend minimal, authentification et base de données
 
@@ -22,15 +18,9 @@ Cette itération remplace la simulation locale de rôle par une vraie session se
 - menus et pages conditionnels selon les permissions backend ;
 - listes de bâtiments et questionnaires chargées depuis PostgreSQL.
 
-## Démo
+## Données de démonstration
 
-Comptes seedés :
-
-| Rôle           | Email                   | Mot de passe     | Accès visible                                                |
-| -------------- | ----------------------- | ---------------- | ------------------------------------------------------------ |
-| Administrateur | `admin@chpm.local`      | `Admin123!`      | Admin, modération, questionnaire, statistiques, architecture |
-| Modérateur     | `moderateur@chpm.local` | `Moderator123!`  | Modération et questionnaire ; bâtiment Montréal A uniquement |
-| Répondant      | `repondant@chpm.local`  | `Respondent123!` | Questionnaire uniquement                                     |
+Les comptes et jeux de données de démonstration sont réservés au développement local avec `VITE_DEMO_MODE=true`. Ils ne doivent pas être documentés comme identifiants de recette ou de production. En préproduction et production, les comptes internes sont créés côté backend via la console d’administration locale et les secrets restent hors front.
 
 ## Prérequis Node.js
 
@@ -92,6 +82,18 @@ npm run dev:frontend
 
 Le front appelle par défaut `http://localhost:3000/api` avec `credentials: include` pour transmettre le cookie
 HTTP-only.
+
+## Textes et i18n éditables
+
+Les libellés mutualisés du front sont dans `public/content/i18n/fr.json` et `public/content/i18n/en.json`. Ces fichiers JSON peuvent être relus par un métier ou traducteur sans modifier les composants Vue.
+
+Validation :
+
+```sh
+npm run content:i18n:check
+```
+
+La procédure d’édition est documentée dans `docs/content/i18n-editing.md`.
 
 ## Build
 
