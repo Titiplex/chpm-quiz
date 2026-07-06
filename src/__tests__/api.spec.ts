@@ -43,4 +43,44 @@ describe('apiRequest', () => {
 
     await expect(apiRequest('/auth/logout', { method: 'POST' })).resolves.toBeUndefined()
   })
+
+  it('keeps explicit caller headers while preserving generated API defaults', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })))
+
+    await apiRequest('/custom', {
+      headers: { 'X-Correlation-ID': 'manual-correlation-id', 'X-Client': 'test' },
+    })
+
+    const [, init] = (fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0]
+    expect(init.headers).toMatchObject({
+      Accept: 'application/json',
+      'X-Correlation-ID': 'manual-correlation-id',
+      'X-Client': 'test',
+    })
+  })
+
+  it('returns text payloads when the backend response is not JSON', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('plain response', { status: 200 })))
+
+    await expect(apiRequest<string>('/plain')).resolves.toBe('plain response')
+  })
+
+  it('uses safe fallback messages for common authorization errors', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 403 })))
+
+    await expect(apiRequest('/admin')).rejects.toMatchObject({
+      status: 403,
+      message: 'Accès refusé pour ce rôle.',
+    })
+  })
+
+  it('uses a generic status fallback for unstructured server errors', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 502 })))
+
+    await expect(apiRequest('/broken')).rejects.toMatchObject({
+      status: 502,
+      message: 'Erreur API 502',
+    })
+  })
+
 })
