@@ -77,4 +77,43 @@ describe('useTerminalStore', () => {
     expect(response.accessToken).toBe('respondent-token')
     expect(store.invitations).toHaveLength(0)
   })
+
+  it('uses a stored terminal token, exposes pending state and clears local state', async () => {
+    window.localStorage.setItem(TERMINAL_TOKEN_STORAGE_KEY, 'stored-token')
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(terminalSessionPayload), { status: 200 })))
+
+    const store = useTerminalStore()
+    await store.load()
+
+    expect(store.terminalToken).toBe('stored-token')
+    expect(store.hasPendingInvitations).toBe(true)
+
+    store.clear()
+
+    expect(store.status).toBe('idle')
+    expect(store.terminalToken).toBeNull()
+    expect(store.terminalDevice).toBeNull()
+    expect(store.invitations).toEqual([])
+    expect(window.localStorage.getItem(TERMINAL_TOKEN_STORAGE_KEY)).toBeNull()
+  })
+
+  it('rejects missing or invalid terminal tokens and failed invitation openings', async () => {
+    const store = useTerminalStore()
+
+    await store.load()
+    expect(store.status).toBe('error')
+    expect(store.error).toBe('Aucun jeton terminal fourni.')
+
+    await expect(store.openInvitation('invitation-1')).rejects.toThrow('Jeton terminal manquant.')
+
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ message: 'Terminal désactivé' }), { status: 403 })))
+    await store.load('bad-token')
+    expect(store.status).toBe('error')
+    expect(store.error).toBe('Terminal désactivé')
+
+    store.terminalToken = 'bad-token'
+    await expect(store.openInvitation('invitation-1')).rejects.toMatchObject({ message: 'Terminal désactivé' })
+    expect(store.status).toBe('error')
+  })
+
 })
