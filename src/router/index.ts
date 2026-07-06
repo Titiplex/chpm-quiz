@@ -2,6 +2,7 @@ import {
   createRouter,
   createWebHashHistory,
   createWebHistory,
+  type RouteLocationNormalized,
   type RouteRecordRaw,
 } from 'vue-router'
 
@@ -18,7 +19,7 @@ declare module 'vue-router' {
 
 const isStaticPagesDemo = import.meta.env.VITE_STATIC_PAGES_DEMO === 'true'
 
-function createStaticPagesRoutes(): RouteRecordRaw[] {
+export function createStaticPagesRoutes(): RouteRecordRaw[] {
   return [
     {
       path: '/',
@@ -55,7 +56,7 @@ function createStaticPagesRoutes(): RouteRecordRaw[] {
   ]
 }
 
-function createConnectedRoutes(): RouteRecordRaw[] {
+export function createConnectedRoutes(): RouteRecordRaw[] {
   return [
     {
       path: '/login',
@@ -210,55 +211,59 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach(async (to) => {
-  if (isStaticPagesDemo) {
-    return true
-  }
+export function createAuthorizationGuard(staticPagesDemo = isStaticPagesDemo) {
+  return async (to: RouteLocationNormalized) => {
+    if (staticPagesDemo) {
+      return true
+    }
 
-  const [{ defaultPathByRole }, { useSessionStore }, { hasRoleAccess }] = await Promise.all([
-    import('@/config/navigation'),
-    import('@/stores/session'),
-    import('@shared/types/rbac'),
-  ])
-  const session = useSessionStore()
+    const [{ defaultPathByRole }, { useSessionStore }, { hasRoleAccess }] = await Promise.all([
+      import('@/config/navigation'),
+      import('@/stores/session'),
+      import('@shared/types/rbac'),
+    ])
+    const session = useSessionStore()
 
-  if (!session.isBootstrapped) {
-    await session.restore()
-  }
+    if (!session.isBootstrapped) {
+      await session.restore()
+    }
 
-  if (to.name === 'login') {
-    if (session.isAuthenticated) {
-      return defaultPathByRole[session.currentRole]
+    if (to.name === 'login') {
+      if (session.isAuthenticated) {
+        return defaultPathByRole[session.currentRole]
+      }
+
+      return true
+    }
+
+    if (to.meta.requiresAuthenticatedUser && !session.isAuthenticated) {
+      return {
+        path: '/login',
+        query: {
+          redirect: to.fullPath,
+        },
+      }
+    }
+
+    if (to.name === 'forbidden') {
+      return true
+    }
+
+    if (!hasRoleAccess(session.currentRole, to.meta.allowedRoles)) {
+      return {
+        path: '/403',
+        query: {
+          from: to.fullPath,
+          role: session.currentRole,
+          fallback: defaultPathByRole[session.currentRole],
+        },
+      }
     }
 
     return true
   }
+}
 
-  if (to.meta.requiresAuthenticatedUser && !session.isAuthenticated) {
-    return {
-      path: '/login',
-      query: {
-        redirect: to.fullPath,
-      },
-    }
-  }
-
-  if (to.name === 'forbidden') {
-    return true
-  }
-
-  if (!hasRoleAccess(session.currentRole, to.meta.allowedRoles)) {
-    return {
-      path: '/403',
-      query: {
-        from: to.fullPath,
-        role: session.currentRole,
-        fallback: defaultPathByRole[session.currentRole],
-      },
-    }
-  }
-
-  return true
-})
+router.beforeEach(createAuthorizationGuard())
 
 export default router

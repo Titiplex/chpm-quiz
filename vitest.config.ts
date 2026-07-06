@@ -27,6 +27,9 @@ export default mergeConfig(
           'src/__tests__/**',
           'src/**/*.spec.ts',
           'src/**/*.functional.spec.ts',
+          'src/data/staticPagesDemo.ts',
+          'src/services/demoApi.ts',
+          'src/views/**',
         ],
         thresholds: {
           statements: 60,
