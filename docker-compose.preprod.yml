@@ -60,6 +60,7 @@ services:
       args:
         VITE_APP_NAME: ${VITE_APP_NAME:-CHPM Survey}
         VITE_API_BASE_URL: /api
+        VITE_I18N_CONTENT_BASE_URL: /content/i18n
         VITE_STATIC_PAGES_DEMO: "false"
         VITE_ROUTER_MODE: history
     restart: unless-stopped

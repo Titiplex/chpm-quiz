@@ -5,6 +5,7 @@ import {
   type RouteRecordRaw,
 } from 'vue-router'
 
+import { t } from '@/i18n'
 import { allRoles, type UserRole } from '@shared/types/rbac'
 
 declare module 'vue-router' {
@@ -28,7 +29,7 @@ function createStaticPagesRoutes(): RouteRecordRaw[] {
       name: 'static-moderation',
       component: () => import('@/views/StaticModeratorView.vue'),
       meta: {
-        label: 'Vue modérateur',
+        label: t('nav.static.moderator'),
         allowedRoles: [...allRoles],
         requiresAuthenticatedUser: false,
       },
@@ -38,7 +39,7 @@ function createStaticPagesRoutes(): RouteRecordRaw[] {
       name: 'static-patient-questionnaire',
       component: () => import('@/views/StaticPatientQuestionnaireView.vue'),
       meta: {
-        label: 'Questionnaire patient',
+        label: t('nav.static.questionnaire'),
         allowedRoles: [...allRoles],
         requiresAuthenticatedUser: false,
       },
@@ -61,7 +62,7 @@ function createConnectedRoutes(): RouteRecordRaw[] {
       name: 'login',
       component: () => import('@/views/LoginView.vue'),
       meta: {
-        label: 'Connexion',
+        label: t('nav.login'),
         allowedRoles: [...allRoles],
         requiresAuthenticatedUser: false,
       },
@@ -71,7 +72,7 @@ function createConnectedRoutes(): RouteRecordRaw[] {
       name: 'home',
       component: () => import('@/views/HomeView.vue'),
       meta: {
-        label: 'Accueil',
+        label: t('nav.home'),
         allowedRoles: [...allRoles],
         requiresAuthenticatedUser: true,
       },
@@ -81,7 +82,7 @@ function createConnectedRoutes(): RouteRecordRaw[] {
       name: 'admin',
       component: () => import('@/views/AdminBuilderView.vue'),
       meta: {
-        label: 'Administration',
+        label: t('nav.admin'),
         allowedRoles: ['admin', 'questionnaire_admin'],
         requiresAuthenticatedUser: true,
       },
@@ -91,7 +92,7 @@ function createConnectedRoutes(): RouteRecordRaw[] {
       name: 'moderation',
       component: () => import('@/views/ModeratorView.vue'),
       meta: {
-        label: 'Modération',
+        label: t('nav.moderation'),
         allowedRoles: ['admin', 'moderator', 'site_manager'],
         requiresAuthenticatedUser: true,
       },
@@ -101,7 +102,7 @@ function createConnectedRoutes(): RouteRecordRaw[] {
       name: 'questionnaire',
       component: () => import('@/views/RespondentView.vue'),
       meta: {
-        label: 'Questionnaire',
+        label: t('nav.respondentPreview'),
         allowedRoles: ['admin', 'moderator', 'questionnaire_admin'],
         requiresAuthenticatedUser: true,
       },
@@ -111,7 +112,7 @@ function createConnectedRoutes(): RouteRecordRaw[] {
       name: 'respondent-token',
       component: () => import('@/views/RespondentView.vue'),
       meta: {
-        label: 'Questionnaire répondant',
+        label: t('nav.static.questionnaire'),
         allowedRoles: [...allRoles],
         requiresAuthenticatedUser: false,
       },
@@ -121,9 +122,29 @@ function createConnectedRoutes(): RouteRecordRaw[] {
       name: 'stats',
       component: () => import('@/views/StatsView.vue'),
       meta: {
-        label: 'Statistiques',
+        label: t('nav.stats'),
         allowedRoles: ['admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo'],
         requiresAuthenticatedUser: true,
+      },
+    },
+    {
+      path: '/terminaux',
+      name: 'terminals-admin',
+      component: () => import('@/views/TerminalAdminView.vue'),
+      meta: {
+        label: t('nav.terminals'),
+        allowedRoles: ['admin', 'site_manager', 'moderator', 'technical_admin'],
+        requiresAuthenticatedUser: true,
+      },
+    },
+    {
+      path: '/terminal/:terminalToken?',
+      name: 'terminal',
+      component: () => import('@/views/TerminalView.vue'),
+      meta: {
+        label: t('nav.terminals'),
+        allowedRoles: [...allRoles],
+        requiresAuthenticatedUser: false,
       },
     },
     {
@@ -131,7 +152,7 @@ function createConnectedRoutes(): RouteRecordRaw[] {
       name: 'compliance',
       component: () => import('@/views/ComplianceView.vue'),
       meta: {
-        label: 'RGPD / sécurité',
+        label: t('nav.rgpd'),
         allowedRoles: ['admin', 'analyst', 'dpo', 'technical_admin', 'judicial_officer'],
         requiresAuthenticatedUser: true,
       },
@@ -141,7 +162,7 @@ function createConnectedRoutes(): RouteRecordRaw[] {
       name: 'identity-vault',
       component: () => import('@/views/IdentityVaultView.vue'),
       meta: {
-        label: 'Coffre email',
+        label: t('nav.identityVault'),
         allowedRoles: ['dpo', 'judicial_officer'],
         requiresAuthenticatedUser: true,
       },
@@ -151,7 +172,7 @@ function createConnectedRoutes(): RouteRecordRaw[] {
       name: 'architecture',
       component: () => import('@/views/ArchitectureView.vue'),
       meta: {
-        label: 'Architecture / sécurité',
+        label: t('nav.architecture'),
         allowedRoles: [
           'admin',
           'questionnaire_admin',
@@ -167,7 +188,7 @@ function createConnectedRoutes(): RouteRecordRaw[] {
       name: 'forbidden',
       component: () => import('@/views/AccessDeniedView.vue'),
       meta: {
-        label: 'Accès refusé',
+        label: t('nav.forbidden'),
         allowedRoles: [...allRoles],
         requiresAuthenticatedUser: true,
       },

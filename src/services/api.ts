@@ -1,5 +1,4 @@
 import { appConfig } from '@/config/env'
-import { demoApiRequest } from '@/services/demoApi'
 
 export class ApiError extends Error {
   readonly status: number
@@ -20,7 +19,8 @@ export interface ApiRequestOptions extends Omit<RequestInit, 'body'> {
 }
 
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
-  if (appConfig.demoMode) {
+  if (import.meta.env.DEV && appConfig.demoMode) {
+    const { demoApiRequest } = await import('@/services/demoApi')
     return demoApiRequest<T>(path, options)
   }
 
