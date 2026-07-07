@@ -23,6 +23,9 @@ const catalog = useCatalogStore()
 const session = useSessionStore()
 const statsStore = useStatsStore()
 const selectedQuestionnaireId = ref('')
+const visibleSubmissionCount = ref(10)
+const visiblePopupCount = ref(8)
+const visibleQuestionCount = ref(6)
 
 const statsSections: PageSectionNavItem[] = [
   { id: 'stats-overview', label: 'Synthèse', hint: 'KPI et seuil' },
@@ -38,13 +41,41 @@ const selectedQuestionnaire = computed(() => (
 
 const canReadSubmissions = computed(() => ['admin', 'analyst', 'dpo'].includes(session.currentRole))
 
+const visibleSubmissions = computed(() => statsStore.stats?.submissions.slice(0, visibleSubmissionCount.value) ?? [])
+const visiblePopups = computed(() => statsStore.stats?.popups?.slice(0, visiblePopupCount.value) ?? [])
+const visibleQuestions = computed(() => statsStore.stats?.questions.slice(0, visibleQuestionCount.value) ?? [])
+
+const hiddenSubmissionCount = computed(() => Math.max((statsStore.stats?.submissions.length ?? 0) - visibleSubmissionCount.value, 0))
+const hiddenPopupCount = computed(() => Math.max((statsStore.stats?.popups?.length ?? 0) - visiblePopupCount.value, 0))
+const hiddenQuestionCount = computed(() => Math.max((statsStore.stats?.questions.length ?? 0) - visibleQuestionCount.value, 0))
+
+function resetVisibleStatsLists(): void {
+  visibleSubmissionCount.value = 10
+  visiblePopupCount.value = 8
+  visibleQuestionCount.value = 6
+}
+
+function showMoreSubmissions(): void {
+  visibleSubmissionCount.value += 10
+}
+
+function showMorePopups(): void {
+  visiblePopupCount.value += 8
+}
+
+function showMoreQuestions(): void {
+  visibleQuestionCount.value += 6
+}
+
 onMounted(async () => {
   await catalog.fetchCatalog()
   selectedQuestionnaireId.value = catalog.publishedQuestionnaires[0]?.id ?? ''
 })
 
 watch(selectedQuestionnaireId, async (id) => {
-  if (id) await statsStore.fetchForQuestionnaire(id)
+  if (!id) return
+  resetVisibleStatsLists()
+  await statsStore.fetchForQuestionnaire(id)
 }, { immediate: false })
 
 function formatDuration(durationMs?: number | null): string {
@@ -344,7 +375,7 @@ function closeSubmissionDetail(): void {
                 <p class="muted mb-0">Table déplacée en section déroulante : elle sert au support ponctuel, pas au pilotage quotidien.</p>
                 <span class="badge-soft warning">Pas d’email affiché</span>
               </div>
-              <div class="table-card table-card-scroll table-card-scroll-lg">
+              <div class="table-card stats-table-card">
                 <table class="table align-middle">
                   <thead>
                     <tr>
@@ -356,7 +387,7 @@ function closeSubmissionDetail(): void {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="submission in statsStore.stats.submissions" :key="submission.publicCode">
+                    <tr v-for="submission in visibleSubmissions" :key="submission.publicCode">
                       <td class="fw-semibold" style="font-family:monospace; font-size:0.88rem;">{{ submission.publicCode }}</td>
                       <td>{{ submission.building }}</td>
                       <td><span class="badge-soft success">{{ submission.status }}</span></td>
@@ -375,6 +406,29 @@ function closeSubmissionDetail(): void {
                   </tbody>
                 </table>
               </div>
+              <div class="stats-list-actions">
+                <span class="small" style="color: var(--chm-muted);">
+                  {{ visibleSubmissions.length }} / {{ statsStore.stats.submissions.length }} soumission(s) affichée(s)
+                </span>
+                <div class="d-flex flex-wrap gap-2">
+                  <button
+                    v-if="hiddenSubmissionCount > 0"
+                    class="btn btn-sm btn-outline-primary"
+                    type="button"
+                    @click="showMoreSubmissions"
+                  >
+                    Afficher 10 de plus
+                  </button>
+                  <button
+                    v-if="visibleSubmissionCount > 10"
+                    class="btn btn-sm btn-outline-secondary"
+                    type="button"
+                    @click="visibleSubmissionCount = 10"
+                  >
+                    Réduire
+                  </button>
+                </div>
+              </div>
               <p v-if="!canReadSubmissions" class="small mt-3 mb-0" style="color: var(--chm-muted);">
                 Votre rôle accède aux indicateurs agrégés uniquement.
               </p>
@@ -389,7 +443,7 @@ function closeSubmissionDetail(): void {
               :badge="`Seuil n ≥ ${statsStore.stats.threshold}`"
               body-class="compact"
             >
-              <div class="table-card table-card-scroll">
+              <div class="table-card stats-table-card">
                 <table class="table align-middle">
                   <thead>
                     <tr>
@@ -402,7 +456,7 @@ function closeSubmissionDetail(): void {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="popup in statsStore.stats.popups ?? []" :key="popup.id">
+                    <tr v-for="popup in visiblePopups" :key="popup.id">
                       <td>
                         <strong>{{ popup.title }}</strong>
                         <div class="small" style="color:var(--chm-muted); font-family:monospace;">{{ popup.termKey }}</div>
@@ -420,6 +474,29 @@ function closeSubmissionDetail(): void {
                   </tbody>
                 </table>
               </div>
+              <div class="stats-list-actions">
+                <span class="small" style="color: var(--chm-muted);">
+                  {{ visiblePopups.length }} / {{ statsStore.stats.popups?.length ?? 0 }} terme(s) affiché(s)
+                </span>
+                <div class="d-flex flex-wrap gap-2">
+                  <button
+                    v-if="hiddenPopupCount > 0"
+                    class="btn btn-sm btn-outline-primary"
+                    type="button"
+                    @click="showMorePopups"
+                  >
+                    Afficher 8 de plus
+                  </button>
+                  <button
+                    v-if="visiblePopupCount > 8"
+                    class="btn btn-sm btn-outline-secondary"
+                    type="button"
+                    @click="visiblePopupCount = 8"
+                  >
+                    Réduire
+                  </button>
+                </div>
+              </div>
             </CollapsibleSection>
           </div>
 
@@ -432,7 +509,7 @@ function closeSubmissionDetail(): void {
               :default-open="false"
               body-class="compact"
             >
-              <div class="table-card table-card-scroll table-card-scroll-lg">
+              <div class="table-card stats-table-card stats-table-card-wide">
                 <table class="table align-middle">
                   <thead>
                     <tr>
@@ -445,7 +522,7 @@ function closeSubmissionDetail(): void {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="question in statsStore.stats.questions" :key="question.id">
+                    <tr v-for="question in visibleQuestions" :key="question.id">
                       <td style="min-width: 220px">
                         <strong>{{ question.code }}</strong>
                         <div class="small" style="color:var(--chm-muted);">{{ question.label }}</div>
@@ -490,6 +567,29 @@ function closeSubmissionDetail(): void {
                     </tr>
                   </tbody>
                 </table>
+              </div>
+              <div class="stats-list-actions">
+                <span class="small" style="color: var(--chm-muted);">
+                  {{ visibleQuestions.length }} / {{ statsStore.stats.questions.length }} question(s) affichée(s)
+                </span>
+                <div class="d-flex flex-wrap gap-2">
+                  <button
+                    v-if="hiddenQuestionCount > 0"
+                    class="btn btn-sm btn-outline-primary"
+                    type="button"
+                    @click="showMoreQuestions"
+                  >
+                    Afficher 6 de plus
+                  </button>
+                  <button
+                    v-if="visibleQuestionCount > 6"
+                    class="btn btn-sm btn-outline-secondary"
+                    type="button"
+                    @click="visibleQuestionCount = 6"
+                  >
+                    Réduire
+                  </button>
+                </div>
               </div>
             </CollapsibleSection>
           </div>

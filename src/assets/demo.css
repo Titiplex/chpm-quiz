@@ -481,10 +481,17 @@ body {
 .table-card-scroll {
   max-height: min(62vh, 640px);
   overflow: auto;
+  padding-bottom: 0.75rem;
+  scroll-padding-bottom: 1rem;
+  overscroll-behavior: contain;
 }
 
 .table-card-scroll-lg {
   max-height: min(72vh, 780px);
+}
+
+.table-card-scroll .table {
+  margin-bottom: 0.75rem;
 }
 
 .table-card-scroll thead th {
@@ -1344,5 +1351,40 @@ details:not([open]) > .builder-disclosure-summary::after {
 @media (min-width: 1400px) {
   .table-card-scroll-invitations {
     max-height: min(48vh, 560px);
+  }
+}
+
+/* ---- Stats long-list readability ----------------------------------------- */
+.stats-table-card {
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+.stats-table-card .table {
+  margin-bottom: 0;
+}
+
+.stats-table-card-wide .table {
+  min-width: 980px;
+}
+
+.stats-list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--chm-line);
+}
+
+@media (max-width: 767.98px) {
+  .stats-list-actions {
+    align-items: stretch;
+  }
+
+  .stats-list-actions > * {
+    width: 100%;
   }
 }
