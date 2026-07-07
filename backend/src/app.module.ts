@@ -19,6 +19,7 @@ import { SecurityModule } from './security/security.module'
 import { StatsModule } from './stats/stats.module'
 import { TerminalModule } from './terminal/terminal.module'
 import { TerminalAdminModule } from './terminal-admin/terminal-admin.module'
+import { UsersModule } from './users/users.module'
 import { VersionsModule } from './versions/versions.module'
 
 @Module({
@@ -44,6 +45,7 @@ import { VersionsModule } from './versions/versions.module'
     StatsModule,
     TerminalModule,
     TerminalAdminModule,
+    UsersModule,
     JudicialModule,
   ],
 })

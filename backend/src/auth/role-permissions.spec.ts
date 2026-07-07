@@ -18,6 +18,7 @@ describe('role permission profiles', () => {
     expect(canDelegateRole('admin', 'site_manager')).toBe(true)
     expect(canDelegateRole('site_manager', 'moderator')).toBe(true)
     expect(canDelegateRole('moderator', 'site_manager')).toBe(false)
+    expect(roleProfiles.site_manager.permissions).toContain('user:manageScoped')
   })
 
   it('detects role inheritance and predefined role families', () => {

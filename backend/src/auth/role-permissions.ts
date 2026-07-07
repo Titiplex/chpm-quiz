@@ -30,6 +30,7 @@ export type Permission =
   | 'judicial:validateRequest'
   | 'judicial:executeAccess'
   | 'user:administer'
+  | 'user:manageScoped'
   | 'notification:configure'
   | 'compliance:read'
   | 'compliance:maintain'
@@ -90,13 +91,14 @@ export const roleProfiles: Record<UserRole, RoleProfile> = {
       'compliance:read',
       'compliance:maintain',
       'user:administer',
+      'user:manageScoped',
       'terminal:administer',
     ],
   },
   site_manager: {
     label: 'Gestionnaire de site',
     shortLabel: 'Gestion site',
-    description: 'Niveau 2 : gère les invitations, les terminaux et les indicateurs agrégés uniquement sur son site.',
+    description: 'Niveau 2 : gère les invitations, les terminaux, les modérateurs et les indicateurs agrégés uniquement sur son site.',
     family: 'operational',
     rank: 200,
     scope: 'site',
@@ -110,6 +112,7 @@ export const roleProfiles: Record<UserRole, RoleProfile> = {
       'invitation:resend',
       'statistics:read',
       'notification:configure',
+      'user:manageScoped',
       'terminal:administer',
     ],
   },

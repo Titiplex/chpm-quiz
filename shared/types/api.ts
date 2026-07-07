@@ -26,6 +26,51 @@ export interface AuthResponse {
   user: AuthUserProfile
 }
 
+
+export interface ApiSiteTeamUser {
+  id: string
+  email: string
+  displayName: string
+  role: Extract<UserRole, 'site_manager' | 'moderator'>
+  roleLabel: string
+  isActive: boolean
+  organizationId: string | null
+  siteId: string | null
+  buildingId: string | null
+  site: { id: string; code: string; name: string } | null
+  building: ApiBuilding | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SiteTeamResponse {
+  users: ApiSiteTeamUser[]
+  policy: {
+    manageableRoles: Array<Extract<UserRole, 'moderator'>>
+    scope: 'site' | 'organization'
+    passwordReturnedOnce: boolean
+  }
+}
+
+export interface CreateSiteModeratorRequest {
+  email: string
+  displayName: string
+  buildingId: string
+  temporaryPassword?: string
+}
+
+export interface SiteModeratorMutationResponse {
+  user: ApiSiteTeamUser
+  temporaryPassword?: string
+  temporaryPasswordGenerated?: boolean
+}
+
+export interface UpdateSiteModeratorRequest {
+  displayName?: string
+  buildingId?: string
+  isActive?: boolean
+}
+
 export interface ApiLikertScale {
   id: string
   points: number
