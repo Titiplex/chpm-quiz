@@ -8,9 +8,9 @@ const session = useSessionStore()
 const roleKindLabel = computed(() => session.currentProfile.activeRole ? 'Rôle actif' : 'Rôle spécialisé')
 const scopeText = computed(() => {
   if (session.user?.building) {
-    return `Périmètre : ${session.user.building.label}`
+    return `Périmètre : ${session.user.building.label}.`
   }
-  return `Périmètre : ${session.currentProfile.scopeLabel}`
+  return `Périmètre : ${session.currentProfile.scopeLabel}.`
 })
 </script>
 

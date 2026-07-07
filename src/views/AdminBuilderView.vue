@@ -670,8 +670,8 @@ async function performAction(action: () => Promise<string>): Promise<void> {
               </option>
             </select>
 
-            <div class="question-row mb-4">
-              <p class="section-eyebrow mb-2">Créer un questionnaire</p>
+            <details class="question-row mb-4" open>
+              <summary class="builder-disclosure-summary">Créer un questionnaire</summary>
               <label class="form-label small fw-bold" for="new-code">Code</label>
               <input id="new-code" v-model="createQuestionnaireForm.code" class="form-control mb-2" />
               <label class="form-label small fw-bold" for="new-title">Titre</label>
@@ -685,7 +685,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
               <button class="btn btn-outline-primary w-100" type="button" :disabled="isSaving" @click="createQuestionnaire">
                 + Créer le brouillon
               </button>
-            </div>
+            </details>
 
             <div class="d-flex align-items-center justify-content-between mb-2">
               <h3 class="h6 fw-bold mb-0">Groupes</h3>
@@ -705,8 +705,8 @@ async function performAction(action: () => Promise<string>): Promise<void> {
               </button>
             </div>
 
-            <div class="question-row">
-              <p class="page-header-eyebrow mb-2">Ajouter un groupe</p>
+            <details class="question-row" open>
+              <summary class="builder-disclosure-summary">Ajouter un groupe</summary>
               <label class="form-label small fw-bold" for="group-title">Nom du groupe</label>
               <input id="group-title" v-model="groupForm.title" class="form-control mb-2" />
               <label class="form-label small fw-bold" for="group-description">Description</label>
@@ -740,7 +740,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
               >
                 + Ajouter le groupe
               </button>
-            </div>
+            </details>
           </aside>
         </div>
 
@@ -962,6 +962,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                 <div v-if="!allQuestions.length" class="alert alert-warning rounded-3 mb-0">
                   Aucune question pour l'instant. Commencez par créer un groupe, puis ajoutez vos questions.
                 </div>
+                <div v-else class="compact-list content-scroll content-scroll-sm">
                 <div v-for="question in allQuestions" :key="question.id" class="question-row">
                   <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
                     <span class="badge-soft">{{ question.code }}</span>
@@ -980,6 +981,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                       {{ question.popupDefinitions.length }} popup(s)
                     </span>
                   </div>
+                </div>
                 </div>
               </div>
             </div>
@@ -1031,6 +1033,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                 </div>
               </div>
 
+              <div class="content-scroll content-scroll-lg">
               <div v-for="group in previewGroups" :key="group.id" class="question-row mb-3">
                 <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
                   <span class="badge-soft">{{ group.title }} · {{ group.questionsPerPage }} question(s)/page</span>
@@ -1086,6 +1089,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                     <p class="small muted mb-0 mt-2">{{ popup.body }}</p>
                   </div>
                 </div>
+              </div>
               </div>
             </div>
 

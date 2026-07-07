@@ -205,7 +205,7 @@ function formatDate(value?: string | null): string {
       <div class="demo-card mt-4">
         <p class="section-eyebrow mb-2">Inventaire complet</p>
         <h2 class="h4 fw-bold mb-3">Terminaux suspendus ou révoqués</h2>
-        <div class="table-card">
+        <div class="table-card table-card-scroll">
           <table class="table align-middle">
             <thead class="table-light">
               <tr>

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 
+import CollapsibleSection from '@/components/common/CollapsibleSection.vue'
 import KpiCard from '@/components/common/KpiCard.vue'
+import PageSectionNav from '@/components/common/PageSectionNav.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
 import { appConfig } from '@/config/env'
@@ -9,10 +11,25 @@ import { useCatalogStore } from '@/stores/catalog'
 import { useSessionStore } from '@/stores/session'
 import { useStatsStore } from '@/stores/stats'
 
+
+type PageSectionNavItem = {
+  id: string
+  label: string
+  hint?: string
+}
+
 const catalog = useCatalogStore()
 const session = useSessionStore()
 const statsStore = useStatsStore()
 const selectedQuestionnaireId = ref('')
+
+const statsSections: PageSectionNavItem[] = [
+  { id: 'stats-overview', label: 'Synthèse', hint: 'KPI et seuil' },
+  { id: 'stats-segments', label: 'Segments', hint: 'Versions, sites, bâtiments' },
+  { id: 'stats-submissions', label: 'Soumissions', hint: 'Codes pseudonymisés' },
+  { id: 'stats-popups', label: 'Popups', hint: 'Termes ouverts' },
+  { id: 'stats-questions', label: 'Questions', hint: 'Temps et signaux' },
+]
 
 const selectedQuestionnaire = computed(() => (
   catalog.publishedQuestionnaires.find((questionnaire) => questionnaire.id === selectedQuestionnaireId.value) ?? null
@@ -92,8 +109,11 @@ function formatAnswer(value: unknown): string {
       </div>
 
       <template v-if="statsStore.stats">
+        <div class="page-workspace">
+          <PageSectionNav title="Navigation statistiques" :sections="statsSections" />
+          <div class="page-workspace-main">
         <!-- Info seuil -->
-        <div class="d-flex align-items-center gap-2 mb-4">
+        <div id="stats-overview" class="page-section d-flex align-items-center gap-2 mb-4">
           <span class="badge-soft warning">Seuil n ≥ {{ statsStore.stats.threshold }}</span>
           <span class="small" style="color: var(--chm-muted);">En dessous, les détails sont masqués pour préserver la confidentialité.</span>
         </div>
@@ -126,12 +146,12 @@ function formatAnswer(value: unknown): string {
           </div>
         </div>
 
-        <div class="row g-4">
+        <div id="stats-segments" class="page-section row g-4">
           <!-- Versions -->
           <div class="col-xl-6">
             <div class="demo-card h-100">
               <h2 class="page-header-title mb-4" style="font-size:1rem;">Versions</h2>
-              <div class="table-card">
+              <div class="table-card table-card-scroll">
                 <table class="table align-middle">
                   <thead>
                     <tr>
@@ -162,7 +182,7 @@ function formatAnswer(value: unknown): string {
           <div class="col-xl-6">
             <div class="demo-card h-100">
               <h2 class="page-header-title mb-4" style="font-size:1rem;">Canaux de passation</h2>
-              <div class="table-card">
+              <div class="table-card table-card-scroll">
                 <table class="table align-middle">
                   <thead>
                     <tr>
@@ -191,7 +211,7 @@ function formatAnswer(value: unknown): string {
           <div class="col-xl-6">
             <div class="demo-card h-100">
               <h2 class="page-header-title mb-4" style="font-size:1rem;">Sites</h2>
-              <div class="table-card">
+              <div class="table-card table-card-scroll">
                 <table class="table align-middle">
                   <thead>
                     <tr>
@@ -220,7 +240,7 @@ function formatAnswer(value: unknown): string {
           <div class="col-xl-6">
             <div class="demo-card h-100">
               <h2 class="page-header-title mb-4" style="font-size:1rem;">Langues</h2>
-              <div class="table-card">
+              <div class="table-card table-card-scroll">
                 <table class="table align-middle">
                   <thead>
                     <tr>
@@ -249,7 +269,7 @@ function formatAnswer(value: unknown): string {
           <div class="col-xl-6">
             <div class="demo-card h-100">
               <h2 class="page-header-title mb-4" style="font-size:1rem;">Bâtiments</h2>
-              <div class="table-card">
+              <div class="table-card table-card-scroll">
                 <table class="table align-middle">
                   <thead>
                     <tr>
@@ -282,7 +302,7 @@ function formatAnswer(value: unknown): string {
           <div class="col-xl-6">
             <div class="demo-card h-100">
               <h2 class="page-header-title mb-4" style="font-size:1rem;">Groupes de questions</h2>
-              <div class="table-card">
+              <div class="table-card table-card-scroll">
                 <table class="table align-middle">
                   <thead>
                     <tr>
@@ -311,7 +331,7 @@ function formatAnswer(value: unknown): string {
           <div class="col-xl-7">
             <div class="demo-card h-100">
               <h2 class="page-header-title mb-4" style="font-size:1rem;">Soumissions pseudonymisées</h2>
-              <div class="table-card">
+              <div class="table-card table-card-scroll">
                 <table class="table align-middle">
                   <thead>
                     <tr>
@@ -349,13 +369,14 @@ function formatAnswer(value: unknown): string {
           </div>
 
           <!-- Popups -->
-          <div class="col-12">
-            <div class="demo-card">
-              <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
-                <h2 class="page-header-title mb-0" style="font-size:1rem;">Termes nécessitant une explication</h2>
-                <span class="badge-soft warning">Seuil n ≥ {{ statsStore.stats.threshold }}</span>
-              </div>
-              <div class="table-card">
+          <div id="stats-popups" class="page-section col-12">
+            <CollapsibleSection
+              title="Termes nécessitant une explication"
+              badge-tone="warning"
+              :badge="`Seuil n ≥ ${statsStore.stats.threshold}`"
+              body-class="compact"
+            >
+              <div class="table-card table-card-scroll">
                 <table class="table align-middle">
                   <thead>
                     <tr>
@@ -386,17 +407,19 @@ function formatAnswer(value: unknown): string {
                   </tbody>
                 </table>
               </div>
-            </div>
+            </CollapsibleSection>
           </div>
 
           <!-- Questions détaillées -->
-          <div class="col-12">
-            <div class="demo-card">
-              <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
-                <h2 class="page-header-title mb-0" style="font-size:1rem;">Signaux de compréhension par question</h2>
-                <span class="badge-soft warning">{{ statsStore.stats.totals.popupOpens }} ouverture(s) popup</span>
-              </div>
-              <div class="table-card">
+          <div id="stats-questions" class="page-section col-12">
+            <CollapsibleSection
+              title="Signaux de compréhension par question"
+              badge-tone="warning"
+              :badge="`${statsStore.stats.totals.popupOpens} ouverture(s) popup`"
+              :default-open="false"
+              body-class="compact"
+            >
+              <div class="table-card table-card-scroll table-card-scroll-lg">
                 <table class="table align-middle">
                   <thead>
                     <tr>
@@ -455,7 +478,7 @@ function formatAnswer(value: unknown): string {
                   </tbody>
                 </table>
               </div>
-            </div>
+            </CollapsibleSection>
           </div>
         </div>
 
@@ -479,7 +502,7 @@ function formatAnswer(value: unknown): string {
             <div class="col-md-3"><strong>Temps total</strong><div style="color:var(--chm-muted);">{{ formatDuration(statsStore.selectedSubmission.totalDurationMs) }}</div></div>
             <div class="col-md-3"><strong>Événements</strong><div style="color:var(--chm-muted);">{{ statsStore.selectedSubmission.telemetry.totalEvents }}</div></div>
           </div>
-          <div class="table-card">
+          <div class="table-card table-card-scroll">
             <table class="table align-middle">
               <thead>
                 <tr>
@@ -499,6 +522,8 @@ function formatAnswer(value: unknown): string {
                 </tr>
               </tbody>
             </table>
+          </div>
+        </div>
           </div>
         </div>
       </template>

@@ -324,7 +324,7 @@ function canResend(invitation: ApiInvitation): boolean {
         <div class="col-xl-7">
           <div class="demo-card h-100">
             <h2 class="page-header-title mb-4" style="font-size:1.1rem;">Terminaux actifs</h2>
-            <div class="table-card">
+            <div class="table-card table-card-scroll">
               <table class="table align-middle">
                 <thead>
                   <tr><th>Terminal</th><th>Bâtiment</th><th>En attente</th><th>Dernière activité</th></tr>

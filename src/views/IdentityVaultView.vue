@@ -237,7 +237,7 @@ function statusLabel(value: string): string {
           <div class="demo-card">
             <p class="section-eyebrow mb-2">Workflow</p>
             <h2 class="h4 fw-bold mb-4">Demandes d’accès judiciaire</h2>
-            <div class="table-card">
+            <div class="table-card table-card-scroll">
               <table class="table align-middle">
                 <thead class="table-light">
                   <tr>

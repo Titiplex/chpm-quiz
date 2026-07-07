@@ -21,7 +21,7 @@ withDefaults(defineProps<Props>(), {
       <span v-if="icon" aria-hidden="true" style="font-size:1.1rem;">{{ icon }}</span>
     </div>
     <strong class="kpi-value">{{ value }}</strong>
-    <p v-if="detail" class="small mb-0 mt-1" style="color: var(--chm-muted);">
+    <p v-if="detail" class="small mb-0 mt-1" :class="`text-${tone}`">
       {{ detail }}
     </p>
   </div>
