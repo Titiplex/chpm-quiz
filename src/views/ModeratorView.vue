@@ -6,6 +6,7 @@ import KpiCard from '@/components/common/KpiCard.vue'
 import ModalPanel from '@/components/common/ModalPanel.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import NotificationPreferencesCard from '@/components/notifications/NotificationPreferencesCard.vue'
+import SiteTeamPanel from '@/components/moderation/SiteTeamPanel.vue'
 import { appConfig } from '@/config/env'
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
 import { useCatalogStore } from '@/stores/catalog'
@@ -51,7 +52,7 @@ const questionnaires = computed(() =>
   catalog.publishedQuestionnaires.filter((questionnaire) => isQuestionnaireOpen(questionnaire.openFrom, questionnaire.openUntil)),
 )
 const total = computed(() => moderation.totals)
-const canAdministerTerminals = computed(() => ['admin', 'technical_admin'].includes(session.currentRole))
+const canAdministerTerminals = computed(() => ['admin', 'site_manager', 'technical_admin'].includes(session.currentRole))
 const responseRate = computed(() => {
   if (total.value.sent === 0) return '0 %'
   return `${Math.round((total.value.submitted / total.value.sent) * 100)} %`
@@ -319,6 +320,10 @@ function canResend(invitation: ApiInvitation): boolean {
 
       <div class="row g-4 mb-4">
         <div class="col-12"><NotificationPreferencesCard /></div>
+      </div>
+
+      <div v-if="session.hasPermission('user:manageScoped')" class="mb-4">
+        <SiteTeamPanel />
       </div>
 
       <CollapsibleSection

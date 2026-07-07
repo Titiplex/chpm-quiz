@@ -51,6 +51,11 @@ import type {
   UpdateQuestionRequest,
   UpdateTerminalDeviceRequest,
   RegenerateTerminalDeviceTokenResponse,
+  ApiSiteTeamUser,
+  CreateSiteModeratorRequest,
+  SiteModeratorMutationResponse,
+  SiteTeamResponse,
+  UpdateSiteModeratorRequest,
   UpsertNotificationSubscriptionRequest,
 } from '@shared/types/api'
 
@@ -59,6 +64,7 @@ interface DemoRequestOptions {
 }
 
 const SESSION_EMAIL_STORAGE_KEY = 'chpm_demo_session_email'
+const DEMO_USERS_STORAGE_KEY = 'chpm_demo_users'
 const QUESTIONNAIRES_STORAGE_KEY = 'chpm_demo_questionnaires'
 const INVITATIONS_STORAGE_KEY = 'chpm_demo_invitations'
 const RESPONDENT_SESSIONS_STORAGE_KEY = 'chpm_demo_respondent_sessions'
@@ -68,12 +74,16 @@ const NOTIFICATION_SUBSCRIPTIONS_STORAGE_KEY = 'chpm_demo_notification_subscript
 const AUDIT_LOGS_STORAGE_KEY = 'chpm_demo_audit_logs'
 
 interface DemoUserSeed {
+  id?: string
   email: string
   password: string
   displayName: string
   role: Exclude<UserRole, 'respondent' | 'service_account'>
   buildingId?: string
   siteId?: string
+  createdAt?: string
+  updatedAt?: string
+  isActive?: boolean
 }
 
 type RespondentSessionMap = Record<string, RespondentSessionResponse>
@@ -157,12 +167,14 @@ const terminalDeviceSeeds: ApiTerminalDevice[] = [
 
 const demoUsers: DemoUserSeed[] = [
   {
+    id: 'demo-user-admin',
     email: 'admin@chpm.local',
     password: 'Admin123!',
     displayName: 'Alice Martin',
     role: 'admin',
   },
   {
+    id: 'demo-user-site-manager-mtl',
     email: 'site.manager@chpm.local',
     password: 'SiteManager123!',
     displayName: 'Sophie Responsable de site',
@@ -170,6 +182,7 @@ const demoUsers: DemoUserSeed[] = [
     siteId: 'demo-site-mtl',
   },
   {
+    id: 'demo-user-moderator-mtl-a',
     email: 'moderateur@chpm.local',
     password: 'Moderator123!',
     displayName: 'Marc Dubois',
@@ -178,30 +191,35 @@ const demoUsers: DemoUserSeed[] = [
     siteId: 'demo-site-mtl',
   },
   {
+    id: 'demo-user-questionnaire-admin',
     email: 'questionnaire.admin@chpm.local',
     password: 'Questionnaire123!',
     displayName: 'Quentin Questionnaires',
     role: 'questionnaire_admin',
   },
   {
+    id: 'demo-user-analyst',
     email: 'analyste@chpm.local',
     password: 'Analyst123!',
     displayName: 'Nadia Bernard',
     role: 'analyst',
   },
   {
+    id: 'demo-user-dpo',
     email: 'dpo@chpm.local',
     password: 'Dpo12345!',
     displayName: 'Claire DPO',
     role: 'dpo',
   },
   {
+    id: 'demo-user-judicial',
     email: 'judiciaire@chpm.local',
     password: 'Judiciaire123!',
     displayName: 'Julie Accès judiciaire',
     role: 'judicial_officer',
   },
   {
+    id: 'demo-user-tech',
     email: 'tech@chpm.local',
     password: 'Tech12345!',
     displayName: 'Thomas Exploitation',
@@ -227,6 +245,25 @@ export async function demoApiRequest<T>(path: string, options: DemoRequestOption
   if (method === 'POST' && route === '/auth/logout') {
     window.localStorage.removeItem(SESSION_EMAIL_STORAGE_KEY)
     return undefined as T
+  }
+
+
+  if (method === 'GET' && route === '/users/site-team') {
+    return asResponse<T>(getSiteTeam() satisfies SiteTeamResponse)
+  }
+
+  if (method === 'POST' && route === '/users/site-moderators') {
+    return asResponse<T>(upsertSiteModerator(options.body as CreateSiteModeratorRequest) satisfies SiteModeratorMutationResponse)
+  }
+
+  const siteModeratorMatch = route.match(/^\/users\/site-moderators\/([^/]+)$/)
+  if (siteModeratorMatch?.[1] && method === 'PATCH') {
+    return asResponse<T>(updateSiteModerator(siteModeratorMatch[1], options.body as UpdateSiteModeratorRequest) satisfies SiteModeratorMutationResponse)
+  }
+
+  const siteModeratorResetMatch = route.match(/^\/users\/site-moderators\/([^/]+)\/reset-password$/)
+  if (siteModeratorResetMatch?.[1] && method === 'POST') {
+    return asResponse<T>(resetSiteModeratorPassword(siteModeratorResetMatch[1]) satisfies SiteModeratorMutationResponse)
   }
 
   if (method === 'GET' && route === '/buildings') {
@@ -424,7 +461,7 @@ function asResponse<T>(payload: unknown): T {
 
 function getCurrentAuthResponse(): AuthResponse {
   const email = window.localStorage.getItem(SESSION_EMAIL_STORAGE_KEY)
-  const user = demoUsers.find((candidate) => candidate.email === email)
+  const user = getDemoUsers().find((candidate) => candidate.email === email)
 
   if (!user) {
     throw new Error('Session de démonstration absente.')
@@ -435,7 +472,7 @@ function getCurrentAuthResponse(): AuthResponse {
 
 function login(credentials: { email?: string; password?: string }): AuthResponse {
   const email = credentials.email?.trim().toLowerCase() ?? ''
-  const user = demoUsers.find((candidate) => candidate.email === email && candidate.password === credentials.password)
+  const user = getDemoUsers().find((candidate) => candidate.email === email && candidate.password === credentials.password && candidate.isActive !== false)
 
   if (!user) {
     throw new Error('Identifiants de démonstration invalides.')
@@ -449,7 +486,7 @@ function toAuthUserProfile(seed: DemoUserSeed): AuthUserProfile {
   const building = seed.buildingId ? buildingSeeds.find((candidate) => candidate.id === seed.buildingId) ?? null : null
 
   return {
-    id: `demo-user-${seed.role}`,
+    id: seed.id ?? `demo-user-${seed.role}`,
     email: seed.email,
     displayName: seed.displayName,
     role: seed.role,
@@ -485,7 +522,193 @@ function getVisibleQuestionnaires(): ApiQuestionnaire[] {
 
 function safeCurrentUser(): DemoUserSeed | null {
   const email = window.localStorage.getItem(SESSION_EMAIL_STORAGE_KEY)
-  return demoUsers.find((candidate) => candidate.email === email) ?? null
+  return getDemoUsers().find((candidate) => candidate.email === email) ?? null
+}
+
+function getDemoUsers(): DemoUserSeed[] {
+  return readStorage(DEMO_USERS_STORAGE_KEY, () => demoUsers)
+}
+
+function saveDemoUsers(users: DemoUserSeed[]): void {
+  window.localStorage.setItem(DEMO_USERS_STORAGE_KEY, JSON.stringify(users))
+}
+
+
+
+function requireSiteTeamManager(): DemoUserSeed {
+  const currentUser = safeCurrentUser()
+  if (!currentUser || !['admin', 'site_manager'].includes(currentUser.role)) {
+    throw new Error('Votre rôle ne permet pas de gérer une équipe de site.')
+  }
+  if (currentUser.role === 'site_manager' && !currentUser.siteId) {
+    throw new Error('Gestionnaire de site sans site affecté.')
+  }
+  return currentUser
+}
+
+function getSiteTeam(): SiteTeamResponse {
+  const currentUser = requireSiteTeamManager()
+  const users = getDemoUsers()
+    .filter((user) => user.role === 'site_manager' || user.role === 'moderator')
+    .filter((user) => isUserInSiteTeamScope(currentUser, user))
+    .map(toApiSiteTeamUser)
+
+  return {
+    users,
+    policy: {
+      manageableRoles: ['moderator'],
+      scope: currentUser.role === 'site_manager' ? 'site' : 'organization',
+      passwordReturnedOnce: true,
+    },
+  }
+}
+
+function upsertSiteModerator(payload: CreateSiteModeratorRequest): SiteModeratorMutationResponse {
+  const currentUser = requireSiteTeamManager()
+  const building = buildingSeeds.find((candidate) => candidate.id === payload.buildingId)
+  if (!building) throw new Error('Bâtiment introuvable dans la démo.')
+  assertBuildingInCurrentUserScope(building)
+
+  const users = getDemoUsers()
+  const email = payload.email.trim().toLowerCase()
+  const existingIndex = users.findIndex((candidate) => candidate.email === email)
+  const existing = existingIndex >= 0 ? users[existingIndex] : undefined
+  if (existing && existing.role !== 'moderator') {
+    throw new Error('Cet email correspond déjà à un compte qui n’est pas modérateur.')
+  }
+  if (existing && !isUserInSiteTeamScope(currentUser, existing)) {
+    throw new Error('Modérateur hors de votre périmètre.')
+  }
+
+  const temporaryPassword = payload.temporaryPassword ?? generateDemoTemporaryPassword()
+  const now = nowIso()
+  const nextUser: DemoUserSeed = {
+    ...existing,
+    id: existing?.id ?? createId('user-moderator'),
+    email,
+    password: temporaryPassword,
+    displayName: payload.displayName.trim(),
+    role: 'moderator',
+    buildingId: building.id,
+    siteId: building.siteId,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+    isActive: true,
+  }
+
+  if (existingIndex >= 0) {
+    users[existingIndex] = nextUser
+  } else {
+    users.push(nextUser)
+  }
+  saveDemoUsers(users)
+  appendAuditLog('user.siteModerator.create', 'User', nextUser.id ?? null, null, { email, buildingId: building.id })
+
+  return {
+    user: toApiSiteTeamUser(nextUser),
+    temporaryPassword,
+    temporaryPasswordGenerated: payload.temporaryPassword === undefined,
+  }
+}
+
+function updateSiteModerator(id: string, payload: UpdateSiteModeratorRequest): SiteModeratorMutationResponse {
+  const currentUser = requireSiteTeamManager()
+  const users = getDemoUsers()
+  const index = users.findIndex((candidate) => candidate.id === id)
+  const user = index >= 0 ? users[index] : undefined
+  if (!user || user.role !== 'moderator' || !isUserInSiteTeamScope(currentUser, user)) {
+    throw new Error('Modérateur introuvable dans votre périmètre.')
+  }
+
+  let nextBuilding = user.buildingId ? buildingSeeds.find((candidate) => candidate.id === user.buildingId) : undefined
+  if (payload.buildingId) {
+    nextBuilding = buildingSeeds.find((candidate) => candidate.id === payload.buildingId)
+    if (!nextBuilding) throw new Error('Bâtiment introuvable dans la démo.')
+    assertBuildingInCurrentUserScope(nextBuilding)
+  }
+
+  const updated: DemoUserSeed = {
+    ...user,
+    displayName: payload.displayName?.trim() || user.displayName,
+    buildingId: nextBuilding?.id ?? user.buildingId,
+    siteId: nextBuilding?.siteId ?? user.siteId,
+    updatedAt: nowIso(),
+  }
+  if (payload.isActive !== undefined) {
+    updated.isActive = payload.isActive
+  }
+  if (payload.isActive === false) {
+    updated.password = createId('disabled-password')
+  }
+
+  users[index] = updated
+  saveDemoUsers(users)
+  appendAuditLog('user.siteModerator.patch', 'User', updated.id ?? null, null, {
+    email: updated.email,
+    buildingId: updated.buildingId,
+    isActive: payload.isActive,
+  })
+
+  return { user: toApiSiteTeamUser(updated) }
+}
+
+function resetSiteModeratorPassword(id: string): SiteModeratorMutationResponse {
+  const currentUser = requireSiteTeamManager()
+  const users = getDemoUsers()
+  const index = users.findIndex((candidate) => candidate.id === id)
+  const user = index >= 0 ? users[index] : undefined
+  if (!user || user.role !== 'moderator' || !isUserInSiteTeamScope(currentUser, user)) {
+    throw new Error('Modérateur introuvable dans votre périmètre.')
+  }
+
+  const temporaryPassword = generateDemoTemporaryPassword()
+  const updated: DemoUserSeed = { ...user, password: temporaryPassword, isActive: true, updatedAt: nowIso() }
+  users[index] = updated
+  saveDemoUsers(users)
+  appendAuditLog('user.siteModerator.resetPassword', 'User', updated.id ?? null, null, { email: updated.email })
+
+  return { user: toApiSiteTeamUser(updated), temporaryPassword, temporaryPasswordGenerated: true }
+}
+
+function isUserInSiteTeamScope(currentUser: DemoUserSeed, user: DemoUserSeed): boolean {
+  if (currentUser.role === 'admin') return true
+  return Boolean(currentUser.siteId) && user.siteId === currentUser.siteId
+}
+
+function toApiSiteTeamUser(seed: DemoUserSeed): ApiSiteTeamUser {
+  const building = seed.buildingId ? buildingSeeds.find((candidate) => candidate.id === seed.buildingId) ?? null : null
+  const siteId = seed.siteId ?? building?.siteId ?? null
+
+  return {
+    id: seed.id ?? `demo-user-${seed.role}`,
+    email: seed.email,
+    displayName: seed.displayName,
+    role: seed.role as ApiSiteTeamUser['role'],
+    roleLabel: roleProfiles[seed.role].label,
+    isActive: seed.isActive ?? !seed.password.startsWith('demo-disabled-password'),
+    organizationId: DEMO_ORGANIZATION_ID,
+    siteId,
+    buildingId: building?.id ?? null,
+    site: siteId ? siteDto(siteId) : null,
+    building,
+    createdAt: seed.createdAt ?? '2026-01-01T00:00:00.000Z',
+    updatedAt: seed.updatedAt ?? '2026-01-01T00:00:00.000Z',
+  }
+}
+
+function siteDto(siteId: string): { id: string; code: string; name: string } {
+  const firstBuilding = buildingSeeds.find((building) => building.siteId === siteId)
+  const code = siteId.replace('demo-site-', '').toUpperCase()
+  return {
+    id: siteId,
+    code,
+    name: firstBuilding ? firstBuilding.label.split('·')[0]?.trim() ?? code : code,
+  }
+}
+
+function generateDemoTemporaryPassword(): string {
+  const suffix = crypto.randomUUID?.().slice(0, 8) ?? Math.random().toString(16).slice(2, 10)
+  return `Temp-${suffix}-A7!x`
 }
 
 function getQuestionnaires(): ApiQuestionnaire[] {
@@ -2056,7 +2279,7 @@ function createAuditLogRecord(
   occurredAt: string,
   actorUserId: string | null,
 ): AuditLogsResponse['logs'][number] {
-  const actorSeed = actorUserId ? demoUsers.find((candidate) => `demo-user-${candidate.role}` === actorUserId) ?? null : null
+  const actorSeed = actorUserId ? getDemoUsers().find((candidate) => (candidate.id ?? `demo-user-${candidate.role}`) === actorUserId) ?? null : null
 
   return {
     id: createId('audit'),
