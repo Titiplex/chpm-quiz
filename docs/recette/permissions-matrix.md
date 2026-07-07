@@ -20,6 +20,7 @@ Légende : `✓` autorisé, `●` autorisé sous condition de périmètre/procé
 | Créer demande judiciaire | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ● | ✗ |
 | Valider demande judiciaire | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ● | ✗ |
 | Administrer utilisateurs/rôles | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ● | ✗ | ✗ |
+| Gérer modérateurs de site | ✗ | ✗ | ● | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ |
 | Consulter journaux d'audit | ✗ | ✗ | ✗ | ✗ | ✗ | ● | ✓ | ● | ✓ |
 | Consulter métriques techniques | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✓ | ✗ | ✓ |
 

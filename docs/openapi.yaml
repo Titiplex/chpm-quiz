@@ -51,6 +51,30 @@ components:
         permissions:
           type: array
           items: { type: string }
+    SiteTeamUser:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        displayName: { type: string }
+        role: { type: string, enum: [site_manager, moderator] }
+        isActive: { type: boolean }
+        siteId: { type: string, format: uuid, nullable: true }
+        buildingId: { type: string, format: uuid, nullable: true }
+    CreateSiteModeratorRequest:
+      type: object
+      required: [email, displayName, buildingId]
+      properties:
+        email: { type: string, format: email }
+        displayName: { type: string, minLength: 2, maxLength: 120 }
+        buildingId: { type: string, format: uuid }
+        temporaryPassword: { type: string, minLength: 12, maxLength: 128 }
+    UpdateSiteModeratorRequest:
+      type: object
+      properties:
+        displayName: { type: string, minLength: 2, maxLength: 120 }
+        buildingId: { type: string, format: uuid }
+        isActive: { type: boolean }
     PseudonymizedExport:
       type: object
       properties:
@@ -123,6 +147,43 @@ paths:
       summary: Bâtiments filtrés par périmètre
       responses:
         '200': { description: Liste des bâtiments accessibles }
+  /users/site-team:
+    get:
+      summary: Liste des gestionnaires et modérateurs dans le périmètre administrable
+      description: Admin global = périmètre organisationnel ; gestionnaire de site = son site uniquement. Aucun répondant ni service account n'est exposé.
+      responses:
+        '200': { description: Equipe de site filtrée par RBAC/ABAC }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /users/site-moderators:
+    post:
+      summary: Création ou réactivation d'un modérateur bâtiment dans le périmètre autorisé
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSiteModeratorRequest' }
+      responses:
+        '201': { description: Modérateur créé avec mot de passe temporaire affiché une seule fois }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /users/site-moderators/{id}:
+    patch:
+      summary: Mise à jour du bâtiment ou du statut d'un modérateur de site
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateSiteModeratorRequest' }
+      responses:
+        '200': { description: Modérateur mis à jour et sessions révoquées si nécessaire }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /users/site-moderators/{id}/reset-password:
+    post:
+      summary: Réinitialisation locale du mot de passe d'un modérateur du périmètre
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '201': { description: Mot de passe temporaire retourné une seule fois, sessions révoquées }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /questionnaires:
     get:
       summary: Liste des questionnaires accessibles
