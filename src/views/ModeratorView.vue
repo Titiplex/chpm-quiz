@@ -351,7 +351,7 @@ function canResend(invitation: ApiInvitation): boolean {
 
       <CollapsibleSection
         id="moderation-invitations"
-        class="mt-4"
+        class="mt-4 moderation-invitations-section"
         title="Invitations"
         :badge="`${moderation.invitations.length} ligne(s)`"
         :default-open="false"
@@ -361,7 +361,7 @@ function canResend(invitation: ApiInvitation): boolean {
           <p class="muted mb-0">Historique opérationnel placé en bas de page pour éviter de saturer la vue de modération courante.</p>
           <button class="btn btn-outline-primary btn-sm" type="button" @click="moderation.refresh">Actualiser</button>
         </div>
-        <div class="table-card table-card-scroll table-card-scroll-lg">
+        <div class="table-card table-card-scroll table-card-scroll-lg table-card-scroll-invitations">
           <table class="table align-middle">
             <thead>
               <tr>

@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 
 import CollapsibleSection from '@/components/common/CollapsibleSection.vue'
+import ModalPanel from '@/components/common/ModalPanel.vue'
 import PageSectionNav from '@/components/common/PageSectionNav.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
@@ -20,7 +21,6 @@ type PageSectionNavItem = {
 const catalog = useCatalogStore()
 
 const adminSections: PageSectionNavItem[] = [
-  { id: 'admin-structure', label: 'Structure', hint: 'Questionnaires et groupes' },
   { id: 'admin-editor', label: 'Édition', hint: 'Métadonnées et questions' },
   { id: 'admin-preview', label: 'Aperçu', hint: 'Parcours répondant' },
 ]
@@ -29,6 +29,7 @@ const selectedQuestionnaireId = ref<string>('')
 const selectedGroupId = ref<string>('')
 const editingQuestionId = ref<string | null>(null)
 const showPreview = ref(true)
+const showStructureModal = ref(false)
 const localMessage = ref<string | null>(null)
 const localError = ref<string | null>(null)
 const publicationReport = ref<{ canPublish: boolean; errors: string[] } | null>(null)
@@ -613,6 +614,9 @@ async function performAction(action: () => Promise<string>): Promise<void> {
         description="Créez et modifiez vos questionnaires sans code : groupes, questions, popups et prévisualisation intégrée."
       >
         <template #actions>
+          <button class="btn btn-outline-primary" type="button" @click="showStructureModal = true">
+            Structure / groupes
+          </button>
           <button class="btn btn-outline-primary" type="button" @click="showPreview = !showPreview">
             {{ showPreview ? 'Masquer' : 'Afficher' }} l’aperçu répondant
           </button>
@@ -663,109 +667,124 @@ async function performAction(action: () => Promise<string>): Promise<void> {
         </ul>
       </div>
 
+      <ModalPanel
+        v-model="showStructureModal"
+        title="Structure du questionnaire"
+        eyebrow="Questionnaires et groupes"
+        description="Sélectionnez le brouillon, créez un questionnaire ou ajoutez un groupe sans compresser l’éditeur principal."
+        size="lg"
+      >
+        <aside class="builder-sidebar admin-structure-panel p-3 border-0 shadow-none">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <h2 class="h5 fw-bold mb-0">Structure</h2>
+        <span class="badge-soft">{{ selectedQuestionnaire?.questionCount ?? 0 }} questions</span>
+      </div>
+
+      <label class="form-label fw-bold" for="questionnaire-select">Questionnaire</label>
+      <select
+        id="questionnaire-select"
+        v-model="selectedQuestionnaireId"
+        class="form-select mb-3"
+        aria-label="Questionnaire en base"
+      >
+        <option v-for="questionnaire in catalog.questionnaires" :key="questionnaire.id" :value="questionnaire.id">
+          {{ questionnaire.title }} · v{{ questionnaire.version }} ·
+          {{ questionnaire.isPublished ? 'publié' : 'brouillon' }}
+        </option>
+      </select>
+
+      <details class="question-row mb-4" open>
+        <summary class="builder-disclosure-summary">Créer un questionnaire</summary>
+        <label class="form-label small fw-bold" for="new-code">Code</label>
+        <input id="new-code" v-model="createQuestionnaireForm.code" class="form-control mb-2" />
+        <label class="form-label small fw-bold" for="new-title">Titre</label>
+        <input id="new-title" v-model="createQuestionnaireForm.title" class="form-control mb-2" />
+        <label class="form-label small fw-bold" for="new-language">Langue par défaut</label>
+        <select id="new-language" v-model="createQuestionnaireForm.defaultLanguage" class="form-select mb-3">
+          <option value="fr">Français</option>
+          <option value="en">Anglais</option>
+          <option value="es">Espagnol</option>
+        </select>
+        <button class="btn btn-outline-primary w-100" type="button" :disabled="isSaving" @click="createQuestionnaire">
+          + Créer le brouillon
+        </button>
+      </details>
+
+      <div class="d-flex align-items-center justify-content-between mb-2">
+        <h3 class="h6 fw-bold mb-0">Groupes</h3>
+        <span class="badge-soft">{{ selectedQuestionnaire?.groupCount ?? 0 }}</span>
+      </div>
+      <div class="d-grid gap-2 mb-4">
+        <button
+          v-for="group in selectedQuestionnaire?.groups ?? []"
+          :key="group.id"
+          class="builder-menu-item border-0 text-start"
+          :class="{ active: group.id === selectedGroup?.id }"
+          type="button"
+          @click="selectedGroupId = group.id; showStructureModal = false"
+        >
+          <span>{{ group.title }}</span>
+          <small>{{ group.questions.length }}</small>
+        </button>
+      </div>
+
+      <details class="question-row" open>
+        <summary class="builder-disclosure-summary">Ajouter un groupe</summary>
+        <label class="form-label small fw-bold" for="group-title">Nom du groupe</label>
+        <input id="group-title" v-model="groupForm.title" class="form-control mb-2" />
+        <label class="form-label small fw-bold" for="group-description">Description</label>
+        <textarea id="group-description" v-model="groupForm.description" class="form-control mb-2" rows="2"></textarea>
+        <label class="form-label small fw-bold" for="group-questions-per-page">Questions par page</label>
+        <input
+          id="group-questions-per-page"
+          v-model.number="groupForm.questionsPerPage"
+          class="form-control mb-2"
+          min="1"
+          max="20"
+          type="number"
+        />
+        <div class="form-check form-switch mb-3">
+          <input id="group-randomize" v-model="groupForm.randomize" class="form-check-input" type="checkbox" />
+          <label class="form-check-label fw-semibold" for="group-randomize">Randomiser ce groupe</label>
+        </div>
+        <div class="condition-line mb-3">
+          <p class="page-header-eyebrow mb-2">Condition simple</p>
+          <label class="form-label small fw-bold" for="group-condition-code">Code question déclencheuse</label>
+          <input id="group-condition-code" v-model="groupForm.conditionQuestionCode" class="form-control mb-2" placeholder="Q-001" />
+          <label class="form-label small fw-bold" for="group-condition-value">Valeur attendue</label>
+          <input id="group-condition-value" v-model="groupForm.conditionValue" class="form-control" placeholder="fr ou en" />
+          <p class="form-text mb-0">Laisser vide pour toujours afficher le groupe.</p>
+        </div>
+        <button
+          class="btn btn-outline-primary w-100"
+          type="button"
+          :disabled="!selectedQuestionnaire || isSaving"
+          @click="createGroup"
+        >
+          + Ajouter le groupe
+        </button>
+      </details>
+        </aside>
+      </ModalPanel>
+
+      <div class="action-strip admin-structure-strip mb-4">
+        <div>
+          <p class="section-eyebrow mb-1">Structure active</p>
+          <h2 class="action-strip-title">{{ selectedQuestionnaire?.title ?? 'Aucun questionnaire sélectionné' }}</h2>
+          <p class="action-strip-description">
+            {{ selectedQuestionnaire?.groupCount ?? 0 }} groupe(s) · {{ selectedQuestionnaire?.questionCount ?? 0 }} question(s)
+            <template v-if="selectedGroup"> · groupe courant : {{ selectedGroup.title }}</template>
+          </p>
+        </div>
+        <button class="btn btn-primary" type="button" @click="showStructureModal = true">
+          Ouvrir la structure
+        </button>
+      </div>
+
       <div class="page-workspace">
         <PageSectionNav title="Navigation admin" :sections="adminSections" />
         <div class="page-workspace-main admin-builder-flow">
-          <div class="admin-builder-shell">
-            <CollapsibleSection
-              id="admin-structure"
-              class="page-section"
-              title="Structure du questionnaire"
-              :badge="`${selectedQuestionnaire?.groupCount ?? 0} groupe(s)`"
-              body-class="compact"
-            >
-              <aside class="builder-sidebar p-3 border-0 shadow-none">
-            <div class="d-flex align-items-center justify-content-between mb-3">
-              <h2 class="h5 fw-bold mb-0">Structure</h2>
-              <span class="badge-soft">{{ selectedQuestionnaire?.questionCount ?? 0 }} questions</span>
-            </div>
-
-            <label class="form-label fw-bold" for="questionnaire-select">Questionnaire</label>
-            <select
-              id="questionnaire-select"
-              v-model="selectedQuestionnaireId"
-              class="form-select mb-3"
-              aria-label="Questionnaire en base"
-            >
-              <option v-for="questionnaire in catalog.questionnaires" :key="questionnaire.id" :value="questionnaire.id">
-                {{ questionnaire.title }} · v{{ questionnaire.version }} ·
-                {{ questionnaire.isPublished ? 'publié' : 'brouillon' }}
-              </option>
-            </select>
-
-            <details class="question-row mb-4" open>
-              <summary class="builder-disclosure-summary">Créer un questionnaire</summary>
-              <label class="form-label small fw-bold" for="new-code">Code</label>
-              <input id="new-code" v-model="createQuestionnaireForm.code" class="form-control mb-2" />
-              <label class="form-label small fw-bold" for="new-title">Titre</label>
-              <input id="new-title" v-model="createQuestionnaireForm.title" class="form-control mb-2" />
-              <label class="form-label small fw-bold" for="new-language">Langue par défaut</label>
-              <select id="new-language" v-model="createQuestionnaireForm.defaultLanguage" class="form-select mb-3">
-                <option value="fr">Français</option>
-                <option value="en">Anglais</option>
-                <option value="es">Espagnol</option>
-              </select>
-              <button class="btn btn-outline-primary w-100" type="button" :disabled="isSaving" @click="createQuestionnaire">
-                + Créer le brouillon
-              </button>
-            </details>
-
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <h3 class="h6 fw-bold mb-0">Groupes</h3>
-              <span class="badge-soft">{{ selectedQuestionnaire?.groupCount ?? 0 }}</span>
-            </div>
-            <div class="d-grid gap-2 mb-4">
-              <button
-                v-for="group in selectedQuestionnaire?.groups ?? []"
-                :key="group.id"
-                class="builder-menu-item border-0 text-start"
-                :class="{ active: group.id === selectedGroup?.id }"
-                type="button"
-                @click="selectedGroupId = group.id"
-              >
-                <span>{{ group.title }}</span>
-                <small>{{ group.questions.length }}</small>
-              </button>
-            </div>
-
-            <details class="question-row" open>
-              <summary class="builder-disclosure-summary">Ajouter un groupe</summary>
-              <label class="form-label small fw-bold" for="group-title">Nom du groupe</label>
-              <input id="group-title" v-model="groupForm.title" class="form-control mb-2" />
-              <label class="form-label small fw-bold" for="group-description">Description</label>
-              <textarea id="group-description" v-model="groupForm.description" class="form-control mb-2" rows="2"></textarea>
-              <label class="form-label small fw-bold" for="group-questions-per-page">Questions par page</label>
-              <input
-                id="group-questions-per-page"
-                v-model.number="groupForm.questionsPerPage"
-                class="form-control mb-2"
-                min="1"
-                max="20"
-                type="number"
-              />
-              <div class="form-check form-switch mb-3">
-                <input id="group-randomize" v-model="groupForm.randomize" class="form-check-input" type="checkbox" />
-                <label class="form-check-label fw-semibold" for="group-randomize">Randomiser ce groupe</label>
-              </div>
-              <div class="condition-line mb-3">
-                <p class="page-header-eyebrow mb-2">Condition simple</p>
-                <label class="form-label small fw-bold" for="group-condition-code">Code question déclencheuse</label>
-                <input id="group-condition-code" v-model="groupForm.conditionQuestionCode" class="form-control mb-2" placeholder="Q-001" />
-                <label class="form-label small fw-bold" for="group-condition-value">Valeur attendue</label>
-                <input id="group-condition-value" v-model="groupForm.conditionValue" class="form-control" placeholder="fr ou en" />
-                <p class="form-text mb-0">Laisser vide pour toujours afficher le groupe.</p>
-              </div>
-              <button
-                class="btn btn-outline-primary w-100"
-                type="button"
-                :disabled="!selectedQuestionnaire || isSaving"
-                @click="createGroup"
-              >
-                + Ajouter le groupe
-              </button>
-            </details>
-              </aside>
-            </CollapsibleSection>
+          <div class="admin-builder-shell admin-builder-shell-single">
 
             <CollapsibleSection
               id="admin-editor"

@@ -1281,7 +1281,7 @@ details:not([open]) > .builder-disclosure-summary::after {
 
 @media (min-width: 1400px) {
   .admin-builder-shell {
-    grid-template-columns: minmax(320px, 0.42fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     align-items: start;
   }
 
@@ -1305,5 +1305,44 @@ details:not([open]) > .builder-disclosure-summary::after {
   .modal-panel-footer,
   .modal-panel-body {
     padding: 1rem;
+  }
+}
+
+/* ---- Readability fixes: admin modal + moderation scroll ------------------- */
+.admin-builder-shell-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.admin-structure-strip {
+  align-items: flex-start;
+}
+
+.admin-structure-panel {
+  max-height: none;
+  overflow: visible;
+}
+
+.admin-structure-panel .builder-menu-item {
+  min-height: 44px;
+}
+
+.table-card-scroll-invitations {
+  max-height: min(50vh, 540px);
+  padding-bottom: 0.75rem;
+  scroll-padding-bottom: 1rem;
+  overscroll-behavior: contain;
+}
+
+.table-card-scroll-invitations .table {
+  margin-bottom: 0.75rem;
+}
+
+.moderation-invitations-section {
+  margin-bottom: 2rem;
+}
+
+@media (min-width: 1400px) {
+  .table-card-scroll-invitations {
+    max-height: min(48vh, 560px);
   }
 }
