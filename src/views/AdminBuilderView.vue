@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 
+import CollapsibleSection from '@/components/common/CollapsibleSection.vue'
+import PageSectionNav from '@/components/common/PageSectionNav.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
 import { useCatalogStore } from '@/stores/catalog'
@@ -9,7 +11,19 @@ import type { LanguageCode, QuestionType } from '@shared/types/domain'
 
 type BuilderQuestionType = Extract<QuestionType, 'free_text' | 'free_text_short' | 'free_text_long' | 'likert' | 'single_choice' | 'multiple_choice' | 'number' | 'date' | 'information'>
 
+type PageSectionNavItem = {
+  id: string
+  label: string
+  hint?: string
+}
+
 const catalog = useCatalogStore()
+
+const adminSections: PageSectionNavItem[] = [
+  { id: 'admin-structure', label: 'Structure', hint: 'Questionnaires et groupes' },
+  { id: 'admin-editor', label: 'Édition', hint: 'Métadonnées et questions' },
+  { id: 'admin-preview', label: 'Aperçu', hint: 'Parcours répondant' },
+]
 
 const selectedQuestionnaireId = ref<string>('')
 const selectedGroupId = ref<string>('')
@@ -649,9 +663,18 @@ async function performAction(action: () => Promise<string>): Promise<void> {
         </ul>
       </div>
 
-      <div class="row g-4 align-items-start">
-        <div class="col-xl-3">
-          <aside class="builder-sidebar p-3">
+      <div class="page-workspace">
+        <PageSectionNav title="Navigation admin" :sections="adminSections" />
+        <div class="page-workspace-main admin-builder-flow">
+          <div class="admin-builder-shell">
+            <CollapsibleSection
+              id="admin-structure"
+              class="page-section"
+              title="Structure du questionnaire"
+              :badge="`${selectedQuestionnaire?.groupCount ?? 0} groupe(s)`"
+              body-class="compact"
+            >
+              <aside class="builder-sidebar p-3 border-0 shadow-none">
             <div class="d-flex align-items-center justify-content-between mb-3">
               <h2 class="h5 fw-bold mb-0">Structure</h2>
               <span class="badge-soft">{{ selectedQuestionnaire?.questionCount ?? 0 }} questions</span>
@@ -741,12 +764,18 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                 + Ajouter le groupe
               </button>
             </details>
-          </aside>
-        </div>
+              </aside>
+            </CollapsibleSection>
 
-        <div class="col-xl-5">
-          <div class="demo-card h-100">
-            <div class="screen-preview">
+            <CollapsibleSection
+              id="admin-editor"
+              class="page-section"
+              title="Édition du brouillon"
+              :badge="selectedQuestionnaire?.isPublished ? 'Publié' : 'Brouillon'"
+              :badge-tone="selectedQuestionnaire?.isPublished ? 'success' : 'warning'"
+              body-class="compact"
+            >
+              <div class="screen-preview">
               <div class="screen-topbar">
                 <span class="window-dot"></span>
                 <span class="window-dot"></span>
@@ -984,13 +1013,20 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                 </div>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
+              </div>
+            </CollapsibleSection>
 
-        <div class="col-xl-4">
-          <div class="d-grid gap-4">
-            <div v-if="showPreview" class="demo-card flat">
+            <CollapsibleSection
+              v-if="showPreview"
+              id="admin-preview"
+              class="page-section admin-preview-section"
+              title="Prévisualisation et contrôles"
+              badge="Parcours simulé"
+              badge-tone="success"
+              body-class="compact"
+            >
+              <div class="d-grid gap-4">
+                <div class="demo-card flat">
               <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
                 <div>
                   <p class="section-eyebrow mb-2">Prévisualisation répondant</p>
@@ -1102,7 +1138,9 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                 <span class="badge-soft success">Randomisation avec ordre stable</span>
                 <span class="badge-soft success">Popups explicatives versionnées</span>
               </div>
-            </div>
+                </div>
+              </div>
+            </CollapsibleSection>
           </div>
         </div>
       </div>

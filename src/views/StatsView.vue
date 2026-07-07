@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 
 import CollapsibleSection from '@/components/common/CollapsibleSection.vue'
 import KpiCard from '@/components/common/KpiCard.vue'
+import ModalPanel from '@/components/common/ModalPanel.vue'
 import PageSectionNav from '@/components/common/PageSectionNav.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
@@ -67,6 +68,10 @@ function formatAnswer(value: unknown): string {
   if (value === null || value === undefined || value === '') return '—'
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value)
   return JSON.stringify(value)
+}
+
+function closeSubmissionDetail(): void {
+  statsStore.clearSubmission()
 }
 </script>
 
@@ -328,10 +333,18 @@ function formatAnswer(value: unknown): string {
           </div>
 
           <!-- Soumissions pseudonymisées -->
-          <div class="col-xl-7">
-            <div class="demo-card h-100">
-              <h2 class="page-header-title mb-4" style="font-size:1rem;">Soumissions pseudonymisées</h2>
-              <div class="table-card table-card-scroll">
+          <div id="stats-submissions" class="page-section col-12">
+            <CollapsibleSection
+              title="Soumissions pseudonymisées"
+              :badge="`${statsStore.stats.submissions.length} code(s)`"
+              :default-open="false"
+              body-class="compact"
+            >
+              <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
+                <p class="muted mb-0">Table déplacée en section déroulante : elle sert au support ponctuel, pas au pilotage quotidien.</p>
+                <span class="badge-soft warning">Pas d’email affiché</span>
+              </div>
+              <div class="table-card table-card-scroll table-card-scroll-lg">
                 <table class="table align-middle">
                   <thead>
                     <tr>
@@ -365,7 +378,7 @@ function formatAnswer(value: unknown): string {
               <p v-if="!canReadSubmissions" class="small mt-3 mb-0" style="color: var(--chm-muted);">
                 Votre rôle accède aux indicateurs agrégés uniquement.
               </p>
-            </div>
+            </CollapsibleSection>
           </div>
 
           <!-- Popups -->
@@ -487,43 +500,45 @@ function formatAnswer(value: unknown): string {
         </div>
 
         <!-- Soumission individuelle -->
-        <div v-if="statsStore.selectedSubmission" class="demo-card mt-4">
-          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-            <div>
-              <h2 class="page-header-title mb-0" style="font-size:1rem;">Détail — Code <code>{{ statsStore.selectedSubmission.publicCode }}</code></h2>
+        <ModalPanel
+          :model-value="Boolean(statsStore.selectedSubmission)"
+          :title="statsStore.selectedSubmission ? `Détail — Code ${statsStore.selectedSubmission.publicCode}` : 'Détail de soumission'"
+          eyebrow="Soumission pseudonymisée"
+          description="Ouverture ponctuelle en fenêtre dédiée pour éviter un bloc massif dans le tableau de bord."
+          size="xl"
+          @update:model-value="closeSubmissionDetail"
+          @close="closeSubmissionDetail"
+        >
+          <template v-if="statsStore.selectedSubmission">
+            <div class="row g-3 mb-4">
+              <div class="col-md-3"><strong>Bâtiment</strong><div style="color:var(--chm-muted);">{{ statsStore.selectedSubmission.building }}</div></div>
+              <div class="col-md-3"><strong>Soumis le</strong><div style="color:var(--chm-muted);">{{ formatDate(statsStore.selectedSubmission.submittedAt) }}</div></div>
+              <div class="col-md-3"><strong>Temps total</strong><div style="color:var(--chm-muted);">{{ formatDuration(statsStore.selectedSubmission.totalDurationMs) }}</div></div>
+              <div class="col-md-3"><strong>Événements</strong><div style="color:var(--chm-muted);">{{ statsStore.selectedSubmission.telemetry.totalEvents }}</div></div>
             </div>
-            <button class="btn btn-outline-secondary btn-sm" type="button" @click="statsStore.clearSubmission()">
-              Fermer
-            </button>
-          </div>
-          <div class="row g-3 mb-4">
-            <div class="col-md-3"><strong>Bâtiment</strong><div style="color:var(--chm-muted);">{{ statsStore.selectedSubmission.building }}</div></div>
-            <div class="col-md-3"><strong>Soumis le</strong><div style="color:var(--chm-muted);">{{ formatDate(statsStore.selectedSubmission.submittedAt) }}</div></div>
-            <div class="col-md-3"><strong>Temps total</strong><div style="color:var(--chm-muted);">{{ formatDuration(statsStore.selectedSubmission.totalDurationMs) }}</div></div>
-            <div class="col-md-3"><strong>Événements</strong><div style="color:var(--chm-muted);">{{ statsStore.selectedSubmission.telemetry.totalEvents }}</div></div>
-          </div>
-          <div class="table-card table-card-scroll">
-            <table class="table align-middle">
-              <thead>
-                <tr>
-                  <th>Question</th>
-                  <th>Réponse</th>
-                  <th>Alerte</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="answer in statsStore.selectedSubmission.answers" :key="answer.questionCode">
-                  <td>
-                    <strong>{{ answer.questionCode }}</strong>
-                    <div class="small" style="color:var(--chm-muted);">{{ answer.questionLabel }}</div>
-                  </td>
-                  <td>{{ formatAnswer(answer.value) }}</td>
-                  <td>{{ answer.warning ?? '—' }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
+            <div class="table-card table-card-scroll table-card-scroll-lg">
+              <table class="table align-middle">
+                <thead>
+                  <tr>
+                    <th>Question</th>
+                    <th>Réponse</th>
+                    <th>Alerte</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="answer in statsStore.selectedSubmission.answers" :key="answer.questionCode">
+                    <td>
+                      <strong>{{ answer.questionCode }}</strong>
+                      <div class="small" style="color:var(--chm-muted);">{{ answer.questionLabel }}</div>
+                    </td>
+                    <td>{{ formatAnswer(answer.value) }}</td>
+                    <td>{{ answer.warning ?? '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
+        </ModalPanel>
           </div>
         </div>
       </template>
