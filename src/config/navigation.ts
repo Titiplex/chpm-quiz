@@ -58,12 +58,6 @@ export const navigationItems: NavigationItem[] = [
     roles: ['dpo', 'judicial_officer'],
     description: t('nav.identityVault.description'),
   },
-  {
-    label: t('nav.architecture'),
-    to: '/architecture',
-    roles: ['admin', 'questionnaire_admin', 'dpo', 'technical_admin', 'judicial_officer'],
-    description: t('nav.architecture.description'),
-  },
 ]
 
 export const defaultPathByRole: Record<UserRole, string> = {

@@ -62,7 +62,6 @@ const defaultPath = computed(() => defaultPathByRole[session.currentRole])
 const canOpenAdmin = computed(() => hasRoleAccess(session.currentRole, ['admin', 'questionnaire_admin']))
 const canOpenVault = computed(() => hasRoleAccess(session.currentRole, ['dpo', 'judicial_officer']))
 const canOpenStats = computed(() => hasRoleAccess(session.currentRole, ['admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo']))
-const canOpenArchitecture = computed(() => hasRoleAccess(session.currentRole, ['admin', 'questionnaire_admin', 'dpo', 'technical_admin', 'judicial_officer']))
 
 const greetingName = computed(() => session.user?.displayName?.split(' ')[0] ?? '')
 </script>
@@ -91,9 +90,6 @@ const greetingName = computed(() => session.user?.displayName?.split(' ')[0] ?? 
             </RouterLink>
             <RouterLink v-if="canOpenVault" class="btn btn-outline-light" to="/coffre-email">
               Coffre email
-            </RouterLink>
-            <RouterLink v-if="canOpenArchitecture" class="btn btn-outline-light" to="/architecture">
-              Architecture
             </RouterLink>
             <RouterLink v-if="!canOpenAdmin && canOpenStats" class="btn btn-light fw-bold" to="/stats">
               Mes statistiques

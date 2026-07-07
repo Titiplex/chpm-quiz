@@ -8,7 +8,6 @@ import AdminBuilderView from '@/views/AdminBuilderView.vue'
 import RespondentView from '@/views/RespondentView.vue'
 import ModeratorView from '@/views/ModeratorView.vue'
 import StatsView from '@/views/StatsView.vue'
-import ArchitectureView from '@/views/ArchitectureView.vue'
 import AccessDeniedView from '@/views/AccessDeniedView.vue'
 import LoginView from '@/views/LoginView.vue'
 import { useSessionStore } from '@/stores/session'
@@ -53,11 +52,6 @@ function makeRouter() {
         meta: { label: 'Statistiques', allowedRoles: ['admin'], requiresAuthenticatedUser: true },
       },
       {
-        path: '/architecture',
-        component: ArchitectureView,
-        meta: { label: 'Architecture', allowedRoles: ['admin'], requiresAuthenticatedUser: true },
-      },
-      {
         path: '/403',
         component: AccessDeniedView,
         meta: { label: 'Accès refusé', allowedRoles: allRoles, requiresAuthenticatedUser: true },
@@ -92,16 +86,16 @@ describe('HomeView', () => {
       email: 'admin@chpm.local',
       displayName: 'Alice Martin',
       role: 'admin',
-      permissions: ['questionnaire:configure', 'statistics:read', 'architecture:read'],
+      permissions: ['questionnaire:configure', 'statistics:read'],
       building: null,
     }
 
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.text()).toContain('Produit connecté')
-    expect(wrapper.text()).toContain('Questionnaire adaptatif')
-    expect(wrapper.text()).toContain('Administration no-code')
-    expect(wrapper.text()).toContain('Pilotage statistique')
-    expect(wrapper.text()).toContain('Backend actif')
+    expect(wrapper.text()).toContain('Application connectée')
+    expect(wrapper.text()).toContain('Constructeur de questionnaire')
+    expect(wrapper.text()).toContain('Vos modules')
+    expect(wrapper.text()).toContain('Statistiques')
+    expect(wrapper.text()).not.toContain('Architecture')
   })
 })

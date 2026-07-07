@@ -10,7 +10,6 @@ import AdminBuilderView from '../views/AdminBuilderView.vue'
 import ModeratorView from '../views/ModeratorView.vue'
 import RespondentView from '../views/RespondentView.vue'
 import StatsView from '../views/StatsView.vue'
-import ArchitectureView from '../views/ArchitectureView.vue'
 import AccessDeniedView from '../views/AccessDeniedView.vue'
 import { allRoles } from '@shared/types/rbac'
 
@@ -59,11 +58,6 @@ describe('App', () => {
           path: '/stats',
           component: StatsView,
           meta: { label: 'Statistiques', allowedRoles: ['admin'], requiresAuthenticatedUser: true },
-        },
-        {
-          path: '/architecture',
-          component: ArchitectureView,
-          meta: { label: 'Architecture', allowedRoles: ['admin'], requiresAuthenticatedUser: true },
         },
         {
           path: '/403',

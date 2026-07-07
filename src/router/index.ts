@@ -169,22 +169,6 @@ export function createConnectedRoutes(): RouteRecordRaw[] {
       },
     },
     {
-      path: '/architecture',
-      name: 'architecture',
-      component: () => import('@/views/ArchitectureView.vue'),
-      meta: {
-        label: t('nav.architecture'),
-        allowedRoles: [
-          'admin',
-          'questionnaire_admin',
-          'dpo',
-          'technical_admin',
-          'judicial_officer',
-        ],
-        requiresAuthenticatedUser: true,
-      },
-    },
-    {
       path: '/403',
       name: 'forbidden',
       component: () => import('@/views/AccessDeniedView.vue'),

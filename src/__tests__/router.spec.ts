@@ -40,7 +40,6 @@ describe('router configuration and guards', () => {
       '/terminal/:terminalToken?',
       '/rgpd',
       '/coffre-email',
-      '/architecture',
       '/403',
       '/:pathMatch(.*)*',
     ])
