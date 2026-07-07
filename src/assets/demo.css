@@ -1153,3 +1153,157 @@ details:not([open]) > .builder-disclosure-summary::after {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---- Modal panels / action drawers --------------------------------------- */
+.modal-panel-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1080;
+  display: grid;
+  place-items: center;
+  padding: clamp(1rem, 3vw, 2rem);
+  background: rgba(15, 23, 42, 0.54);
+  backdrop-filter: blur(4px);
+}
+
+.modal-panel {
+  width: min(100%, 760px);
+  max-height: min(88vh, 920px);
+  overflow: hidden;
+  border: 1px solid var(--chm-line);
+  border-radius: var(--chm-radius-xl);
+  background: var(--chm-surface);
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
+}
+
+.modal-panel-md { width: min(100%, 620px); }
+.modal-panel-lg { width: min(100%, 820px); }
+.modal-panel-xl { width: min(100%, 1040px); }
+
+.modal-panel-header,
+.modal-panel-footer {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 1.25rem 1.35rem;
+  border-bottom: 1px solid var(--chm-line);
+  background: #fff;
+}
+
+.modal-panel-footer {
+  align-items: center;
+  border-top: 1px solid var(--chm-line);
+  border-bottom: 0;
+}
+
+.modal-panel-title {
+  margin: 0;
+  color: var(--chm-navy);
+  font-size: clamp(1.15rem, 2.2vw, 1.45rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.modal-panel-description {
+  max-width: 680px;
+  color: var(--chm-muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.modal-panel-close {
+  display: inline-grid;
+  width: 2.4rem;
+  height: 2.4rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--chm-line);
+  border-radius: 999px;
+  background: var(--chm-bg);
+  color: var(--chm-navy);
+  font-size: 1.45rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.modal-panel-close:hover,
+.modal-panel-close:focus-visible {
+  background: var(--chm-navy);
+  color: #fff;
+}
+
+.modal-panel-body {
+  max-height: calc(min(88vh, 920px) - 102px);
+  overflow: auto;
+  padding: 1.35rem;
+}
+
+.modal-panel-footer + .modal-panel-body,
+.modal-panel:has(.modal-panel-footer) .modal-panel-body {
+  max-height: calc(min(88vh, 920px) - 184px);
+}
+
+.action-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  border: 1px solid var(--chm-line);
+  border-radius: var(--chm-radius-lg);
+  background: #fff;
+  box-shadow: var(--chm-shadow-sm);
+}
+
+.action-strip-title {
+  margin: 0;
+  color: var(--chm-navy);
+  font-weight: 800;
+}
+
+.action-strip-description {
+  margin: 0.15rem 0 0;
+  color: var(--chm-muted);
+  font-size: 0.88rem;
+}
+
+.admin-builder-flow {
+  display: grid;
+  gap: 1rem;
+}
+
+.admin-builder-shell {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 1400px) {
+  .admin-builder-shell {
+    grid-template-columns: minmax(320px, 0.42fr) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .admin-builder-shell .admin-preview-section {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .modal-panel-backdrop {
+    align-items: end;
+    padding: 0.75rem;
+  }
+
+  .modal-panel {
+    max-height: 92vh;
+    border-radius: var(--chm-radius-lg);
+  }
+
+  .modal-panel-header,
+  .modal-panel-footer,
+  .modal-panel-body {
+    padding: 1rem;
+  }
+}

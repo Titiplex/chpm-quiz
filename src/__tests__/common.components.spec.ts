@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import KpiCard from '@/components/common/KpiCard.vue'
+import ModalPanel from '@/components/common/ModalPanel.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
 import { useSessionStore } from '@/stores/session'
@@ -25,6 +26,28 @@ describe('common display components', () => {
     expect(detailed.text()).toContain('+12 %')
     expect(detailed.find('p').classes()).toContain('text-success')
     expect(compact.find('p').exists()).toBe(false)
+  })
+
+  it('renders modal panels only when opened and emits close updates', async () => {
+    const wrapper = mount(ModalPanel, {
+      props: {
+        modelValue: true,
+        title: 'Créer un terminal',
+        eyebrow: 'Appairage',
+        description: 'Lien sensible',
+      },
+      slots: { default: '<p>Contenu isolé</p>' },
+    })
+
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true)
+    expect(wrapper.find('[aria-modal="true"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Créer un terminal')
+    expect(wrapper.text()).toContain('Contenu isolé')
+
+    await wrapper.find('button[aria-label="Fermer la fenêtre"]').trigger('click')
+
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([false])
+    expect(wrapper.emitted('close')).toHaveLength(1)
   })
 
   it('renders optional page header description, badge and action slot', () => {
