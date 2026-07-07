@@ -595,9 +595,8 @@ async function performAction(action: () => Promise<string>): Promise<void> {
   <section class="demo-page">
     <div class="container-fluid px-4 px-xl-5">
       <PageHeader
-        eyebrow="Administrateur non-informaticien"
-        title="Constructeur visuel de questionnaire"
-        description="Création, version brouillon, groupes, questions, Likert, popups et prévisualisation répondant sont maintenant reliés à l’API NestJS et persistés en PostgreSQL."
+        title="Constructeur de questionnaire"
+        description="Créez et modifiez vos questionnaires sans code : groupes, questions, popups et prévisualisation intégrée."
       >
         <template #actions>
           <button class="btn btn-outline-primary" type="button" @click="showPreview = !showPreview">
@@ -707,7 +706,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
             </div>
 
             <div class="question-row">
-              <p class="section-eyebrow mb-2">Ajouter un groupe</p>
+              <p class="page-header-eyebrow mb-2">Ajouter un groupe</p>
               <label class="form-label small fw-bold" for="group-title">Nom du groupe</label>
               <input id="group-title" v-model="groupForm.title" class="form-control mb-2" />
               <label class="form-label small fw-bold" for="group-description">Description</label>
@@ -726,7 +725,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                 <label class="form-check-label fw-semibold" for="group-randomize">Randomiser ce groupe</label>
               </div>
               <div class="condition-line mb-3">
-                <p class="section-eyebrow mb-2">Condition simple</p>
+                <p class="page-header-eyebrow mb-2">Condition simple</p>
                 <label class="form-label small fw-bold" for="group-condition-code">Code question déclencheuse</label>
                 <input id="group-condition-code" v-model="groupForm.conditionQuestionCode" class="form-control mb-2" placeholder="Q-001" />
                 <label class="form-label small fw-bold" for="group-condition-value">Valeur attendue</label>
@@ -960,8 +959,8 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                   </button>
                 </div>
 
-                <div v-if="!allQuestions.length" class="alert alert-warning rounded-4 mb-0">
-                  Aucun item pour l’instant. Ajoutez le groupe “Informations générales”, puis les questions de démonstration.
+                <div v-if="!allQuestions.length" class="alert alert-warning rounded-3 mb-0">
+                  Aucune question pour l'instant. Commencez par créer un groupe, puis ajoutez vos questions.
                 </div>
                 <div v-for="question in allQuestions" :key="question.id" class="question-row">
                   <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
@@ -1002,10 +1001,10 @@ async function performAction(action: () => Promise<string>): Promise<void> {
               <div class="question-help mb-3">
                 <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
                   <div>
-                    <p class="section-eyebrow mb-1">Prévisualisation conditionnelle</p>
-                    <strong>Valeurs factices du parcours</strong>
+                    <p class="page-header-eyebrow mb-1">Simulation de parcours</p>
+                    <strong>Valeurs de test pour les conditions</strong>
                   </div>
-                  <span class="badge-soft warning">randomisation reproductible</span>
+                  <span class="badge-soft warning">randomisation stable</span>
                 </div>
                 <div class="row g-2 align-items-end">
                   <div class="col-md-6">
@@ -1082,7 +1081,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                   <div v-for="popup in question.popupDefinitions ?? []" :key="popup.id" class="question-help mb-2">
                     <div class="d-flex justify-content-between gap-3">
                       <strong>{{ popup.title }}</strong>
-                      <span class="badge-soft warning">bulle persistée</span>
+                      <span class="badge-soft warning">popup</span>
                     </div>
                     <p class="small muted mb-0 mt-2">{{ popup.body }}</p>
                   </div>
@@ -1091,26 +1090,14 @@ async function performAction(action: () => Promise<string>): Promise<void> {
             </div>
 
             <div class="demo-card flat">
-              <p class="section-eyebrow mb-2">Critères d’acceptation</p>
-              <h2 class="h5 fw-bold">Couverture semaine 5</h2>
+              <p class="page-header-eyebrow mb-2">Fonctionnalités disponibles</p>
               <div class="d-grid gap-2">
                 <span class="badge-soft success">Création sans code</span>
-                <span class="badge-soft success">Conditions simples question/groupe</span>
-                <span class="badge-soft success">Langue Q-001 : parcours FR/EN</span>
-                <span class="badge-soft success">Randomisation stable prévisualisée</span>
+                <span class="badge-soft success">Conditions simples question / groupe</span>
+                <span class="badge-soft success">Parcours multilingue (FR / EN)</span>
+                <span class="badge-soft success">Randomisation avec ordre stable</span>
                 <span class="badge-soft success">Popups explicatives versionnées</span>
               </div>
-            </div>
-
-            <div class="demo-card flat">
-              <p class="section-eyebrow mb-2">Démonstration guidée</p>
-              <ol class="muted mb-0 ps-3">
-                <li>Créer un questionnaire ou sélectionner un brouillon.</li>
-                <li>Ajouter “Informations générales”.</li>
-                <li>Créer “Q-001 Langue” en choix unique : fr/en.</li>
-                <li>Configurer deux groupes conditionnels : Q-001 = fr puis Q-001 = en.</li>
-                <li>Activer la randomisation d’un groupe et vérifier l’ordre stable dans l’aperçu.</li>
-              </ol>
             </div>
           </div>
         </div>

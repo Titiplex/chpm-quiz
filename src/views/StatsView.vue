@@ -57,80 +57,83 @@ function formatAnswer(value: unknown): string {
   <section class="demo-page">
     <div class="container-fluid px-4 px-xl-5">
       <PageHeader
-        eyebrow="Statistiques pseudonymisées"
-        title="Dashboard administrateur sans exposition email"
-        :description="appConfig.demoMode ? 'Indicateurs simulés pour démonstration métier : volumes, taux, temps, groupes, Likert, soumissions par code et coffre email séparé.' : 'Indicateurs calculés depuis les invitations, réponses, soumissions et événements PostgreSQL. Les ventilations faibles restent masquées par seuil d’agrégation.'"
+        title="Statistiques"
+        description="Indicateurs de participation et signaux de compréhension — sans exposition d'identité."
         :badge="appConfig.demoMode ? 'Données simulées' : 'Données réelles'"
+        :badge-tone="appConfig.demoMode ? 'warning' : 'success'"
       />
-      <RoleGateInfo class="mb-4" />
+      <RoleGateInfo />
 
+      <!-- Sélecteur questionnaire -->
       <div class="demo-card mb-4">
         <div class="row g-3 align-items-end">
-          <div class="col-lg-7">
-            <label class="form-label fw-semibold" for="questionnaire-select">Questionnaire publié</label>
-            <select id="questionnaire-select" v-model="selectedQuestionnaireId" class="form-select form-select-lg rounded-4">
+          <div class="col-lg-8">
+            <label class="form-label fw-semibold" for="questionnaire-select">Questionnaire</label>
+            <select id="questionnaire-select" v-model="selectedQuestionnaireId" class="form-select form-select-lg">
               <option v-for="questionnaire in catalog.publishedQuestionnaires" :key="questionnaire.id" :value="questionnaire.id">
                 {{ questionnaire.title }} · {{ questionnaire.versionLabel }}
               </option>
             </select>
           </div>
-          <div class="col-lg-5">
-            <div class="alert alert-info rounded-4 mb-0">
-              <strong>Identifiant opérationnel :</strong>
-              code unique uniquement. Aucun email ni identité directe n’est affiché dans ce dashboard.
-            </div>
+          <div class="col-lg-4">
+            <p class="small mb-0" style="color: var(--chm-muted);">
+              Les données affichées sont pseudonymisées — aucun email ni identité directe n'apparaît ici.
+            </p>
           </div>
         </div>
       </div>
 
-      <div v-if="statsStore.status === 'error'" class="alert alert-danger rounded-4" role="alert">
+      <div v-if="statsStore.status === 'error'" class="alert alert-danger rounded-3" role="alert">
         {{ statsStore.error }}
       </div>
 
-      <div v-if="statsStore.status === 'loading'" class="demo-card text-center py-5">
+      <div v-if="statsStore.status === 'loading'" class="demo-card text-center py-5" style="color: var(--chm-muted);">
         Chargement des statistiques…
       </div>
 
       <template v-if="statsStore.stats">
-        <div class="alert alert-info rounded-4">
-          Seuil d’agrégation actif : n ≥ {{ statsStore.stats.threshold }}. En dessous, les détails par bâtiment, groupe ou question affichent “effectif insuffisant”.
+        <!-- Info seuil -->
+        <div class="d-flex align-items-center gap-2 mb-4">
+          <span class="badge-soft warning">Seuil n ≥ {{ statsStore.stats.threshold }}</span>
+          <span class="small" style="color: var(--chm-muted);">En dessous, les détails sont masqués pour préserver la confidentialité.</span>
         </div>
 
+        <!-- KPIs principaux -->
         <div class="row g-3 mb-4">
           <div class="col-md-3">
-            <KpiCard label="Invitations" :value="String(statsStore.stats.totals.invited)" />
+            <KpiCard label="Invitations" :value="String(statsStore.stats.totals.invited)" icon="📨" />
           </div>
           <div class="col-md-3">
-            <KpiCard label="Ouverture" :value="`${statsStore.stats.totals.openingRate} %`" />
+            <KpiCard label="Taux d'ouverture" :value="`${statsStore.stats.totals.openingRate} %`" icon="📬" />
+          </div>
+          <div class="col-md-3">
+            <KpiCard label="Taux de soumission" :value="`${statsStore.stats.totals.submissionRate} %`" tone="success" icon="✅" />
+          </div>
+          <div class="col-md-3">
+            <KpiCard label="Taux d'abandon" :value="`${statsStore.stats.totals.abandonmentRate} %`" tone="warning" icon="⚠️" />
           </div>
           <div class="col-md-3">
             <KpiCard label="Démarrage" :value="`${statsStore.stats.totals.startRate} %`" />
           </div>
           <div class="col-md-3">
-            <KpiCard label="Soumission" :value="`${statsStore.stats.totals.submissionRate} %`" tone="success" />
+            <KpiCard label="Temps médian" :value="formatDuration(statsStore.stats.totals.medianTotalDurationMs)" icon="⏱️" />
           </div>
           <div class="col-md-3">
-            <KpiCard label="Abandon" :value="`${statsStore.stats.totals.abandonmentRate} %`" tone="warning" />
+            <KpiCard label="Popups ouvertes" :value="String(statsStore.stats.totals.popupOpens)" tone="warning" icon="💬" />
           </div>
           <div class="col-md-3">
-            <KpiCard label="Temps médian total" :value="formatDuration(statsStore.stats.totals.medianTotalDurationMs)" />
-          </div>
-          <div class="col-md-3">
-            <KpiCard label="Popups ouvertes" :value="String(statsStore.stats.totals.popupOpens)" tone="warning" />
-          </div>
-          <div class="col-md-3">
-            <KpiCard label="Changements / reprises" :value="`${statsStore.stats.totals.answerChanges} / ${statsStore.stats.totals.resumes}`" />
+            <KpiCard label="Reprises" :value="String(statsStore.stats.totals.resumes)" />
           </div>
         </div>
 
         <div class="row g-4">
+          <!-- Versions -->
           <div class="col-xl-6">
             <div class="demo-card h-100">
-              <p class="section-eyebrow mb-2">Versions</p>
-              <h2 class="h4 fw-bold mb-4">Comparaison de campagne</h2>
+              <h2 class="page-header-title mb-4" style="font-size:1rem;">Versions</h2>
               <div class="table-card">
                 <table class="table align-middle">
-                  <thead class="table-light">
+                  <thead>
                     <tr>
                       <th>Version</th>
                       <th>Invités</th>
@@ -146,7 +149,7 @@ function formatAnswer(value: unknown): string {
                       <td>{{ version.invited }}</td>
                       <td>{{ version.openingRate }} %</td>
                       <td>{{ version.startRate }} %</td>
-                      <td>{{ version.submissionRate }} %</td>
+                      <td><span class="badge-soft success">{{ version.submissionRate }} %</span></td>
                       <td>{{ version.abandonmentRate }} %</td>
                     </tr>
                   </tbody>
@@ -155,13 +158,13 @@ function formatAnswer(value: unknown): string {
             </div>
           </div>
 
+          <!-- Canaux -->
           <div class="col-xl-6">
             <div class="demo-card h-100">
-              <p class="section-eyebrow mb-2">Canaux de passation</p>
-              <h2 class="h4 fw-bold mb-4">Email vs terminal hospitalier</h2>
+              <h2 class="page-header-title mb-4" style="font-size:1rem;">Canaux de passation</h2>
               <div class="table-card">
                 <table class="table align-middle">
-                  <thead class="table-light">
+                  <thead>
                     <tr>
                       <th>Canal</th>
                       <th>Invités</th>
@@ -181,19 +184,16 @@ function formatAnswer(value: unknown): string {
                   </tbody>
                 </table>
               </div>
-              <p class="small muted mt-3 mb-0">
-                Le canal terminal permet d’inclure les répondants sans email ni appareil personnel, sans exposer une session staff.
-              </p>
             </div>
           </div>
 
+          <!-- Sites -->
           <div class="col-xl-6">
             <div class="demo-card h-100">
-              <p class="section-eyebrow mb-2">Sites</p>
-              <h2 class="h4 fw-bold mb-4">Ventilation par site</h2>
+              <h2 class="page-header-title mb-4" style="font-size:1rem;">Sites</h2>
               <div class="table-card">
                 <table class="table align-middle">
-                  <thead class="table-light">
+                  <thead>
                     <tr>
                       <th>Site</th>
                       <th>Invités</th>
@@ -216,13 +216,13 @@ function formatAnswer(value: unknown): string {
             </div>
           </div>
 
+          <!-- Langues -->
           <div class="col-xl-6">
             <div class="demo-card h-100">
-              <p class="section-eyebrow mb-2">Langues</p>
-              <h2 class="h4 fw-bold mb-4">Versions et réponses par langue</h2>
+              <h2 class="page-header-title mb-4" style="font-size:1rem;">Langues</h2>
               <div class="table-card">
                 <table class="table align-middle">
-                  <thead class="table-light">
+                  <thead>
                     <tr>
                       <th>Langue</th>
                       <th>Versions</th>
@@ -245,13 +245,13 @@ function formatAnswer(value: unknown): string {
             </div>
           </div>
 
+          <!-- Bâtiments -->
           <div class="col-xl-6">
             <div class="demo-card h-100">
-              <p class="section-eyebrow mb-2">Bâtiments</p>
-              <h2 class="h4 fw-bold mb-4">Ventilation seuillée</h2>
+              <h2 class="page-header-title mb-4" style="font-size:1rem;">Bâtiments</h2>
               <div class="table-card">
                 <table class="table align-middle">
-                  <thead class="table-light">
+                  <thead>
                     <tr>
                       <th>Bâtiment</th>
                       <th>Invités</th>
@@ -278,13 +278,13 @@ function formatAnswer(value: unknown): string {
             </div>
           </div>
 
-          <div class="col-xl-5">
+          <!-- Groupes -->
+          <div class="col-xl-6">
             <div class="demo-card h-100">
-              <p class="section-eyebrow mb-2">Groupes</p>
-              <h2 class="h4 fw-bold mb-4">Temps et popups par bloc</h2>
+              <h2 class="page-header-title mb-4" style="font-size:1rem;">Groupes de questions</h2>
               <div class="table-card">
                 <table class="table align-middle">
-                  <thead class="table-light">
+                  <thead>
                     <tr>
                       <th>Groupe</th>
                       <th>Questions</th>
@@ -307,59 +307,57 @@ function formatAnswer(value: unknown): string {
             </div>
           </div>
 
+          <!-- Soumissions pseudonymisées -->
           <div class="col-xl-7">
             <div class="demo-card h-100">
-              <p class="section-eyebrow mb-2">Soumissions pseudonymisées</p>
-              <h2 class="h4 fw-bold mb-4">Liste par code unique</h2>
+              <h2 class="page-header-title mb-4" style="font-size:1rem;">Soumissions pseudonymisées</h2>
               <div class="table-card">
                 <table class="table align-middle">
-                  <thead class="table-light">
+                  <thead>
                     <tr>
                       <th>Code</th>
                       <th>Bâtiment</th>
                       <th>Statut</th>
                       <th>Temps</th>
-                      <th>Actions</th>
+                      <th></th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr v-for="submission in statsStore.stats.submissions" :key="submission.publicCode">
-                      <td class="fw-semibold">{{ submission.publicCode }}</td>
+                      <td class="fw-semibold" style="font-family:monospace; font-size:0.88rem;">{{ submission.publicCode }}</td>
                       <td>{{ submission.building }}</td>
                       <td><span class="badge-soft success">{{ submission.status }}</span></td>
                       <td>{{ formatDuration(submission.totalDurationMs) }}</td>
                       <td>
                         <button
-                          class="btn btn-sm btn-outline-primary rounded-pill"
+                          class="btn btn-sm btn-outline-primary"
                           type="button"
                           :disabled="!canReadSubmissions || statsStore.submissionStatus === 'loading'"
                           @click="statsStore.fetchSubmission(submission.publicCode)"
                         >
-                          Voir sans email
+                          Voir
                         </button>
                       </td>
                     </tr>
                   </tbody>
                 </table>
               </div>
-              <p v-if="!canReadSubmissions" class="small muted mt-3 mb-0">
-                Votre rôle voit les indicateurs agrégés mais pas le détail individuel des soumissions.
+              <p v-if="!canReadSubmissions" class="small mt-3 mb-0" style="color: var(--chm-muted);">
+                Votre rôle accède aux indicateurs agrégés uniquement.
               </p>
             </div>
           </div>
 
+          <!-- Popups -->
           <div class="col-12">
             <div class="demo-card">
-              <div class="d-flex flex-wrap justify-content-between gap-2 mb-4">
-                <div>
-                  <p class="section-eyebrow mb-2">Popups</p>
-                  <h2 class="h4 fw-bold mb-0">Compréhension des termes métier</h2>
-                </div>
+              <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+                <h2 class="page-header-title mb-0" style="font-size:1rem;">Termes nécessitant une explication</h2>
                 <span class="badge-soft warning">Seuil n ≥ {{ statsStore.stats.threshold }}</span>
               </div>
               <div class="table-card">
                 <table class="table align-middle">
-                  <thead class="table-light">
+                  <thead>
                     <tr>
                       <th>Terme</th>
                       <th>Question</th>
@@ -373,7 +371,7 @@ function formatAnswer(value: unknown): string {
                     <tr v-for="popup in statsStore.stats.popups ?? []" :key="popup.id">
                       <td>
                         <strong>{{ popup.title }}</strong>
-                        <div class="small muted">{{ popup.termKey }}</div>
+                        <div class="small" style="color:var(--chm-muted); font-family:monospace;">{{ popup.termKey }}</div>
                       </td>
                       <td>{{ popup.questionCode }}</td>
                       <td>{{ popup.groupTitle }}</td>
@@ -391,33 +389,31 @@ function formatAnswer(value: unknown): string {
             </div>
           </div>
 
+          <!-- Questions détaillées -->
           <div class="col-12">
             <div class="demo-card">
-              <div class="d-flex flex-wrap justify-content-between gap-2 mb-4">
-                <div>
-                  <p class="section-eyebrow mb-2">Questions, Likert et popups</p>
-                  <h2 class="h4 fw-bold mb-0">Signaux de compréhension</h2>
-                </div>
+              <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+                <h2 class="page-header-title mb-0" style="font-size:1rem;">Signaux de compréhension par question</h2>
                 <span class="badge-soft warning">{{ statsStore.stats.totals.popupOpens }} ouverture(s) popup</span>
               </div>
               <div class="table-card">
                 <table class="table align-middle">
-                  <thead class="table-light">
+                  <thead>
                     <tr>
                       <th>Question</th>
                       <th>Réponses</th>
                       <th>Temps médian</th>
                       <th>Likert</th>
-                      <th>Libre</th>
+                      <th>Texte libre</th>
                       <th>Signal</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr v-for="question in statsStore.stats.questions" :key="question.id">
-                      <td style="min-width: 260px">
+                      <td style="min-width: 220px">
                         <strong>{{ question.code }}</strong>
-                        <div class="small muted">{{ question.label }}</div>
-                        <div class="small muted">{{ question.responseType }}</div>
+                        <div class="small" style="color:var(--chm-muted);">{{ question.label }}</div>
+                        <div class="small" style="color:var(--chm-muted);">{{ question.responseType }}</div>
                       </td>
                       <td>{{ question.answerCount ?? question.displayValue }}</td>
                       <td>
@@ -425,16 +421,16 @@ function formatAnswer(value: unknown): string {
                           {{ formatDuration(question.medianDurationMs) }}
                         </span>
                       </td>
-                      <td style="min-width: 280px">
+                      <td style="min-width: 240px">
                         <div v-if="question.likertDistribution" class="d-grid gap-1">
                           <div v-for="bucket in question.likertDistribution" :key="`${question.id}-${bucket.value}`" class="small">
-                            <strong>{{ bucket.value }}</strong> · {{ bucket.count }} réponse(s) · {{ bucket.rate }} %
-                            <span class="muted">{{ bucket.label }}</span>
+                            <strong>{{ bucket.value }}</strong> · {{ bucket.count }} rép. · {{ bucket.rate }} %
+                            <span style="color:var(--chm-muted)">{{ bucket.label }}</span>
                           </div>
                         </div>
-                        <span v-else class="muted">—</span>
+                        <span v-else style="color:var(--chm-muted)">—</span>
                       </td>
-                      <td style="min-width: 260px">
+                      <td style="min-width: 220px">
                         <div v-if="question.freeTextResponses.length" class="d-grid gap-2">
                           <blockquote v-for="response in question.freeTextResponses.slice(0, 2)" :key="`${question.id}-${response.publicCode}`" class="small border-start ps-2 mb-0">
                             <span class="badge-soft me-1">{{ response.publicCode }}</span>
@@ -443,12 +439,12 @@ function formatAnswer(value: unknown): string {
                           </blockquote>
                         </div>
                         <span v-else-if="question.freeTextAccess === 'forbidden'" class="badge-soft warning">permission requise</span>
-                        <span v-else class="muted">—</span>
+                        <span v-else style="color:var(--chm-muted)">—</span>
                       </td>
                       <td>
                         <div class="d-flex flex-wrap gap-1">
                           <span class="badge-soft" :class="{ danger: question.difficultQuestion, success: question.effectifSufficient && !question.difficultQuestion, warning: !question.effectifSufficient }">
-                            {{ question.difficultQuestion ? 'question difficile' : question.displayValue }}
+                            {{ question.difficultQuestion ? 'difficile' : question.displayValue }}
                           </span>
                           <span v-for="label in question.difficultyLabels" :key="label" class="badge-soft warning">
                             {{ label }}
@@ -463,29 +459,29 @@ function formatAnswer(value: unknown): string {
           </div>
         </div>
 
-        <div v-if="statsStore.submissionError" class="alert alert-danger rounded-4 mt-4">
+        <div v-if="statsStore.submissionError" class="alert alert-danger rounded-3 mt-4">
           {{ statsStore.submissionError }}
         </div>
 
+        <!-- Soumission individuelle -->
         <div v-if="statsStore.selectedSubmission" class="demo-card mt-4">
-          <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
             <div>
-              <p class="section-eyebrow mb-2">Soumission individuelle pseudonymisée</p>
-              <h2 class="h4 fw-bold mb-0">Code {{ statsStore.selectedSubmission.publicCode }}</h2>
+              <h2 class="page-header-title mb-0" style="font-size:1rem;">Détail — Code <code>{{ statsStore.selectedSubmission.publicCode }}</code></h2>
             </div>
-            <button class="btn btn-outline-secondary rounded-pill" type="button" @click="statsStore.clearSubmission()">
+            <button class="btn btn-outline-secondary btn-sm" type="button" @click="statsStore.clearSubmission()">
               Fermer
             </button>
           </div>
           <div class="row g-3 mb-4">
-            <div class="col-md-3"><strong>Bâtiment</strong><div class="muted">{{ statsStore.selectedSubmission.building }}</div></div>
-            <div class="col-md-3"><strong>Soumis le</strong><div class="muted">{{ formatDate(statsStore.selectedSubmission.submittedAt) }}</div></div>
-            <div class="col-md-3"><strong>Temps total</strong><div class="muted">{{ formatDuration(statsStore.selectedSubmission.totalDurationMs) }}</div></div>
-            <div class="col-md-3"><strong>Télémétrie</strong><div class="muted">{{ statsStore.selectedSubmission.telemetry.totalEvents }} événement(s)</div></div>
+            <div class="col-md-3"><strong>Bâtiment</strong><div style="color:var(--chm-muted);">{{ statsStore.selectedSubmission.building }}</div></div>
+            <div class="col-md-3"><strong>Soumis le</strong><div style="color:var(--chm-muted);">{{ formatDate(statsStore.selectedSubmission.submittedAt) }}</div></div>
+            <div class="col-md-3"><strong>Temps total</strong><div style="color:var(--chm-muted);">{{ formatDuration(statsStore.selectedSubmission.totalDurationMs) }}</div></div>
+            <div class="col-md-3"><strong>Événements</strong><div style="color:var(--chm-muted);">{{ statsStore.selectedSubmission.telemetry.totalEvents }}</div></div>
           </div>
           <div class="table-card">
             <table class="table align-middle">
-              <thead class="table-light">
+              <thead>
                 <tr>
                   <th>Question</th>
                   <th>Réponse</th>
@@ -496,7 +492,7 @@ function formatAnswer(value: unknown): string {
                 <tr v-for="answer in statsStore.selectedSubmission.answers" :key="answer.questionCode">
                   <td>
                     <strong>{{ answer.questionCode }}</strong>
-                    <div class="small muted">{{ answer.questionLabel }}</div>
+                    <div class="small" style="color:var(--chm-muted);">{{ answer.questionLabel }}</div>
                   </td>
                   <td>{{ formatAnswer(answer.value) }}</td>
                   <td>{{ answer.warning ?? '—' }}</td>
@@ -504,14 +500,11 @@ function formatAnswer(value: unknown): string {
               </tbody>
             </table>
           </div>
-          <div class="alert alert-success rounded-4 mt-3 mb-0">
-            Vérification : aucune adresse email n’est fournie par cette vue. La correspondance code-email reste dans le coffre identité.
-          </div>
         </div>
       </template>
 
-      <div v-if="selectedQuestionnaire && statsStore.status === 'ready'" class="small muted mt-4">
-        Questionnaire courant : {{ selectedQuestionnaire.code }} · {{ selectedQuestionnaire.title }}.
+      <div v-if="selectedQuestionnaire && statsStore.status === 'ready'" class="small mt-4" style="color: var(--chm-muted);">
+        {{ selectedQuestionnaire.code }} · {{ selectedQuestionnaire.title }}
       </div>
     </div>
   </section>

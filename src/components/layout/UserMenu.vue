@@ -9,6 +9,15 @@ const router = useRouter()
 const session = useSessionStore()
 
 const roleLabel = computed(() => session.currentProfile.shortLabel)
+const initials = computed(() => {
+  const name = session.user?.displayName ?? ''
+  return name
+    .split(' ')
+    .map((part) => part[0] ?? '')
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
+})
 
 async function logout(): Promise<void> {
   await session.logout()
@@ -19,10 +28,21 @@ async function logout(): Promise<void> {
 <template>
   <div v-if="session.user" class="user-menu">
     <div class="user-menu-identity">
-      <span class="badge-soft success">{{ roleLabel }}</span>
+      <div
+        aria-hidden="true"
+        style="
+          width: 32px; height: 32px;
+          border-radius: 50%;
+          background: var(--chm-navy);
+          color: #fff;
+          display: grid; place-items: center;
+          font-size: 0.72rem; font-weight: 800;
+          flex-shrink: 0;
+        "
+      >{{ initials }}</div>
       <div>
-        <strong>{{ session.user.displayName }}</strong>
-        <small>{{ session.user.email }}</small>
+        <strong style="font-size:0.85rem;">{{ session.user.displayName }}</strong>
+        <small>{{ roleLabel }}</small>
       </div>
     </div>
     <button class="btn btn-sm btn-outline-primary" type="button" @click="logout">

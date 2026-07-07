@@ -120,37 +120,30 @@ async function submit(): Promise<void> {
   <section class="demo-page login-page">
     <div class="container-fluid px-4 px-xl-5">
       <div class="row g-4 align-items-stretch">
+
+        <!-- Panneau gauche : identité + comptes démo -->
         <div class="col-xl-7">
           <div class="hero-card p-4 p-lg-5 h-100">
             <div class="position-relative z-1">
-              <p class="hero-eyebrow mb-3">{{ t('auth.internal') }}</p>
-              <h1 class="hero-title fw-black mb-4">
+              <p class="hero-eyebrow mb-2">{{ t('auth.internal') }}</p>
+              <h1 class="hero-title mb-3">
                 {{ appConfig.demoMode ? t('auth.demo.title') : t('auth.connected.title') }}
               </h1>
               <p class="hero-text mb-4">
                 {{ appConfig.demoMode ? t('auth.demo.body') : t('auth.connected.body') }}
               </p>
 
-              <div v-if="appConfig.demoMode" class="alert alert-warning rounded-4 mb-4" role="alert">
-                <strong>{{ t('auth.demo.warning.title') }}</strong>
-                <p class="small mb-0 mt-1">{{ t('auth.demo.warning.body') }}</p>
+              <!-- Avertissement démo -->
+              <div v-if="appConfig.demoMode" class="mb-4 p-3 rounded-3" style="background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2);">
+                <strong style="color:#fff;">{{ t('auth.demo.warning.title') }}</strong>
+                <p class="small mb-0 mt-1" style="color: rgba(255,255,255,0.75);">{{ t('auth.demo.warning.body') }}</p>
               </div>
 
-              <div v-if="appConfig.demoMode" class="demo-card bg-white border-0 mb-4">
-                <p class="section-eyebrow mb-2">{{ t('auth.hierarchy.eyebrow') }}</p>
-                <h2 class="h5 fw-bold mb-3">{{ t('auth.hierarchy.title') }}</h2>
-                <div class="row g-3">
-                  <div v-for="(role, index) in activeOperationalRoles" :key="role" class="col-md-4">
-                    <div class="border rounded-4 p-3 h-100">
-                      <span class="badge-soft success">{{ t('auth.level', { level: index + 1 }) }}</span>
-                      <h3 class="h6 fw-bold mt-2 mb-1">{{ roleProfiles[role].label }}</h3>
-                      <p class="small muted mb-0">{{ roleProfiles[role].scopeLabel }}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div v-if="appConfig.demoMode" class="d-grid gap-3 mb-4">
+              <!-- Comptes opérationnels -->
+              <div v-if="appConfig.demoMode" class="d-grid gap-2 mb-4">
+                <p class="small mb-2" style="color: rgba(255,255,255,0.6); font-weight:600; text-transform:uppercase; letter-spacing:0.08em; font-size:0.7rem;">
+                  Comptes opérationnels
+                </p>
                 <article
                   v-for="account in operationalAccounts"
                   :key="account.email"
@@ -158,22 +151,25 @@ async function submit(): Promise<void> {
                 >
                   <div>
                     <span class="badge-soft success">{{ t(account.labelKey) }}</span>
-                    <h2 class="h5 fw-bold mt-2 mb-1">{{ account.email }}</h2>
-                    <p class="small muted mb-0">{{ t(account.descriptionKey) }}</p>
+                    <p class="small mb-0 mt-1" style="color: var(--chm-muted);">{{ t(account.descriptionKey) }}</p>
                   </div>
                   <button
-                    class="btn btn-outline-primary"
+                    class="btn btn-sm btn-outline-primary"
+                    style="flex-shrink:0;"
                     type="button"
                     @click="fillDemoAccount(account)"
                   >
-                    {{ t('auth.useAccount') }}
+                    Utiliser
                   </button>
                 </article>
               </div>
 
-              <details v-if="appConfig.demoMode" class="demo-card bg-white border-0">
-                <summary class="fw-bold">{{ t('auth.specializedRoles') }}</summary>
-                <div class="d-grid gap-3 mt-3">
+              <!-- Comptes spécialisés (repliés) -->
+              <details v-if="appConfig.demoMode" style="color: rgba(255,255,255,0.8);">
+                <summary style="cursor:pointer; font-weight:600; font-size:0.88rem; color: rgba(255,255,255,0.6);">
+                  {{ t('auth.specializedRoles') }}
+                </summary>
+                <div class="d-grid gap-2 mt-3">
                   <article
                     v-for="account in specializedAccounts"
                     :key="account.email"
@@ -181,15 +177,15 @@ async function submit(): Promise<void> {
                   >
                     <div>
                       <span class="badge-soft">{{ t(account.labelKey) }}</span>
-                      <h2 class="h5 fw-bold mt-2 mb-1">{{ account.email }}</h2>
-                      <p class="small muted mb-0">{{ t(account.descriptionKey) }}</p>
+                      <p class="small mb-0 mt-1" style="color: var(--chm-muted);">{{ t(account.descriptionKey) }}</p>
                     </div>
                     <button
-                      class="btn btn-outline-primary"
+                      class="btn btn-sm btn-outline-primary"
+                      style="flex-shrink:0;"
                       type="button"
                       @click="fillDemoAccount(account)"
                     >
-                      {{ t('auth.useAccount') }}
+                      Utiliser
                     </button>
                   </article>
                 </div>
@@ -198,31 +194,37 @@ async function submit(): Promise<void> {
           </div>
         </div>
 
+        <!-- Panneau droit : formulaire de connexion -->
         <div class="col-xl-5">
           <div class="demo-card h-100">
-            <p class="section-eyebrow mb-2">{{ t('auth.internalAccount') }}</p>
-            <h2 class="h3 fw-bold mb-4">{{ t('auth.signIn') }}</h2>
+            <h2 class="page-header-title mb-1" style="font-size:1.5rem;">{{ t('auth.signIn') }}</h2>
+            <p class="small mb-4" style="color: var(--chm-muted);">{{ t('auth.internalAccount') }}</p>
 
             <form @submit.prevent="submit">
-              <label class="form-label fw-bold" for="email">{{ t('auth.email') }}</label>
-              <input
-                id="email"
-                v-model="form.email"
-                class="form-control mb-3"
-                autocomplete="username"
-                type="email"
-              />
+              <div class="mb-3">
+                <label class="form-label fw-semibold" for="email">{{ t('auth.email') }}</label>
+                <input
+                  id="email"
+                  v-model="form.email"
+                  class="form-control"
+                  autocomplete="username"
+                  type="email"
+                  placeholder="prenom.nom@chpm.local"
+                />
+              </div>
 
-              <label class="form-label fw-bold" for="password">{{ t('auth.password') }}</label>
-              <input
-                id="password"
-                v-model="form.password"
-                class="form-control mb-3"
-                autocomplete="current-password"
-                type="password"
-              />
+              <div class="mb-4">
+                <label class="form-label fw-semibold" for="password">{{ t('auth.password') }}</label>
+                <input
+                  id="password"
+                  v-model="form.password"
+                  class="form-control"
+                  autocomplete="current-password"
+                  type="password"
+                />
+              </div>
 
-              <div v-if="session.error" class="alert alert-danger rounded-4" role="alert">
+              <div v-if="session.error" class="alert alert-danger rounded-3 mb-3" role="alert">
                 {{ session.error }}
               </div>
 
@@ -232,11 +234,12 @@ async function submit(): Promise<void> {
             </form>
 
             <hr class="my-4" />
-            <p class="small muted mb-0">
+            <p class="small mb-0" style="color: var(--chm-muted);">
               {{ appConfig.demoMode ? t('auth.demo.note') : t('auth.production.note') }}
             </p>
           </div>
         </div>
+
       </div>
     </div>
   </section>

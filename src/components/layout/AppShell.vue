@@ -15,8 +15,8 @@ const staticPagesNavigation = [
 
 <template>
   <div class="app-shell">
-    <header class="topbar border-bottom">
-      <nav class="navbar navbar-expand-xl bg-white">
+    <header class="topbar">
+      <nav class="navbar navbar-expand-xl">
         <div class="container-fluid px-4 px-xl-5 gap-3">
           <RouterLink
             class="navbar-brand brand-mark"
@@ -24,7 +24,7 @@ const staticPagesNavigation = [
           >
             <span class="brand-dot">CH</span>
             <span>
-              <strong>{{ appConfig.appName }}</strong>
+              <strong style="font-size:0.95rem; letter-spacing:-0.01em;">{{ appConfig.appName }}</strong>
               <small>{{ appConfig.staticPagesDemo ? t('app.mode.static') : t('app.mode.connected') }}</small>
             </span>
           </RouterLink>
@@ -32,20 +32,20 @@ const staticPagesNavigation = [
           <div class="topbar-actions ms-xl-auto">
             <ul
               v-if="appConfig.staticPagesDemo"
-              class="navbar-nav gap-2 flex-row flex-wrap justify-content-end"
+              class="navbar-nav gap-1 flex-row flex-wrap justify-content-end"
             >
               <li v-for="item in staticPagesNavigation" :key="item.to" class="nav-item">
-                <RouterLink class="nav-link rounded-pill px-3" :to="item.to">
+                <RouterLink class="nav-link" :to="item.to">
                   {{ item.label }}
                 </RouterLink>
               </li>
             </ul>
             <ul
               v-else-if="session.isAuthenticated"
-              class="navbar-nav gap-2 flex-row flex-wrap justify-content-end"
+              class="navbar-nav gap-1 flex-row flex-wrap justify-content-end"
             >
               <li v-for="item in session.visibleNavigation" :key="item.to" class="nav-item">
-                <RouterLink class="nav-link rounded-pill px-3" :to="item.to">
+                <RouterLink class="nav-link" :to="item.to">
                   {{ item.label }}
                 </RouterLink>
               </li>
