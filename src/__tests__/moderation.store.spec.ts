@@ -39,7 +39,8 @@ describe('useModerationStore', () => {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (String(url).endsWith('/moderation/invitations')) {
         expect(init?.method).toBe('POST')
-        expect(JSON.parse(String(init.body))).toMatchObject({ questionnaireVersionId: 'version-1', buildingId: 'building-1' })
+        expect(init).toBeDefined()
+        expect(JSON.parse(String(init!.body))).toMatchObject({ questionnaireVersionId: 'version-1', buildingId: 'building-1' })
         return jsonResponse({
           invitation: invitationFixture,
           accessToken: 'respondent-token',

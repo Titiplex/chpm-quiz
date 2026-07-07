@@ -51,7 +51,9 @@ describe('apiRequest', () => {
       headers: { 'X-Correlation-ID': 'manual-correlation-id', 'X-Client': 'test' },
     })
 
-    const [, init] = (fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0]
+    const firstCall = (fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0]
+    expect(firstCall).toBeDefined()
+    const [, init] = firstCall!
     expect(init.headers).toMatchObject({
       Accept: 'application/json',
       'X-Correlation-ID': 'manual-correlation-id',
