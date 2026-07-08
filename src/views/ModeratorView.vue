@@ -322,7 +322,7 @@ function canResend(invitation: ApiInvitation): boolean {
         <div class="col-12"><NotificationPreferencesCard /></div>
       </div>
 
-      <div v-if="session.hasPermission('user:manageScoped')" class="mb-4">
+      <div v-if="session.hasPermission('user:manageModeratorsScoped')" class="mb-4">
         <SiteTeamPanel />
       </div>
 

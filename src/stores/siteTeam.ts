@@ -5,6 +5,7 @@ import { apiRequest } from '@/services/api'
 import type {
   ApiSiteTeamUser,
   CreateSiteModeratorRequest,
+  RevokeSessionsResponse,
   SiteModeratorMutationResponse,
   SiteTeamResponse,
   UpdateSiteModeratorRequest,
@@ -18,6 +19,7 @@ export const useSiteTeamStore = defineStore('siteTeam', () => {
   const error = ref<string | null>(null)
   const lastTemporaryPassword = ref<string | null>(null)
   const lastTemporaryPasswordUser = ref<ApiSiteTeamUser | null>(null)
+  const lastRevokedSessionCount = ref<number | null>(null)
 
   const activeModerators = computed(() => users.value.filter((user) => user.role === 'moderator' && user.isActive))
   const inactiveModerators = computed(() => users.value.filter((user) => user.role === 'moderator' && !user.isActive))
@@ -28,7 +30,7 @@ export const useSiteTeamStore = defineStore('siteTeam', () => {
     error.value = null
 
     try {
-      const response = await apiRequest<SiteTeamResponse>('/users/site-team')
+      const response = await apiRequest<SiteTeamResponse>('/site/team')
       users.value = response.users
       status.value = 'ready'
     } catch (caught) {
@@ -42,9 +44,10 @@ export const useSiteTeamStore = defineStore('siteTeam', () => {
     error.value = null
     lastTemporaryPassword.value = null
     lastTemporaryPasswordUser.value = null
+    lastRevokedSessionCount.value = null
 
     try {
-      const response = await apiRequest<SiteModeratorMutationResponse>('/users/site-moderators', {
+      const response = await apiRequest<SiteModeratorMutationResponse>('/site/moderators', {
         method: 'POST',
         body: payload,
       })
@@ -62,9 +65,10 @@ export const useSiteTeamStore = defineStore('siteTeam', () => {
   async function updateModerator(id: string, payload: UpdateSiteModeratorRequest): Promise<void> {
     status.value = 'saving'
     error.value = null
+    lastRevokedSessionCount.value = null
 
     try {
-      const response = await apiRequest<SiteModeratorMutationResponse>(`/users/site-moderators/${id}`, {
+      const response = await apiRequest<SiteModeratorMutationResponse>(`/site/moderators/${id}`, {
         method: 'PATCH',
         body: payload,
       })
@@ -82,9 +86,10 @@ export const useSiteTeamStore = defineStore('siteTeam', () => {
     error.value = null
     lastTemporaryPassword.value = null
     lastTemporaryPasswordUser.value = null
+    lastRevokedSessionCount.value = null
 
     try {
-      const response = await apiRequest<SiteModeratorMutationResponse>(`/users/site-moderators/${id}/reset-password`, {
+      const response = await apiRequest<SiteModeratorMutationResponse>(`/site/moderators/${id}/reset-password`, {
         method: 'POST',
       })
       upsertUser(response.user)
@@ -98,9 +103,32 @@ export const useSiteTeamStore = defineStore('siteTeam', () => {
     }
   }
 
+  async function revokeModeratorSessions(id: string): Promise<void> {
+    status.value = 'saving'
+    error.value = null
+    lastRevokedSessionCount.value = null
+
+    try {
+      const response = await apiRequest<RevokeSessionsResponse>(`/site/moderators/${id}/revoke-sessions`, {
+        method: 'POST',
+      })
+      upsertUser(response.user)
+      lastRevokedSessionCount.value = response.revokedSessionCount
+      status.value = 'ready'
+    } catch (caught) {
+      status.value = 'error'
+      error.value = caught instanceof Error ? caught.message : 'Révocation des sessions impossible.'
+      throw caught
+    }
+  }
+
   function clearTemporaryPassword(): void {
     lastTemporaryPassword.value = null
     lastTemporaryPasswordUser.value = null
+  }
+
+  function clearRevocationNotice(): void {
+    lastRevokedSessionCount.value = null
   }
 
   function upsertUser(user: ApiSiteTeamUser): void {
@@ -119,6 +147,7 @@ export const useSiteTeamStore = defineStore('siteTeam', () => {
     error,
     lastTemporaryPassword,
     lastTemporaryPasswordUser,
+    lastRevokedSessionCount,
     activeModerators,
     inactiveModerators,
     siteManagers,
@@ -126,6 +155,8 @@ export const useSiteTeamStore = defineStore('siteTeam', () => {
     createModerator,
     updateModerator,
     resetModeratorPassword,
+    revokeModeratorSessions,
     clearTemporaryPassword,
+    clearRevocationNotice,
   }
 })

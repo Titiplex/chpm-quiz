@@ -39,7 +39,7 @@ const selectedQuestionnaire = computed(() => (
   catalog.publishedQuestionnaires.find((questionnaire) => questionnaire.id === selectedQuestionnaireId.value) ?? null
 ))
 
-const canReadSubmissions = computed(() => ['admin', 'analyst', 'dpo'].includes(session.currentRole))
+const canReadSubmissions = computed(() => session.currentRole === 'analyst')
 
 const visibleSubmissions = computed(() => statsStore.stats?.submissions.slice(0, visibleSubmissionCount.value) ?? [])
 const visiblePopups = computed(() => statsStore.stats?.popups?.slice(0, visiblePopupCount.value) ?? [])

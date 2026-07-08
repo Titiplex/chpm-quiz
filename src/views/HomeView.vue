@@ -18,14 +18,14 @@ const modules: Array<{
   icon: string
 }> = [
   {
-    title: 'Questionnaire',
-    description: 'Accéder au questionnaire en cours.',
-    to: '/questionnaire',
-    roles: ['admin', 'moderator', 'questionnaire_admin'],
-    icon: '📋',
+    title: 'Administration projet',
+    description: 'Créer et piloter les responsables de site, sans accès aux données confidentielles.',
+    to: '/administration-projet',
+    roles: ['admin'],
+    icon: '🧭',
   },
   {
-    title: 'Administration',
+    title: 'Questionnaires',
     description: 'Créer et modifier les questionnaires (groupes, questions, popups).',
     to: '/admin',
     roles: ['admin', 'questionnaire_admin'],
@@ -33,24 +33,24 @@ const modules: Array<{
   },
   {
     title: 'Modération',
-    description: 'Inviter des répondants par email ou terminal hospitalier.',
+    description: 'Inviter des répondants par email ou terminal hospitalier dans le périmètre local.',
     to: '/moderation',
-    roles: ['admin', 'moderator', 'site_manager'],
+    roles: ['moderator', 'site_manager'],
     icon: '📨',
   },
   {
-    title: 'Statistiques',
-    description: 'Consulter les taux de réponse, temps médians et signaux de compréhension.',
-    to: '/stats',
-    roles: ['admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo'],
-    icon: '📊',
+    title: 'Questionnaire',
+    description: 'Accéder à la prévisualisation du questionnaire en cours.',
+    to: '/questionnaire',
+    roles: ['admin', 'moderator', 'questionnaire_admin'],
+    icon: '📋',
   },
   {
-    title: 'Coffre email',
-    description: 'Accéder au registre sécurisé de correspondance code–email.',
-    to: '/coffre-email',
-    roles: ['dpo', 'judicial_officer'],
-    icon: '🔒',
+    title: 'Statistiques',
+    description: 'Consulter les indicateurs agrégés et pseudonymisés sous seuils.',
+    to: '/stats',
+    roles: ['admin', 'site_manager', 'questionnaire_admin', 'analyst'],
+    icon: '📊',
   },
 ]
 
@@ -59,9 +59,9 @@ const visibleModules = computed(() =>
 )
 
 const defaultPath = computed(() => defaultPathByRole[session.currentRole])
-const canOpenAdmin = computed(() => hasRoleAccess(session.currentRole, ['admin', 'questionnaire_admin']))
-const canOpenVault = computed(() => hasRoleAccess(session.currentRole, ['dpo', 'judicial_officer']))
-const canOpenStats = computed(() => hasRoleAccess(session.currentRole, ['admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo']))
+const canOpenProjectAdministration = computed(() => hasRoleAccess(session.currentRole, ['admin']))
+const canOpenBuilder = computed(() => hasRoleAccess(session.currentRole, ['admin', 'questionnaire_admin']))
+const canOpenStats = computed(() => hasRoleAccess(session.currentRole, ['admin', 'site_manager', 'questionnaire_admin', 'analyst']))
 
 const greetingName = computed(() => session.user?.displayName?.split(' ')[0] ?? '')
 </script>
@@ -85,16 +85,16 @@ const greetingName = computed(() => session.user?.displayName?.split(' ')[0] ?? 
               : 'Bienvenue sur la plateforme de questionnaires du CH Montfavet.' }}
           </p>
           <div class="d-flex flex-wrap gap-2">
-            <RouterLink v-if="canOpenAdmin" class="btn btn-light fw-bold" to="/admin">
+            <RouterLink v-if="canOpenProjectAdministration" class="btn btn-light fw-bold" to="/administration-projet">
+              Administration projet
+            </RouterLink>
+            <RouterLink v-else-if="canOpenBuilder" class="btn btn-light fw-bold" to="/admin">
               Constructeur de questionnaire
             </RouterLink>
-            <RouterLink v-if="canOpenVault" class="btn btn-outline-light" to="/coffre-email">
-              Coffre email
-            </RouterLink>
-            <RouterLink v-if="!canOpenAdmin && canOpenStats" class="btn btn-light fw-bold" to="/stats">
+            <RouterLink v-else-if="canOpenStats" class="btn btn-light fw-bold" to="/stats">
               Mes statistiques
             </RouterLink>
-            <RouterLink v-else-if="!canOpenAdmin" class="btn btn-light fw-bold" :to="defaultPath">
+            <RouterLink v-else class="btn btn-light fw-bold" :to="defaultPath">
               Mon espace
             </RouterLink>
           </div>

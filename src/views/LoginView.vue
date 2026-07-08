@@ -55,13 +55,6 @@ const demoAccounts: Array<{
     descriptionKey: 'auth.role.analyst.description',
   },
   {
-    role: 'dpo',
-    labelKey: 'auth.role.dpo.label',
-    email: 'dpo@chpm.local',
-    password: 'Dpo12345!',
-    descriptionKey: 'auth.role.dpo.description',
-  },
-  {
     role: 'judicial_officer',
     labelKey: 'auth.role.judicial.label',
     email: 'judiciaire@chpm.local',

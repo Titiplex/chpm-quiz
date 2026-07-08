@@ -51,10 +51,18 @@ import type {
   UpdateQuestionRequest,
   UpdateTerminalDeviceRequest,
   RegenerateTerminalDeviceTokenResponse,
+  ApiSite,
   ApiSiteTeamUser,
+  ApiSiteAdminUser,
+  CreateSiteAdminRequest,
   CreateSiteModeratorRequest,
+  RevokeSessionsResponse,
+  SiteAdminMutationResponse,
+  SiteAdminsResponse,
   SiteModeratorMutationResponse,
+  SitesResponse,
   SiteTeamResponse,
+  UpdateSiteAdminRequest,
   UpdateSiteModeratorRequest,
   UpsertNotificationSubscriptionRequest,
 } from '@shared/types/api'
@@ -205,13 +213,6 @@ const demoUsers: DemoUserSeed[] = [
     role: 'analyst',
   },
   {
-    id: 'demo-user-dpo',
-    email: 'dpo@chpm.local',
-    password: 'Dpo12345!',
-    displayName: 'Claire DPO',
-    role: 'dpo',
-  },
-  {
     id: 'demo-user-judicial',
     email: 'judiciaire@chpm.local',
     password: 'Judiciaire123!',
@@ -248,22 +249,54 @@ export async function demoApiRequest<T>(path: string, options: DemoRequestOption
   }
 
 
-  if (method === 'GET' && route === '/users/site-team') {
+  if (method === 'GET' && route === '/admin/sites') {
+    return asResponse<T>({ sites: getDemoSites() } satisfies SitesResponse)
+  }
+
+  if (method === 'GET' && route === '/admin/site-admins') {
+    return asResponse<T>(getSiteAdmins() satisfies SiteAdminsResponse)
+  }
+
+  if (method === 'POST' && route === '/admin/site-admins') {
+    return asResponse<T>(upsertSiteAdmin(options.body as CreateSiteAdminRequest) satisfies SiteAdminMutationResponse)
+  }
+
+  const siteAdminMatch = route.match(/^\/admin\/site-admins\/([^/]+)$/)
+  if (siteAdminMatch?.[1] && method === 'PATCH') {
+    return asResponse<T>(updateSiteAdmin(siteAdminMatch[1], options.body as UpdateSiteAdminRequest) satisfies SiteAdminMutationResponse)
+  }
+
+  const siteAdminResetMatch = route.match(/^\/admin\/site-admins\/([^/]+)\/reset-password$/)
+  if (siteAdminResetMatch?.[1] && method === 'POST') {
+    return asResponse<T>(resetSiteAdminPassword(siteAdminResetMatch[1]) satisfies SiteAdminMutationResponse)
+  }
+
+  const siteAdminRevokeMatch = route.match(/^\/admin\/site-admins\/([^/]+)\/revoke-sessions$/)
+  if (siteAdminRevokeMatch?.[1] && method === 'POST') {
+    return asResponse<T>(revokeSiteAdminSessions(siteAdminRevokeMatch[1]) satisfies RevokeSessionsResponse)
+  }
+
+  if ((method === 'GET' && route === '/site/team') || (method === 'GET' && route === '/users/site-team')) {
     return asResponse<T>(getSiteTeam() satisfies SiteTeamResponse)
   }
 
-  if (method === 'POST' && route === '/users/site-moderators') {
+  if ((method === 'POST' && route === '/site/moderators') || (method === 'POST' && route === '/users/site-moderators')) {
     return asResponse<T>(upsertSiteModerator(options.body as CreateSiteModeratorRequest) satisfies SiteModeratorMutationResponse)
   }
 
-  const siteModeratorMatch = route.match(/^\/users\/site-moderators\/([^/]+)$/)
+  const siteModeratorMatch = route.match(/^\/(?:site\/moderators|users\/site-moderators)\/([^/]+)$/)
   if (siteModeratorMatch?.[1] && method === 'PATCH') {
     return asResponse<T>(updateSiteModerator(siteModeratorMatch[1], options.body as UpdateSiteModeratorRequest) satisfies SiteModeratorMutationResponse)
   }
 
-  const siteModeratorResetMatch = route.match(/^\/users\/site-moderators\/([^/]+)\/reset-password$/)
+  const siteModeratorResetMatch = route.match(/^\/(?:site\/moderators|users\/site-moderators)\/([^/]+)\/reset-password$/)
   if (siteModeratorResetMatch?.[1] && method === 'POST') {
     return asResponse<T>(resetSiteModeratorPassword(siteModeratorResetMatch[1]) satisfies SiteModeratorMutationResponse)
+  }
+
+  const siteModeratorRevokeMatch = route.match(/^\/(?:site\/moderators|users\/site-moderators)\/([^/]+)\/revoke-sessions$/)
+  if (siteModeratorRevokeMatch?.[1] && method === 'POST') {
+    return asResponse<T>(revokeSiteModeratorSessions(siteModeratorRevokeMatch[1]) satisfies RevokeSessionsResponse)
   }
 
   if (method === 'GET' && route === '/buildings') {
@@ -537,10 +570,10 @@ function saveDemoUsers(users: DemoUserSeed[]): void {
 
 function requireSiteTeamManager(): DemoUserSeed {
   const currentUser = safeCurrentUser()
-  if (!currentUser || !['admin', 'site_manager'].includes(currentUser.role)) {
-    throw new Error('Votre rôle ne permet pas de gérer une équipe de site.')
+  if (!currentUser || currentUser.role !== 'site_manager') {
+    throw new Error('Seul un responsable de site peut gérer une équipe de site.')
   }
-  if (currentUser.role === 'site_manager' && !currentUser.siteId) {
+  if (!currentUser.siteId) {
     throw new Error('Gestionnaire de site sans site affecté.')
   }
   return currentUser
@@ -549,7 +582,7 @@ function requireSiteTeamManager(): DemoUserSeed {
 function getSiteTeam(): SiteTeamResponse {
   const currentUser = requireSiteTeamManager()
   const users = getDemoUsers()
-    .filter((user) => user.role === 'site_manager' || user.role === 'moderator')
+    .filter((user) => user.role === 'moderator')
     .filter((user) => isUserInSiteTeamScope(currentUser, user))
     .map(toApiSiteTeamUser)
 
@@ -557,10 +590,128 @@ function getSiteTeam(): SiteTeamResponse {
     users,
     policy: {
       manageableRoles: ['moderator'],
-      scope: currentUser.role === 'site_manager' ? 'site' : 'organization',
+      scope: 'site',
       passwordReturnedOnce: true,
     },
   }
+}
+
+
+function getDemoSites(): ApiSite[] {
+  const siteIds = Array.from(new Set(buildingSeeds.map((building) => building.siteId).filter((siteId): siteId is string => Boolean(siteId))))
+  return siteIds.map((siteId) => {
+    const buildings = buildingSeeds.filter((building) => building.siteId === siteId)
+    const firstBuilding = buildings[0]
+    const code = siteId.replace('demo-site-', '').toUpperCase()
+    return {
+      id: siteId,
+      code,
+      name: firstBuilding?.label.split('·')[0]?.trim() ?? code,
+      organizationId: DEMO_ORGANIZATION_ID,
+      organization: { id: DEMO_ORGANIZATION_ID, code: 'CHPM', name: 'CH Montfavet' },
+      country: firstBuilding?.country ?? null,
+      timezone: firstBuilding?.timezone ?? null,
+    }
+  })
+}
+
+function requireProjectAdmin(): DemoUserSeed {
+  const currentUser = safeCurrentUser()
+  if (!currentUser || currentUser.role !== 'admin') {
+    throw new Error('Seul un administrateur projet peut gérer les responsables de site dans la démo.')
+  }
+  return currentUser
+}
+
+function getSiteAdmins(): SiteAdminsResponse {
+  requireProjectAdmin()
+  return {
+    users: getDemoUsers().filter((user) => user.role === 'site_manager').map(toApiSiteAdminUser),
+    policy: {
+      manageableRoles: ['site_manager'],
+      scope: 'project',
+      passwordReturnedOnce: true,
+      forbiddenRoles: ['admin', 'dpo', 'technical_admin', 'judicial_officer'],
+    },
+  }
+}
+
+function upsertSiteAdmin(payload: CreateSiteAdminRequest): SiteAdminMutationResponse {
+  requireProjectAdmin()
+  const site = getDemoSites().find((candidate) => candidate.id === payload.siteId)
+  if (!site) throw new Error('Site introuvable dans la démo.')
+
+  const users = getDemoUsers()
+  const email = payload.email.trim().toLowerCase()
+  const existingIndex = users.findIndex((candidate) => candidate.email === email)
+  const existing = existingIndex >= 0 ? users[existingIndex] : undefined
+  if (existing && existing.role !== 'site_manager') throw new Error('Cet email correspond déjà à un compte qui n’est pas responsable de site.')
+
+  const temporaryPassword = payload.temporaryPassword ?? generateDemoTemporaryPassword()
+  const now = nowIso()
+  const nextUser: DemoUserSeed = {
+    ...existing,
+    id: existing?.id ?? createId('user-site-manager'),
+    email,
+    password: temporaryPassword,
+    displayName: payload.displayName.trim(),
+    role: 'site_manager',
+    siteId: site.id,
+    buildingId: undefined,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+    isActive: true,
+  }
+
+  if (existingIndex >= 0) users[existingIndex] = nextUser
+  else users.push(nextUser)
+  saveDemoUsers(users)
+  appendAuditLog('user.siteAdmin.create', 'User', nextUser.id ?? null, null, { email, siteId: site.id })
+  return { user: toApiSiteAdminUser(nextUser), temporaryPassword, temporaryPasswordGenerated: payload.temporaryPassword === undefined }
+}
+
+function updateSiteAdmin(id: string, payload: UpdateSiteAdminRequest): SiteAdminMutationResponse {
+  requireProjectAdmin()
+  const users = getDemoUsers()
+  const index = users.findIndex((candidate) => candidate.id === id)
+  const user = index >= 0 ? users[index] : undefined
+  if (!user || user.role !== 'site_manager') throw new Error('Responsable de site introuvable dans la démo.')
+  if (payload.siteId && !getDemoSites().some((site) => site.id === payload.siteId)) throw new Error('Site introuvable dans la démo.')
+
+  const updated: DemoUserSeed = {
+    ...user,
+    displayName: payload.displayName?.trim() || user.displayName,
+    siteId: payload.siteId ?? user.siteId,
+    buildingId: undefined,
+    updatedAt: nowIso(),
+  }
+  if (payload.isActive !== undefined) updated.isActive = payload.isActive
+  users[index] = updated
+  saveDemoUsers(users)
+  appendAuditLog('user.siteAdmin.patch', 'User', updated.id ?? null, null, { email: updated.email, siteId: updated.siteId, isActive: payload.isActive })
+  return { user: toApiSiteAdminUser(updated) }
+}
+
+function resetSiteAdminPassword(id: string): SiteAdminMutationResponse {
+  requireProjectAdmin()
+  const users = getDemoUsers()
+  const index = users.findIndex((candidate) => candidate.id === id)
+  const user = index >= 0 ? users[index] : undefined
+  if (!user || user.role !== 'site_manager') throw new Error('Responsable de site introuvable dans la démo.')
+  const temporaryPassword = generateDemoTemporaryPassword()
+  const updated: DemoUserSeed = { ...user, password: temporaryPassword, isActive: true, updatedAt: nowIso() }
+  users[index] = updated
+  saveDemoUsers(users)
+  appendAuditLog('user.siteAdmin.resetPassword', 'User', updated.id ?? null, null, { email: updated.email })
+  return { user: toApiSiteAdminUser(updated), temporaryPassword, temporaryPasswordGenerated: true }
+}
+
+function revokeSiteAdminSessions(id: string): RevokeSessionsResponse {
+  requireProjectAdmin()
+  const user = getDemoUsers().find((candidate) => candidate.id === id && candidate.role === 'site_manager')
+  if (!user) throw new Error('Responsable de site introuvable dans la démo.')
+  appendAuditLog('user.siteAdmin.revokeSessions', 'User', user.id ?? null, null, { email: user.email })
+  return { user: toApiSiteAdminUser(user), revokedSessionCount: 1 }
 }
 
 function upsertSiteModerator(payload: CreateSiteModeratorRequest): SiteModeratorMutationResponse {
@@ -670,9 +821,19 @@ function resetSiteModeratorPassword(id: string): SiteModeratorMutationResponse {
   return { user: toApiSiteTeamUser(updated), temporaryPassword, temporaryPasswordGenerated: true }
 }
 
+
+function revokeSiteModeratorSessions(id: string): RevokeSessionsResponse {
+  const currentUser = requireSiteTeamManager()
+  const user = getDemoUsers().find((candidate) => candidate.id === id)
+  if (!user || user.role !== 'moderator' || !isUserInSiteTeamScope(currentUser, user)) {
+    throw new Error('Modérateur introuvable dans votre périmètre.')
+  }
+  appendAuditLog('user.siteModerator.revokeSessions', 'User', user.id ?? null, null, { email: user.email })
+  return { user: toApiSiteTeamUser(user), revokedSessionCount: 1 }
+}
+
 function isUserInSiteTeamScope(currentUser: DemoUserSeed, user: DemoUserSeed): boolean {
-  if (currentUser.role === 'admin') return true
-  return Boolean(currentUser.siteId) && user.siteId === currentUser.siteId
+  return currentUser.role === 'site_manager' && Boolean(currentUser.siteId) && user.siteId === currentUser.siteId
 }
 
 function toApiSiteTeamUser(seed: DemoUserSeed): ApiSiteTeamUser {
@@ -694,6 +855,11 @@ function toApiSiteTeamUser(seed: DemoUserSeed): ApiSiteTeamUser {
     createdAt: seed.createdAt ?? '2026-01-01T00:00:00.000Z',
     updatedAt: seed.updatedAt ?? '2026-01-01T00:00:00.000Z',
   }
+}
+
+
+function toApiSiteAdminUser(seed: DemoUserSeed): ApiSiteAdminUser {
+  return toApiSiteTeamUser(seed) as ApiSiteAdminUser
 }
 
 function siteDto(siteId: string): { id: string; code: string; name: string } {
@@ -2248,7 +2414,7 @@ function saveAuditLogs(logs: AuditLogsResponse['logs']): void {
 
 function createInitialAuditLogs(): AuditLogsResponse['logs'] {
   return [
-    createAuditLogRecord('judicial.request.received', 'JudicialAccessRequest', 'demo-jar-001', '8F4K-29QX', { workflow: 'double_validation', simulation: true }, addDaysIso(-1), 'demo-user-dpo'),
+    createAuditLogRecord('judicial.request.received', 'JudicialAccessRequest', 'demo-jar-001', '8F4K-29QX', { workflow: 'double_validation', simulation: true }, addDaysIso(-1), 'demo-user-tech'),
     createAuditLogRecord('notification.email.simulated', 'ResponseSubmission', 'demo-submission-001', '8F4K-29QX', { channel: 'email', directEmailVisible: false, simulation: true }, addDaysIso(-2), 'demo-user-admin'),
     createAuditLogRecord('identity.vault.access.denied', 'IdentityVaultEntry', null, '8F4K-29QX', { reason: 'rôle non judiciaire', directEmailVisible: false, simulation: true }, addDaysIso(-3), 'demo-user-admin'),
   ]

@@ -19,7 +19,7 @@ const form = reactive({
 })
 
 const publishedQuestionnaires = computed(() => catalog.publishedQuestionnaires)
-const canRunDigest = computed(() => ['admin', 'dpo', 'technical_admin'].includes(session.user?.role ?? ''))
+const canRunDigest = computed(() => ['admin', 'technical_admin'].includes(session.user?.role ?? ''))
 
 onMounted(async () => {
   if (catalog.status === 'idle') {

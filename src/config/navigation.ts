@@ -13,8 +13,14 @@ export const navigationItems: NavigationItem[] = [
   {
     label: t('nav.home'),
     to: '/',
-    roles: ['admin', 'moderator', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo', 'technical_admin', 'judicial_officer'],
+    roles: ['admin', 'moderator', 'site_manager', 'questionnaire_admin', 'analyst', 'technical_admin', 'judicial_officer'],
     description: t('nav.home.description'),
+  },
+  {
+    label: t('nav.projectAdministration'),
+    to: '/administration-projet',
+    roles: ['admin'],
+    description: t('nav.projectAdministration.description'),
   },
   {
     label: t('nav.admin'),
@@ -25,7 +31,7 @@ export const navigationItems: NavigationItem[] = [
   {
     label: t('nav.moderation'),
     to: '/moderation',
-    roles: ['admin', 'moderator', 'site_manager'],
+    roles: ['moderator', 'site_manager'],
     description: t('nav.moderation.description'),
   },
   {
@@ -37,7 +43,7 @@ export const navigationItems: NavigationItem[] = [
   {
     label: t('nav.stats'),
     to: '/stats',
-    roles: ['admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo'],
+    roles: ['admin', 'site_manager', 'questionnaire_admin', 'analyst'],
     description: t('nav.stats.description'),
   },
   {
@@ -49,25 +55,19 @@ export const navigationItems: NavigationItem[] = [
   {
     label: t('nav.rgpd'),
     to: '/rgpd',
-    roles: ['admin', 'analyst', 'dpo', 'technical_admin', 'judicial_officer'],
+    roles: ['admin', 'analyst', 'technical_admin', 'judicial_officer'],
     description: t('nav.rgpd.description'),
-  },
-  {
-    label: t('nav.identityVault'),
-    to: '/coffre-email',
-    roles: ['dpo', 'judicial_officer'],
-    description: t('nav.identityVault.description'),
   },
 ]
 
 export const defaultPathByRole: Record<UserRole, string> = {
-  admin: '/admin',
+  admin: '/administration-projet',
   moderator: '/moderation',
   site_manager: '/moderation',
   questionnaire_admin: '/admin',
   analyst: '/stats',
-  dpo: '/coffre-email',
-  judicial_officer: '/coffre-email',
+  dpo: '/',
+  judicial_officer: '/rgpd',
   technical_admin: '/terminaux',
   service_account: '/',
   respondent: '/questionnaire',

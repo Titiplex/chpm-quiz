@@ -47,6 +47,10 @@ async function toggleActive(user: ApiSiteTeamUser): Promise<void> {
 async function resetPassword(user: ApiSiteTeamUser): Promise<void> {
   await siteTeam.resetModeratorPassword(user.id)
 }
+
+async function revokeSessions(user: ApiSiteTeamUser): Promise<void> {
+  await siteTeam.revokeModeratorSessions(user.id)
+}
 </script>
 
 <template>
@@ -63,7 +67,7 @@ async function resetPassword(user: ApiSiteTeamUser): Promise<void> {
           <p class="section-eyebrow mb-1">Délégation locale</p>
           <h3 class="h5 mb-2">Ajouter un modérateur</h3>
           <p class="small mb-3" style="color: var(--chm-muted);">
-            Le compte créé est limité au bâtiment choisi. Le mot de passe temporaire est affiché une seule fois.
+            Le responsable de site peut uniquement créer des modérateurs sur les bâtiments de son propre site. Le mot de passe temporaire est affiché une seule fois.
           </p>
           <form @submit.prevent="createModerator">
             <label class="form-label fw-semibold" for="site-team-display-name">Nom affiché</label>
@@ -95,6 +99,11 @@ async function resetPassword(user: ApiSiteTeamUser): Promise<void> {
           <button class="btn btn-sm btn-outline-dark mt-2" type="button" @click="siteTeam.clearTemporaryPassword()">
             J’ai copié le mot de passe
           </button>
+        </div>
+
+        <div v-if="siteTeam.lastRevokedSessionCount !== null" class="alert alert-info rounded-3" role="status">
+          Sessions révoquées : {{ siteTeam.lastRevokedSessionCount }}.
+          <button class="btn btn-sm btn-outline-dark ms-2" type="button" @click="siteTeam.clearRevocationNotice()">OK</button>
         </div>
 
         <div class="table-card table-card-scroll">
@@ -141,6 +150,9 @@ async function resetPassword(user: ApiSiteTeamUser): Promise<void> {
                     </button>
                     <button class="btn btn-outline-secondary" type="button" :disabled="siteTeam.status === 'saving'" @click="resetPassword(user)">
                       Reset MDP
+                    </button>
+                    <button class="btn btn-outline-secondary" type="button" :disabled="siteTeam.status === 'saving'" @click="revokeSessions(user)">
+                      Révoquer sessions
                     </button>
                   </div>
                   <span v-else class="small" style="color: var(--chm-muted);">Pilotage site</span>

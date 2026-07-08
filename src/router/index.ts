@@ -79,6 +79,16 @@ export function createConnectedRoutes(): RouteRecordRaw[] {
       },
     },
     {
+      path: '/administration-projet',
+      name: 'project-administration',
+      component: () => import('@/views/ProjectAdministrationView.vue'),
+      meta: {
+        label: t('nav.projectAdministration'),
+        allowedRoles: ['admin'],
+        requiresAuthenticatedUser: true,
+      },
+    },
+    {
       path: '/admin',
       name: 'admin',
       component: () => import('@/views/AdminBuilderView.vue'),
@@ -94,7 +104,7 @@ export function createConnectedRoutes(): RouteRecordRaw[] {
       component: () => import('@/views/ModeratorView.vue'),
       meta: {
         label: t('nav.moderation'),
-        allowedRoles: ['admin', 'moderator', 'site_manager'],
+        allowedRoles: ['moderator', 'site_manager'],
         requiresAuthenticatedUser: true,
       },
     },
@@ -124,7 +134,7 @@ export function createConnectedRoutes(): RouteRecordRaw[] {
       component: () => import('@/views/StatsView.vue'),
       meta: {
         label: t('nav.stats'),
-        allowedRoles: ['admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo'],
+        allowedRoles: ['admin', 'site_manager', 'questionnaire_admin', 'analyst'],
         requiresAuthenticatedUser: true,
       },
     },
@@ -154,17 +164,7 @@ export function createConnectedRoutes(): RouteRecordRaw[] {
       component: () => import('@/views/ComplianceView.vue'),
       meta: {
         label: t('nav.rgpd'),
-        allowedRoles: ['admin', 'analyst', 'dpo', 'technical_admin', 'judicial_officer'],
-        requiresAuthenticatedUser: true,
-      },
-    },
-    {
-      path: '/coffre-email',
-      name: 'identity-vault',
-      component: () => import('@/views/IdentityVaultView.vue'),
-      meta: {
-        label: t('nav.identityVault'),
-        allowedRoles: ['dpo', 'judicial_officer'],
+        allowedRoles: ['admin', 'analyst', 'technical_admin', 'judicial_officer'],
         requiresAuthenticatedUser: true,
       },
     },
