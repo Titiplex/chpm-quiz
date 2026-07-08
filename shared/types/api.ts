@@ -18,6 +18,30 @@ export interface ApiSite {
   timezone?: string | null
 }
 
+
+export interface CreateSiteRequest {
+  code: string
+  name: string
+  country?: string
+  timezone?: string
+}
+
+export interface SiteMutationResponse {
+  site: ApiSite
+}
+
+export interface CreateBuildingRequest {
+  code: string
+  label: string
+  city: string
+  country: string
+  timezone: string
+}
+
+export interface BuildingMutationResponse {
+  building: ApiBuilding
+}
+
 export interface AuthUserProfile {
   id: string
   email: string
@@ -216,6 +240,18 @@ export interface QuestionnairesResponse {
 }
 
 export interface QuestionnaireResponse {
+  questionnaire: ApiQuestionnaire
+}
+
+
+export interface AddQuestionnaireLanguageRequest {
+  language: LanguageCode
+  title?: string
+  description?: string
+  finality?: string
+}
+
+export interface AddQuestionnaireLanguageResponse {
   questionnaire: ApiQuestionnaire
 }
 

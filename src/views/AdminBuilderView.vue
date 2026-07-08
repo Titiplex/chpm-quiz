@@ -18,11 +18,22 @@ type PageSectionNavItem = {
   hint?: string
 }
 
+type LanguageOption = {
+  code: LanguageCode
+  label: string
+}
+
 const catalog = useCatalogStore()
 
 const adminSections: PageSectionNavItem[] = [
   { id: 'admin-editor', label: 'Édition', hint: 'Métadonnées et questions' },
   { id: 'admin-preview', label: 'Aperçu', hint: 'Parcours répondant' },
+]
+
+const supportedLanguages: LanguageOption[] = [
+  { code: 'fr', label: 'Français' },
+  { code: 'en', label: 'Anglais' },
+  { code: 'es', label: 'Espagnol' },
 ]
 
 const selectedQuestionnaireId = ref<string>('')
@@ -47,6 +58,13 @@ const metadataForm = reactive({
   title: '',
   description: '',
   defaultLanguage: 'fr' as LanguageCode,
+  finality: '',
+})
+
+const translationForm = reactive({
+  language: 'en' as LanguageCode,
+  title: '',
+  description: '',
   finality: '',
 })
 
@@ -121,6 +139,7 @@ const isSaving = computed(() => catalog.status === 'saving')
 const previewResult = computed(() => renderPreviewPath(selectedQuestionnaire.value?.groups ?? []))
 const previewGroups = computed(() => previewResult.value.visibleGroups)
 const hiddenPreviewGroups = computed(() => previewResult.value.hiddenGroups)
+const currentLanguageLabel = computed(() => languageLabel(selectedQuestionnaire.value?.language ?? metadataForm.defaultLanguage))
 
 watch(
   selectedQuestionnaire,
@@ -134,6 +153,9 @@ watch(
     metadataForm.description = questionnaire.description ?? ''
     metadataForm.defaultLanguage = questionnaire.defaultLanguage
     metadataForm.finality = questionnaire.finality ?? ''
+    translationForm.title = `${questionnaire.title} (${translationForm.language.toUpperCase()})`
+    translationForm.description = questionnaire.description ?? ''
+    translationForm.finality = questionnaire.finality ?? ''
 
     if (!questionnaire.groups.some((group) => group.id === selectedGroupId.value)) {
       selectedGroupId.value = questionnaire.groups[0]?.id ?? ''
@@ -185,6 +207,22 @@ async function saveMetadata(): Promise<void> {
       finality: metadataForm.finality,
     })
     return `Métadonnées de “${questionnaire.title}” sauvegardées en brouillon.`
+  })
+}
+
+async function addLanguageVersion(): Promise<void> {
+  if (!selectedQuestionnaire.value) return
+
+  await performAction(async () => {
+    const translation = await catalog.addQuestionnaireLanguage(selectedQuestionnaire.value!.id, {
+      language: translationForm.language,
+      title: translationForm.title,
+      description: translationForm.description,
+      finality: translationForm.finality,
+    })
+    selectedQuestionnaireId.value = translation.id
+    selectedGroupId.value = translation.groups[0]?.id ?? ''
+    return `Brouillon ${languageLabel(translation.language)} créé pour “${translation.title}”.`
   })
 }
 
@@ -578,6 +616,10 @@ function likertLabel(scale: LikertScaleForDisplay, value: number): string {
     : `Vers « ${scale.rightAnchor || 'le maximum'} »`
 }
 
+function languageLabel(language: LanguageCode): string {
+  return supportedLanguages.find((candidate) => candidate.code === language)?.label ?? language.toUpperCase()
+}
+
 function questionTypeLabel(type?: QuestionType): string {
   const labels: Record<QuestionType, string> = {
     single_choice: 'Choix unique',
@@ -701,9 +743,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
         <input id="new-title" v-model="createQuestionnaireForm.title" class="form-control mb-2" />
         <label class="form-label small fw-bold" for="new-language">Langue par défaut</label>
         <select id="new-language" v-model="createQuestionnaireForm.defaultLanguage" class="form-select mb-3">
-          <option value="fr">Français</option>
-          <option value="en">Anglais</option>
-          <option value="es">Espagnol</option>
+          <option v-for="language in supportedLanguages" :key="language.code" :value="language.code">{{ language.label }}</option>
         </select>
         <button class="btn btn-outline-primary w-100" type="button" :disabled="isSaving" @click="createQuestionnaire">
           + Créer le brouillon
@@ -821,9 +861,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                   <div class="col-md-4">
                     <label class="form-label fw-bold" for="metadata-language">Langue</label>
                     <select id="metadata-language" v-model="metadataForm.defaultLanguage" class="form-select">
-                      <option value="fr">Français</option>
-                      <option value="en">Anglais</option>
-                      <option value="es">Espagnol</option>
+                      <option v-for="language in supportedLanguages" :key="language.code" :value="language.code">{{ language.label }}</option>
                     </select>
                   </div>
                   <div class="col-12">
@@ -833,6 +871,50 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                   <div class="col-12">
                     <label class="form-label fw-bold" for="metadata-finality">Finalité métier</label>
                     <textarea id="metadata-finality" v-model="metadataForm.finality" class="form-control" rows="2"></textarea>
+                  </div>
+                </div>
+
+                <div class="question-row mb-4">
+                  <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
+                    <div>
+                      <p class="section-eyebrow mb-1">Langues et traductions</p>
+                      <h3 class="h5 fw-bold mb-0">Ajouter une langue au questionnaire</h3>
+                    </div>
+                    <span class="badge-soft">Version courante : {{ currentLanguageLabel }}</span>
+                  </div>
+                  <p class="small muted mb-3">
+                    Changer la langue ci-dessus ne traduit pas le contenu. Utilisez cette action pour créer un brouillon de traduction séparé,
+                    avec la même structure, les mêmes codes questions et les textes à adapter.
+                  </p>
+                  <div class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                      <label class="form-label small fw-bold" for="translation-language">Nouvelle langue</label>
+                      <select id="translation-language" v-model="translationForm.language" class="form-select">
+                        <option v-for="language in supportedLanguages" :key="language.code" :value="language.code">{{ language.label }}</option>
+                      </select>
+                    </div>
+                    <div class="col-md-5">
+                      <label class="form-label small fw-bold" for="translation-title">Titre de la traduction</label>
+                      <input id="translation-title" v-model="translationForm.title" class="form-control" />
+                    </div>
+                    <div class="col-md-4">
+                      <button
+                        class="btn btn-outline-primary w-100"
+                        type="button"
+                        :disabled="!selectedQuestionnaire || isSaving || selectedQuestionnaire.language === translationForm.language"
+                        @click="addLanguageVersion"
+                      >
+                        + Créer le brouillon de langue
+                      </button>
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label small fw-bold" for="translation-description">Description traduite</label>
+                      <input id="translation-description" v-model="translationForm.description" class="form-control" />
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label small fw-bold" for="translation-finality">Finalité traduite</label>
+                      <input id="translation-finality" v-model="translationForm.finality" class="form-control" />
+                    </div>
                   </div>
                 </div>
 

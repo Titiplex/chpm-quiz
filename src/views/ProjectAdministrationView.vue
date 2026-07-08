@@ -9,6 +9,13 @@ import type { ApiSiteAdminUser } from '@shared/types/api'
 
 const administration = useProjectAdministrationStore()
 
+const siteForm = reactive({
+  code: 'MTL-NORD',
+  name: 'Montfavet Nord',
+  country: 'France',
+  timezone: 'Europe/Paris',
+})
+
 const form = reactive({
   email: 'responsable.site@chpm.local',
   displayName: 'Responsable de site',
@@ -21,6 +28,19 @@ onMounted(async () => {
 })
 
 const activeCount = computed(() => administration.activeSiteAdmins.length)
+const siteCount = computed(() => administration.sites.length)
+
+async function createSite(): Promise<void> {
+  const site = await administration.createSite({
+    code: siteForm.code,
+    name: siteForm.name,
+    country: siteForm.country,
+    timezone: siteForm.timezone,
+  })
+  form.siteId = site.id
+  siteForm.code = ''
+  siteForm.name = ''
+}
 
 async function createSiteAdmin(): Promise<void> {
   await administration.createSiteAdmin({
@@ -66,6 +86,33 @@ async function revokeSessions(user: ApiSiteAdminUser): Promise<void> {
       <div class="row g-4 mb-4">
         <div class="col-lg-4">
           <div class="surface-card p-3 h-100">
+            <p class="section-eyebrow mb-1">Périmètre projet</p>
+            <h2 class="h5 mb-2">Créer un site</h2>
+            <p class="small mb-3" style="color: var(--chm-muted);">
+              L’administrateur projet crée d’abord le site, puis y affecte un responsable. Aucun bâtiment ni modérateur n’est créé à ce niveau.
+            </p>
+            <form @submit.prevent="createSite">
+              <label class="form-label fw-semibold" for="site-code">Code site</label>
+              <input id="site-code" v-model="siteForm.code" class="form-control mb-3" placeholder="MTL-NORD" required />
+
+              <label class="form-label fw-semibold" for="site-name">Nom du site</label>
+              <input id="site-name" v-model="siteForm.name" class="form-control mb-3" placeholder="Montfavet Nord" required />
+
+              <label class="form-label fw-semibold" for="site-country">Pays</label>
+              <input id="site-country" v-model="siteForm.country" class="form-control mb-3" placeholder="France" />
+
+              <label class="form-label fw-semibold" for="site-timezone">Fuseau horaire</label>
+              <input id="site-timezone" v-model="siteForm.timezone" class="form-control mb-3" placeholder="Europe/Paris" />
+
+              <button class="btn btn-outline-primary w-100" type="submit" :disabled="administration.status === 'saving'">
+                {{ administration.status === 'saving' ? 'Création…' : '+ Ajouter le site' }}
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <div class="col-lg-4">
+          <div class="surface-card p-3 h-100">
             <p class="section-eyebrow mb-1">Délégation projet</p>
             <h2 class="h5 mb-2">Créer un responsable de site</h2>
             <p class="small mb-3" style="color: var(--chm-muted);">
@@ -93,7 +140,7 @@ async function revokeSessions(user: ApiSiteAdminUser): Promise<void> {
           </div>
         </div>
 
-        <div class="col-lg-8">
+        <div class="col-lg-4">
           <div class="surface-card p-3 h-100">
             <p class="section-eyebrow mb-1">Périmètre</p>
             <h2 class="h5 mb-2">Chaîne d’autorité appliquée</h2>
@@ -106,6 +153,44 @@ async function revokeSessions(user: ApiSiteAdminUser): Promise<void> {
           </div>
         </div>
       </div>
+
+      <CollapsibleSection
+        id="project-sites"
+        title="Sites du projet"
+        :badge="`${siteCount} site(s)`"
+        :default-open="true"
+        body-class="compact"
+      >
+        <div class="table-card table-card-scroll">
+          <table class="table align-middle">
+            <thead>
+              <tr>
+                <th>Site</th>
+                <th>Organisation</th>
+                <th>Pays</th>
+                <th>Fuseau</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="site in administration.sites" :key="site.id">
+                <td>
+                  <strong>{{ site.name }}</strong><br />
+                  <span class="small" style="color: var(--chm-muted); font-family: monospace;">{{ site.code }}</span>
+                </td>
+                <td class="small">{{ site.organization?.name ?? 'Organisation projet' }}</td>
+                <td class="small">{{ site.country ?? '—' }}</td>
+                <td class="small">{{ site.timezone ?? '—' }}</td>
+              </tr>
+              <tr v-if="administration.status === 'loading'">
+                <td colspan="4" class="text-center py-4" style="color: var(--chm-muted);">Chargement des sites…</td>
+              </tr>
+              <tr v-else-if="!administration.sites.length">
+                <td colspan="4" class="text-center py-4" style="color: var(--chm-muted);">Aucun site créé.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </CollapsibleSection>
 
       <CollapsibleSection
         id="project-site-admins"

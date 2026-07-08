@@ -5,8 +5,10 @@ import { apiRequest } from '@/services/api'
 import type {
   ApiSite,
   ApiSiteAdminUser,
+  CreateSiteRequest,
   CreateSiteAdminRequest,
   RevokeSessionsResponse,
+  SiteMutationResponse,
   SiteAdminMutationResponse,
   SiteAdminsResponse,
   SitesResponse,
@@ -42,6 +44,26 @@ export const useProjectAdministrationStore = defineStore('projectAdministration'
     } catch (caught) {
       status.value = 'error'
       error.value = caught instanceof Error ? caught.message : 'Chargement de l’administration projet impossible.'
+    }
+  }
+
+
+  async function createSite(payload: CreateSiteRequest): Promise<ApiSite> {
+    status.value = 'saving'
+    error.value = null
+
+    try {
+      const response = await apiRequest<SiteMutationResponse>('/admin/sites', {
+        method: 'POST',
+        body: payload,
+      })
+      upsertSite(response.site)
+      status.value = 'ready'
+      return response.site
+    } catch (caught) {
+      status.value = 'error'
+      error.value = caught instanceof Error ? caught.message : 'Création du site impossible.'
+      throw caught
     }
   }
 
@@ -137,6 +159,17 @@ export const useProjectAdministrationStore = defineStore('projectAdministration'
     lastRevokedSessionCount.value = null
   }
 
+
+  function upsertSite(site: ApiSite): void {
+    const index = sites.value.findIndex((candidate) => candidate.id === site.id)
+    if (index === -1) {
+      sites.value = [...sites.value, site].sort((left, right) => left.name.localeCompare(right.name, 'fr'))
+      return
+    }
+
+    sites.value = sites.value.map((candidate) => candidate.id === site.id ? site : candidate)
+  }
+
   function upsertSiteAdmin(user: ApiSiteAdminUser): void {
     const index = siteAdmins.value.findIndex((candidate) => candidate.id === user.id)
     if (index === -1) {
@@ -158,6 +191,7 @@ export const useProjectAdministrationStore = defineStore('projectAdministration'
     activeSiteAdmins,
     inactiveSiteAdmins,
     fetchAdministration,
+    createSite,
     createSiteAdmin,
     updateSiteAdmin,
     resetSiteAdminPassword,

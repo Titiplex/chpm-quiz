@@ -53,6 +53,12 @@ import type {
   RegenerateTerminalDeviceTokenResponse,
   ApiSite,
   ApiSiteTeamUser,
+  AddQuestionnaireLanguageRequest,
+  AddQuestionnaireLanguageResponse,
+  BuildingMutationResponse,
+  CreateBuildingRequest,
+  CreateSiteRequest,
+  SiteMutationResponse,
   ApiSiteAdminUser,
   CreateSiteAdminRequest,
   CreateSiteModeratorRequest,
@@ -73,6 +79,8 @@ interface DemoRequestOptions {
 
 const SESSION_EMAIL_STORAGE_KEY = 'chpm_demo_session_email'
 const DEMO_USERS_STORAGE_KEY = 'chpm_demo_users'
+const DEMO_SITES_STORAGE_KEY = 'chpm_demo_sites'
+const DEMO_BUILDINGS_STORAGE_KEY = 'chpm_demo_buildings'
 const QUESTIONNAIRES_STORAGE_KEY = 'chpm_demo_questionnaires'
 const INVITATIONS_STORAGE_KEY = 'chpm_demo_invitations'
 const RESPONDENT_SESSIONS_STORAGE_KEY = 'chpm_demo_respondent_sessions'
@@ -285,6 +293,10 @@ export async function demoApiRequest<T>(path: string, options: DemoRequestOption
     return asResponse<T>({ sites: getDemoSites() } satisfies SitesResponse)
   }
 
+  if (method === 'POST' && route === '/admin/sites') {
+    return asResponse<T>(createSite(options.body as CreateSiteRequest) satisfies SiteMutationResponse)
+  }
+
   if (method === 'GET' && route === '/admin/site-admins') {
     return asResponse<T>(getSiteAdmins() satisfies SiteAdminsResponse)
   }
@@ -335,12 +347,21 @@ export async function demoApiRequest<T>(path: string, options: DemoRequestOption
     return asResponse<T>({ buildings: getVisibleBuildings() } satisfies BuildingsResponse)
   }
 
+  if ((method === 'POST' && route === '/site/buildings') || (method === 'POST' && route === '/buildings')) {
+    return asResponse<T>(createBuilding(options.body as CreateBuildingRequest) satisfies BuildingMutationResponse)
+  }
+
   if (method === 'GET' && route === '/questionnaires') {
     return asResponse<T>({ questionnaires: getVisibleQuestionnaires() } satisfies QuestionnairesResponse)
   }
 
   if (method === 'POST' && route === '/questionnaires') {
     return asResponse<T>(createQuestionnaire(options.body as CreateQuestionnaireRequest))
+  }
+
+  const translationMatch = route.match(/^\/questionnaires\/([^/]+)\/translations$/)
+  if (translationMatch?.[1] && method === 'POST') {
+    return asResponse<T>(addQuestionnaireLanguage(translationMatch[1], options.body as AddQuestionnaireLanguageRequest) satisfies AddQuestionnaireLanguageResponse)
   }
 
   const questionnaireMatch = route.match(/^\/questionnaires\/([^/]+)$/)
@@ -548,7 +569,7 @@ function login(credentials: { email?: string; password?: string }): AuthResponse
 }
 
 function toAuthUserProfile(seed: DemoUserSeed): AuthUserProfile {
-  const building = seed.buildingId ? buildingSeeds.find((candidate) => candidate.id === seed.buildingId) ?? null : null
+  const building = seed.buildingId ? getBuildings().find((candidate) => candidate.id === seed.buildingId) ?? null : null
 
   return {
     id: seed.id ?? `demo-user-${seed.role}`,
@@ -564,14 +585,14 @@ function getVisibleBuildings(): ApiBuilding[] {
   const currentUser = safeCurrentUser()
 
   if (currentUser?.role === 'moderator' && currentUser.buildingId) {
-    return buildingSeeds.filter((building) => building.id === currentUser.buildingId)
+    return getBuildings().filter((building) => building.id === currentUser.buildingId)
   }
 
   if (currentUser?.role === 'site_manager' && currentUser.siteId) {
-    return buildingSeeds.filter((building) => building.siteId === currentUser.siteId)
+    return getBuildings().filter((building) => building.siteId === currentUser.siteId)
   }
 
-  return buildingSeeds
+  return getBuildings()
 }
 
 function getVisibleQuestionnaires(): ApiQuestionnaire[] {
@@ -630,6 +651,14 @@ function getSiteTeam(): SiteTeamResponse {
 
 
 function getDemoSites(): ApiSite[] {
+  return readStorage(DEMO_SITES_STORAGE_KEY, createInitialSites)
+}
+
+function saveDemoSites(sites: ApiSite[]): void {
+  window.localStorage.setItem(DEMO_SITES_STORAGE_KEY, JSON.stringify(sites))
+}
+
+function createInitialSites(): ApiSite[] {
   const siteIds = Array.from(new Set(buildingSeeds.map((building) => building.siteId).filter((siteId): siteId is string => Boolean(siteId))))
   return siteIds.map((siteId) => {
     const buildings = buildingSeeds.filter((building) => building.siteId === siteId)
@@ -645,6 +674,69 @@ function getDemoSites(): ApiSite[] {
       timezone: firstBuilding?.timezone ?? null,
     }
   })
+}
+
+function createSite(payload: CreateSiteRequest): SiteMutationResponse {
+  requireProjectAdmin()
+  const sites = getDemoSites()
+  const code = normalizeCode(payload.code || `SITE-${sites.length + 1}`)
+
+  if (sites.some((site) => normalizeCode(site.code) === code)) {
+    throw new Error('Ce code site existe déjà dans la démo.')
+  }
+
+  const site: ApiSite = {
+    id: createId('site'),
+    code,
+    name: payload.name.trim(),
+    organizationId: DEMO_ORGANIZATION_ID,
+    organization: { id: DEMO_ORGANIZATION_ID, code: 'CHPM', name: 'CH Montfavet' },
+    country: payload.country?.trim() || null,
+    timezone: payload.timezone?.trim() || null,
+  }
+
+  sites.push(site)
+  sites.sort((left, right) => left.name.localeCompare(right.name, 'fr'))
+  saveDemoSites(sites)
+  appendAuditLog('site.create', 'Site', site.id, null, { code: site.code, name: site.name })
+  return { site }
+}
+
+function getBuildings(): ApiBuilding[] {
+  return readStorage(DEMO_BUILDINGS_STORAGE_KEY, () => buildingSeeds)
+}
+
+function saveBuildings(buildings: ApiBuilding[]): void {
+  window.localStorage.setItem(DEMO_BUILDINGS_STORAGE_KEY, JSON.stringify(buildings))
+}
+
+function createBuilding(payload: CreateBuildingRequest): BuildingMutationResponse {
+  const currentUser = requireSiteTeamManager()
+  const site = getDemoSites().find((candidate) => candidate.id === currentUser.siteId)
+  if (!site) throw new Error('Site courant introuvable dans la démo.')
+
+  const buildings = getBuildings()
+  const code = normalizeCode(payload.code || `BAT-${buildings.length + 1}`)
+  if (buildings.some((building) => normalizeCode(building.code) === code)) {
+    throw new Error('Ce code bâtiment existe déjà dans la démo.')
+  }
+
+  const building: ApiBuilding = {
+    id: createId('building'),
+    code,
+    label: payload.label.trim(),
+    city: payload.city.trim(),
+    country: payload.country.trim(),
+    timezone: payload.timezone.trim(),
+    organizationId: DEMO_ORGANIZATION_ID,
+    siteId: site.id,
+  }
+
+  buildings.push(building)
+  buildings.sort((left, right) => left.label.localeCompare(right.label, 'fr'))
+  saveBuildings(buildings)
+  appendAuditLog('building.create', 'Building', building.id, null, { code: building.code, siteId: site.id })
+  return { building }
 }
 
 function requireProjectAdmin(): DemoUserSeed {
@@ -748,7 +840,7 @@ function revokeSiteAdminSessions(id: string): RevokeSessionsResponse {
 
 function upsertSiteModerator(payload: CreateSiteModeratorRequest): SiteModeratorMutationResponse {
   const currentUser = requireSiteTeamManager()
-  const building = buildingSeeds.find((candidate) => candidate.id === payload.buildingId)
+  const building = getBuildings().find((candidate) => candidate.id === payload.buildingId)
   if (!building) throw new Error('Bâtiment introuvable dans la démo.')
   assertBuildingInCurrentUserScope(building)
 
@@ -803,9 +895,9 @@ function updateSiteModerator(id: string, payload: UpdateSiteModeratorRequest): S
     throw new Error('Modérateur introuvable dans votre périmètre.')
   }
 
-  let nextBuilding = user.buildingId ? buildingSeeds.find((candidate) => candidate.id === user.buildingId) : undefined
+  let nextBuilding = user.buildingId ? getBuildings().find((candidate) => candidate.id === user.buildingId) : undefined
   if (payload.buildingId) {
-    nextBuilding = buildingSeeds.find((candidate) => candidate.id === payload.buildingId)
+    nextBuilding = getBuildings().find((candidate) => candidate.id === payload.buildingId)
     if (!nextBuilding) throw new Error('Bâtiment introuvable dans la démo.')
     assertBuildingInCurrentUserScope(nextBuilding)
   }
@@ -869,7 +961,7 @@ function isUserInSiteTeamScope(currentUser: DemoUserSeed, user: DemoUserSeed): b
 }
 
 function toApiSiteTeamUser(seed: DemoUserSeed): ApiSiteTeamUser {
-  const building = seed.buildingId ? buildingSeeds.find((candidate) => candidate.id === seed.buildingId) ?? null : null
+  const building = seed.buildingId ? getBuildings().find((candidate) => candidate.id === seed.buildingId) ?? null : null
   const siteId = seed.siteId ?? building?.siteId ?? null
 
   return {
@@ -895,7 +987,7 @@ function toApiSiteAdminUser(seed: DemoUserSeed): ApiSiteAdminUser {
 }
 
 function siteDto(siteId: string): { id: string; code: string; name: string } {
-  const firstBuilding = buildingSeeds.find((building) => building.siteId === siteId)
+  const firstBuilding = getBuildings().find((building) => building.siteId === siteId)
   const code = siteId.replace('demo-site-', '').toUpperCase()
   return {
     id: siteId,
@@ -999,6 +1091,83 @@ function readStorage<T>(key: string, fallback: () => T): T {
     window.localStorage.setItem(key, JSON.stringify(initialValue))
     return clone(initialValue)
   }
+}
+
+function addQuestionnaireLanguage(questionnaireId: string, payload: AddQuestionnaireLanguageRequest): AddQuestionnaireLanguageResponse {
+  const questionnaires = getQuestionnaires()
+  const source = questionnaires.find((candidate) => candidate.id === questionnaireId)
+  if (!source) throw new Error('Questionnaire source introuvable dans la démo.')
+
+  const language = payload.language
+  if (source.language === language) {
+    throw new Error('Cette langue correspond déjà à la version courante.')
+  }
+
+  const codeRoot = source.code.replace(/-(FR|EN|ES)$/i, '')
+  const code = normalizeCode(`${codeRoot}-${language.toUpperCase()}`)
+  if (questionnaires.some((candidate) => candidate.code === code)) {
+    throw new Error('Une traduction avec ce code existe déjà dans la démo.')
+  }
+
+  const questionnaire: ApiQuestionnaire = {
+    ...clone(source),
+    id: createId('questionnaire'),
+    code,
+    title: payload.title?.trim() || `${source.title} (${language.toUpperCase()})`,
+    description: payload.description?.trim() || source.description,
+    defaultLanguage: language,
+    versionId: createId('version'),
+    version: '0.1',
+    versionLabel: `0.1-${language}-draft`,
+    language,
+    finality: payload.finality?.trim() || source.finality,
+    status: 'draft',
+    isPublished: false,
+    groups: source.groups.map((group, groupIndex) => ({
+      ...clone(group),
+      id: createId('group'),
+      displayOrder: groupIndex + 1,
+      questions: group.questions.map((question, questionIndex) => ({
+        ...clone(question),
+        id: createId('question'),
+        title: markTextForTranslation(question.title, language),
+        label: markTextForTranslation(question.label ?? question.title, language),
+        helperText: question.helperText ? markTextForTranslation(question.helperText, language) : question.helperText,
+        displayOrder: questionIndex + 1,
+        likertScale: question.likertScale
+          ? { ...clone(question.likertScale), id: createId('likert') }
+          : null,
+        options: question.options?.map((option, optionIndex) => ({
+          ...clone(option),
+          id: createId('option'),
+          label: markTextForTranslation(option.label, language),
+          displayOrder: optionIndex + 1,
+        })) ?? [],
+        popupDefinitions: question.popupDefinitions?.map((popup) => ({
+          ...clone(popup),
+          id: createId('popup'),
+          language,
+          title: markTextForTranslation(popup.title, language),
+          body: markTextForTranslation(popup.body, language),
+        })) ?? [],
+      })),
+    })),
+  }
+
+  recomputeQuestionnaireCounters(questionnaire)
+  questionnaires.unshift(questionnaire)
+  saveQuestionnaires(questionnaires)
+  appendAuditLog('questionnaire.translation.create', 'Questionnaire', questionnaire.id, null, {
+    sourceQuestionnaireId: source.id,
+    language,
+    code,
+  })
+  return { questionnaire }
+}
+
+function markTextForTranslation(value: string, language: string): string {
+  const marker = `[${language.toUpperCase()} à traduire]`
+  return value.startsWith(marker) ? value : `${marker} ${value}`
 }
 
 function createQuestionnaire(payload: CreateQuestionnaireRequest): QuestionnaireResponse {
@@ -1195,7 +1364,7 @@ function assertCanAdministerTerminalInDemo(building: ApiBuilding): void {
 function createInvitation(payload: CreateInvitationRequest): CreateInvitationResponse {
   const questionnaires = getQuestionnaires()
   const questionnaire = questionnaires.find((candidate) => candidate.versionId === payload.questionnaireVersionId)
-  const building = buildingSeeds.find((candidate) => candidate.id === payload.buildingId)
+  const building = getBuildings().find((candidate) => candidate.id === payload.buildingId)
 
   if (!questionnaire || !building) {
     throw new Error('Questionnaire ou bâtiment de démonstration introuvable.')
@@ -1274,7 +1443,7 @@ function resendInvitation(invitationId: string): { invitation: ApiInvitation } {
 }
 
 function registerTerminalDevice(payload: RegisterTerminalDeviceRequest): RegisterTerminalDeviceResponse {
-  const building = buildingSeeds.find((candidate) => candidate.id === payload.buildingId)
+  const building = getBuildings().find((candidate) => candidate.id === payload.buildingId)
   if (!building) throw new Error('Bâtiment introuvable pour créer le terminal.')
 
   assertCanAdministerTerminalInDemo(building)

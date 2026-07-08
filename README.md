@@ -110,6 +110,7 @@ npm run build:backend
 - `GET /api/buildings` : liste des bâtiments, filtrée pour les modérateurs.
 - `GET /api/questionnaires` : questionnaires, groupes et questions ; les non-admins ne voient que les questionnaires
   publiés.
+- Front attendu pour l’administration opérationnelle : `POST /api/admin/sites` crée un site projet, `POST /api/site/buildings` crée un bâtiment dans le site du responsable connecté, et `POST /api/questionnaires/:id/translations` crée un brouillon de traduction d’un questionnaire. Ces trois flux sont disponibles en mode démo front via `VITE_DEMO_MODE=true`.
 
 ## Critères d’acceptation couverts
 
@@ -118,6 +119,13 @@ npm run build:backend
 - un modérateur reçoit un `403` côté API s’il tente une route admin ;
 - les bâtiments et questionnaires affichés viennent de PostgreSQL ;
 - les erreurs API sont affichées côté front via des alertes et le store de session/catalogue.
+
+
+## Flux front d’administration métier
+
+- Admin projet : page `/administration-projet`, bloc “Créer un site”, puis bloc “Créer un responsable de site”. L’admin projet ne crée pas directement les bâtiments ni les modérateurs.
+- Responsable de site : page `/moderation`, section “Équipe du site”, bloc “Ajouter un bâtiment”, puis bloc “Ajouter un modérateur”. Les bâtiments créés sont immédiatement disponibles pour les modérateurs, invitations et terminaux du site.
+- Constructeur questionnaire : page `/admin`, bloc “Langues et traductions”. Le sélecteur “Langue” ne traduit pas le contenu ; l’action “Créer le brouillon de langue” duplique la structure du questionnaire dans une nouvelle version de langue à traduire.
 
 ## Build GitHub Pages statique
 
