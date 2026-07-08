@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: CHPM Survey API
   version: 0.9.0-preprod
-  description: API REST JSON pour questionnaires adaptatifs, invitations, passation répondant, statistiques, conformité et accès judiciaire.
+  description: API REST JSON pour questionnaires adaptatifs, invitations, passation répondant, statistiques, conformité, administration projet/site et accès DPO hors API métier.
 servers:
   - url: /api
 security:
@@ -17,6 +17,12 @@ components:
       type: apiKey
       in: query
       name: token
+  responses:
+    Forbidden:
+      description: Droits insuffisants
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
   schemas:
     ErrorResponse:
       type: object
@@ -61,6 +67,38 @@ components:
         isActive: { type: boolean }
         siteId: { type: string, format: uuid, nullable: true }
         buildingId: { type: string, format: uuid, nullable: true }
+    Site:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        organizationId: { type: string, format: uuid }
+    SiteAdminUser:
+      allOf:
+        - $ref: '#/components/schemas/SiteTeamUser'
+        - type: object
+          properties:
+            role: { type: string, enum: [site_manager] }
+    CreateSiteAdminRequest:
+      type: object
+      required: [email, displayName, siteId]
+      properties:
+        email: { type: string, format: email }
+        displayName: { type: string, minLength: 2, maxLength: 120 }
+        siteId: { type: string, format: uuid }
+        temporaryPassword: { type: string, minLength: 12, maxLength: 128 }
+    UpdateSiteAdminRequest:
+      type: object
+      properties:
+        displayName: { type: string, minLength: 2, maxLength: 120 }
+        siteId: { type: string, format: uuid }
+        isActive: { type: boolean }
+    RevokeSessionsResponse:
+      type: object
+      properties:
+        user: { $ref: '#/components/schemas/SiteTeamUser' }
+        revokedSessionCount: { type: integer }
     CreateSiteModeratorRequest:
       type: object
       required: [email, displayName, buildingId]
@@ -147,16 +185,114 @@ paths:
       summary: Bâtiments filtrés par périmètre
       responses:
         '200': { description: Liste des bâtiments accessibles }
+  /admin/sites:
+    get:
+      summary: Liste des sites administrables par un admin projet
+      description: Réservé à `admin` technique, c'est-à-dire administrateur projet / chercheur. Ne retourne aucune donnée répondant.
+      responses:
+        '200': { description: Sites, content: { application/json: { schema: { type: object, properties: { sites: { type: array, items: { $ref: '#/components/schemas/Site' } } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/site-admins:
+    get:
+      summary: Liste des responsables de site
+      description: Réservé aux administrateurs projet. Ne retourne que les comptes internes responsables de site.
+      responses:
+        '200': { description: Responsables de site }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      summary: Création d'un responsable de site
+      description: Réservé aux administrateurs projet. Interdit pour créer DPO, admin projet, technical admin ou judiciaire.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSiteAdminRequest' }
+      responses:
+        '201': { description: Responsable créé avec mot de passe temporaire affiché une seule fois }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/site-admins/{id}:
+    patch:
+      summary: Mise à jour d'un responsable de site
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateSiteAdminRequest' }
+      responses:
+        '200': { description: Responsable mis à jour, sessions révoquées si périmètre ou état change }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/site-admins/{id}/reset-password:
+    post:
+      summary: Réinitialisation du mot de passe d'un responsable de site
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '201': { description: Mot de passe temporaire retourné une seule fois, sessions révoquées }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/site-admins/{id}/revoke-sessions:
+    post:
+      summary: Révocation des sessions d'un responsable de site
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '201': { description: Sessions révoquées, audit créé, schema: { $ref: '#/components/schemas/RevokeSessionsResponse' } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /site/team:
+    get:
+      summary: Liste des modérateurs du site courant
+      description: Réservé à `site_manager`. Ne retourne aucun responsable de site hors périmètre ni donnée répondant.
+      responses:
+        '200': { description: Modérateurs du site }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /site/moderators:
+    post:
+      summary: Création ou réactivation d'un modérateur dans le site courant
+      description: Réservé à `site_manager`; le bâtiment doit appartenir au site du responsable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSiteModeratorRequest' }
+      responses:
+        '201': { description: Modérateur créé avec mot de passe temporaire affiché une seule fois }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /site/moderators/{id}:
+    patch:
+      summary: Mise à jour d'un modérateur du site courant
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateSiteModeratorRequest' }
+      responses:
+        '200': { description: Modérateur mis à jour }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /site/moderators/{id}/reset-password:
+    post:
+      summary: Réinitialisation du mot de passe d'un modérateur du site courant
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '201': { description: Mot de passe temporaire retourné une seule fois, sessions révoquées }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /site/moderators/{id}/revoke-sessions:
+    post:
+      summary: Révocation des sessions d'un modérateur du site courant
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '201': { description: Sessions révoquées, audit créé, schema: { $ref: '#/components/schemas/RevokeSessionsResponse' } }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /users/site-team:
     get:
-      summary: Liste des gestionnaires et modérateurs dans le périmètre administrable
-      description: Admin global = périmètre organisationnel ; gestionnaire de site = son site uniquement. Aucun répondant ni service account n'est exposé.
+      summary: Alias historique de /site/team
+      deprecated: true
+      description: Réservé aux responsables de site. Conservé temporairement pour compatibilité ; utiliser /site/team.
       responses:
         '200': { description: Equipe de site filtrée par RBAC/ABAC }
         '403': { $ref: '#/components/responses/Forbidden' }
   /users/site-moderators:
     post:
-      summary: Création ou réactivation d'un modérateur bâtiment dans le périmètre autorisé
+      summary: Alias historique de /site/moderators
+      deprecated: true
       requestBody:
         required: true
         content:
@@ -167,7 +303,8 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
   /users/site-moderators/{id}:
     patch:
-      summary: Mise à jour du bâtiment ou du statut d'un modérateur de site
+      summary: Alias historique de /site/moderators/{id}
+      deprecated: true
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       requestBody:
         required: true
@@ -179,7 +316,8 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
   /users/site-moderators/{id}/reset-password:
     post:
-      summary: Réinitialisation locale du mot de passe d'un modérateur du périmètre
+      summary: Alias historique de /site/moderators/{id}/reset-password
+      deprecated: true
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       responses:
         '201': { description: Mot de passe temporaire retourné une seule fois, sessions révoquées }
@@ -307,13 +445,7 @@ paths:
       responses:
         '200': { description: Demandes }
     post:
-      summary: Création demande judiciaire exceptionnelle
+      summary: Enregistrement administratif d'une demande exceptionnelle
+      description: Ne retourne jamais la correspondance code-email. L'export identity vault est réservé à la console DPO dédiée.
       responses:
         '201': { description: Demande créée }
-components:
-  responses:
-    Forbidden:
-      description: Droits insuffisants
-      content:
-        application/json:
-          schema: { $ref: '#/components/schemas/ErrorResponse' }

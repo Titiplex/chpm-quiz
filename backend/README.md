@@ -55,24 +55,38 @@ L’API écoute par défaut sur `http://localhost:3000/api`.
 
 
 
-## Gestion locale des responsables de site et modérateurs
+## Hiérarchie des rôles et gestion des comptes
 
-Le modèle opérationnel est désormais hiérarchique :
+Le modèle opérationnel est hiérarchique et cloisonné :
 
-- `admin` : crée les gestionnaires de site, conserve la supervision globale et peut gérer tous les modérateurs ;
-- `site_manager` : pilote son site, ses bâtiments, ses invitations, ses terminaux et ses modérateurs ;
-- `moderator` : agit uniquement sur son bâtiment pour les invitations et relances.
+```text
+console locale sécurisée
+  -> crée les administrateurs projet / chercheurs et les DPO
+administrateur projet / chercheur (`admin` technique)
+  -> gère les responsables de site via `/api/admin/site-admins`
+responsable de site (`site_manager`)
+  -> gère les modérateurs de son site via `/api/site/moderators`
+modérateur (`moderator`)
+  -> crée, relance et suit les invitations dans son périmètre
+DPO (`dpo`)
+  -> accède exceptionnellement au code-email hors API métier via console dédiée
+```
 
-Deux canaux coexistent volontairement :
+La valeur technique `admin` est conservée en base pour compatibilité Prisma, mais elle signifie **administrateur projet / chercheur / responsable central**. Elle ne donne aucun droit sur les emails répondants, la table identité ou l'identity vault.
 
-1. la console locale `npm run user:console`, réservée au bootstrap et aux opérations sensibles hors navigateur ;
-2. l’API `/api/users/site-team` et `/api/users/site-moderators`, utilisable par un gestionnaire de site déjà authentifié pour créer, réaffecter, désactiver ou réinitialiser les modérateurs de son propre site.
+## Console locale de gestion des comptes sensibles
 
-Les garde-fous appliqués côté API sont : RBAC explicite, ABAC par site/bâtiment, impossibilité de gérer un rôle supérieur ou spécialisé depuis un site, révocation des sessions après changement sensible, mot de passe temporaire affiché une seule fois et audit systématique `user.siteModerator.*`.
+La console `npm run user:console` sert uniquement au bootstrap et aux opérations sensibles hors navigateur. Elle permet :
 
-## Console locale de gestion des comptes internes
+- créer un administrateur projet / chercheur (`admin`) ;
+- créer un DPO (`dpo`) ;
+- créer un administrateur technique (`technical_admin`) si nécessaire ;
+- réinitialiser le mot de passe d'un compte sensible ;
+- désactiver un compte sensible ;
+- révoquer ses sessions ;
+- journaliser chaque action dans `audit_logs`.
 
-Les comptes à responsabilité (admin global, gestionnaire de site, modérateur, DPO, analyste, responsable judiciaire, administrateur technique) se créent côté serveur avec une console interactive locale. Elle n’expose aucune route HTTP, ne crée pas de comptes répondants et journalise les créations, mises à jour, désactivations et resets de mot de passe dans `audit_logs`.
+Elle ne sert plus à gérer quotidiennement les responsables de site ou les modérateurs. Ces opérations passent par le frontend et par les endpoints RBAC/ABAC dédiés.
 
 Démarrer depuis `backend` :
 
@@ -83,48 +97,59 @@ npm run user:console
 La console ouvre un prompt :
 
 ```text
-chpm-users>>
+chpm-sensitive-users>>
 ```
 
 Commandes disponibles :
 
 ```text
-create          créer ou mettre à jour un compte interne
-disable         désactiver un compte et révoquer ses sessions
-reset-password  réinitialiser le mot de passe et révoquer ses sessions
-list            lister les comptes internes sans afficher de secret
-help            afficher l’aide
+create          créer un compte sensible autorisé
+reset-password  réinitialiser le mot de passe et révoquer les sessions
+disable         désactiver le compte et révoquer les sessions
+revoke-sessions révoquer les sessions sans changer le compte
+list            lister les comptes sensibles sans secret
+help            afficher l'aide
 exit            quitter
 ```
 
-Sécurité appliquée par la console :
+Sécurité appliquée : terminal interactif local, blocage prudent en production, confirmation si la base n'est pas locale, mot de passe fort ou généré, hash bcrypt, révocation de sessions, protection contre la désactivation du dernier admin projet actif et audit source `local-sensitive-user-console`.
 
-- exécution uniquement dans un terminal interactif local ;
-- blocage par défaut en `NODE_ENV=production` / `APP_ENV=production` ;
-- confirmation textuelle supplémentaire si la base PostgreSQL ne pointe pas vers `localhost` ;
-- rôles humains explicitement autorisés, sans `respondent` ni `service_account` ;
-- périmètre obligatoire pour les rôles locaux : bâtiment pour `moderator`, site pour `site_manager` ;
-- mot de passe saisi masqué ou généré automatiquement ;
-- politique minimale : 12 caractères, majuscule, minuscule, chiffre et caractère spécial ;
-- hash bcrypt avec 12 rounds minimum ;
-- révocation des sessions après création/mise à jour, reset ou désactivation ;
-- impossibilité de désactiver le dernier administrateur global actif ;
-- confirmation textuelle avant toute mutation ;
-- audit systématique avec source `local-user-console`.
+## Gestion frontend/API des responsables de site
 
-Exemple d’utilisation :
+Un administrateur projet / chercheur peut gérer les responsables de site depuis le frontend “Administration projet” ou via :
 
-```text
-chpm-users>> create
-Email : admin.site@chpm.local
-Nom affiché : Admin Site
-Rôle : 2
-Site : 1
-Générer un mot de passe temporaire fort automatiquement ? [O/n]
-Tapez "CREER" pour appliquer : CREER
+- `GET /api/admin/sites` ;
+- `GET /api/admin/site-admins` ;
+- `POST /api/admin/site-admins` ;
+- `PATCH /api/admin/site-admins/:id` ;
+- `POST /api/admin/site-admins/:id/reset-password` ;
+- `POST /api/admin/site-admins/:id/revoke-sessions`.
+
+Ces routes sont réservées à `admin`. Elles ne permettent pas de créer un autre admin projet, un DPO, un administrateur technique ou un responsable judiciaire. Toute création, désactivation, changement de site, reset ou révocation est auditée ; les sessions sont révoquées après mutation sensible.
+
+## Gestion frontend/API des modérateurs de site
+
+Un responsable de site peut gérer les modérateurs de son propre site uniquement :
+
+- `GET /api/site/team` ;
+- `POST /api/site/moderators` ;
+- `PATCH /api/site/moderators/:id` ;
+- `POST /api/site/moderators/:id/reset-password` ;
+- `POST /api/site/moderators/:id/revoke-sessions`.
+
+Les garde-fous backend sont : RBAC explicite, ABAC par site/bâtiment, refus des bâtiments hors site, impossibilité de créer ou modifier un rôle supérieur/spécialisé, mot de passe temporaire affiché une seule fois, révocation des sessions et audit `user.siteModerator.*`.
+
+## Console DPO dédiée
+
+L'accès exceptionnel code-email ne passe plus par la SPA Vue ni par l'API métier principale. Il passe par :
+
+```powershell
+npm run dpo:console
+# ou
+npm run identity-vault:console
 ```
 
-Le mot de passe généré est affiché une seule fois et doit être transmis par un canal sûr.
+Fonctions minimales : login nominatif DPO, justification obligatoire, référence de procédure, liste explicite de codes publics, interdiction de recherche libre par email, export minimal code-email, chiffrement fichier, empreinte SHA-256 et double audit opérationnel + identity vault. Un administrateur projet / chercheur ne peut pas exécuter cette console avec succès.
 
 ## Comptes seedés
 
