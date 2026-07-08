@@ -28,6 +28,14 @@ const form = reactive({
 const activeDevices = computed(() => terminalAdmin.terminalDevices.filter((device) => device.status === 'active'))
 const inactiveDevices = computed(() => terminalAdmin.terminalDevices.filter((device) => device.status !== 'active'))
 const canAdministerTerminals = computed(() => session.hasPermission('terminal:administer'))
+const lastLaunchLinkTitle = computed(() =>
+  terminalAdmin.lastLaunchLinkAction === 'regenerated' ? 'Nouveau lien terminal généré.' : 'Lien terminal généré.'
+)
+const lastLaunchLinkDescription = computed(() =>
+  terminalAdmin.lastLaunchLinkAction === 'regenerated'
+    ? 'L’ancien lien est maintenant invalide. Ouvre ce nouveau lien une seule fois sur l’appareil hospitalier cible.'
+    : 'Ouvre ce lien une seule fois sur l’appareil hospitalier cible, puis mets le navigateur en plein écran ou en mode kiosque.'
+)
 
 onMounted(async () => {
   await Promise.all([catalog.fetchCatalog(), terminalAdmin.fetchTerminalDevices()])
@@ -70,6 +78,11 @@ async function copyLastLaunchLink(): Promise<void> {
   if (!terminalAdmin.lastLaunchLink) return
   await navigator.clipboard?.writeText(terminalAdmin.lastLaunchLink)
   copiedLink.value = true
+}
+
+function clearLastLaunchLink(): void {
+  copiedLink.value = false
+  terminalAdmin.clearLastLaunchLink()
 }
 
 function statusLabel(status: TerminalDeviceStatus): string {
@@ -117,6 +130,30 @@ function formatDate(value?: string | null): string {
         Un terminal n’est pas un compte staff. Il s’agit d’un appareil appairé à un bâtiment, utilisable uniquement pour ouvrir les questionnaires qui lui sont explicitement affectés. Les modérateurs consultent leur inventaire ; les gestionnaires de site et administrateurs peuvent administrer les terminaux dans leur périmètre.
       </div>
 
+      <div v-if="terminalAdmin.lastLaunchLink" class="alert alert-success rounded-4" role="status">
+        <div class="d-flex flex-wrap justify-content-between gap-3 align-items-start">
+          <div class="flex-grow-1">
+            <strong>{{ lastLaunchLinkTitle }}</strong>
+            <p class="small muted mt-1 mb-2">{{ lastLaunchLinkDescription }}</p>
+            <p v-if="terminalAdmin.lastLaunchLinkDevice" class="small mb-2">
+              Terminal : <strong>{{ terminalAdmin.lastLaunchLinkDevice.label }}</strong>
+              <span class="muted"> · {{ terminalAdmin.lastLaunchLinkDevice.code }} · {{ terminalAdmin.lastLaunchLinkDevice.building.label }}</span>
+            </p>
+            <a class="d-block text-break" :href="terminalAdmin.lastLaunchLink" target="_blank" rel="noreferrer">
+              {{ terminalAdmin.lastLaunchLink }}
+            </a>
+          </div>
+          <div class="d-flex flex-wrap gap-2">
+            <button class="btn btn-sm btn-outline-primary" type="button" @click="copyLastLaunchLink">
+              {{ copiedLink ? 'Lien copié' : 'Copier le lien' }}
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" type="button" @click="clearLastLaunchLink">
+              Masquer
+            </button>
+          </div>
+        </div>
+      </div>
+
       <ModalPanel
         v-if="canAdministerTerminals"
         v-model="showCreateTerminalModal"
@@ -144,11 +181,9 @@ function formatDate(value?: string | null): string {
             {{ terminalAdmin.status === 'saving' ? 'Création…' : 'Créer et générer le lien terminal' }}
           </button>
 
-          <div v-if="terminalAdmin.lastLaunchLink" class="alert alert-success rounded-4 mt-3 mb-0">
-            <strong>Lien terminal généré.</strong>
-            <p class="small muted mt-1 mb-2">
-              Ouvre ce lien une seule fois sur l’appareil hospitalier cible, puis mets le navigateur en plein écran ou en mode kiosque.
-            </p>
+          <div v-if="terminalAdmin.lastLaunchLink && terminalAdmin.lastLaunchLinkAction === 'created'" class="alert alert-success rounded-4 mt-3 mb-0">
+            <strong>{{ lastLaunchLinkTitle }}</strong>
+            <p class="small muted mt-1 mb-2">{{ lastLaunchLinkDescription }}</p>
             <a class="d-block text-break" :href="terminalAdmin.lastLaunchLink" target="_blank" rel="noreferrer">
               {{ terminalAdmin.lastLaunchLink }}
             </a>

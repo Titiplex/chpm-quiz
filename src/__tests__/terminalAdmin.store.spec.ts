@@ -45,6 +45,8 @@ describe('useTerminalAdminStore', () => {
 
     expect(response.terminalAccessToken).toBe('terminal-token')
     expect(store.lastLaunchLink).toBe('/terminal/terminal-token')
+    expect(store.lastLaunchLinkAction).toBe('created')
+    expect(store.lastLaunchLinkDevice?.id).toBe('terminal-1')
     expect(store.terminalDevices[0]?.id).toBe('terminal-1')
   })
 
@@ -85,5 +87,12 @@ describe('useTerminalAdminStore', () => {
 
     expect(response.terminalAccessToken).toBe('terminal-token-2')
     expect(store.lastLaunchLink).toBe('/terminal/terminal-token-2')
+    expect(store.lastLaunchLinkAction).toBe('regenerated')
+    expect(store.lastLaunchLinkDevice?.id).toBe('terminal-1')
+
+    store.clearLastLaunchLink()
+    expect(store.lastLaunchLink).toBeNull()
+    expect(store.lastLaunchLinkAction).toBeNull()
+    expect(store.lastLaunchLinkDevice).toBeNull()
   })
 })
