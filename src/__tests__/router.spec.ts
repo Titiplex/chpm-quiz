@@ -31,6 +31,7 @@ describe('router configuration and guards', () => {
     expect(routes.map((candidate) => candidate.path)).toEqual([
       '/login',
       '/',
+      '/administration-projet',
       '/admin',
       '/moderation',
       '/questionnaire',
@@ -39,7 +40,6 @@ describe('router configuration and guards', () => {
       '/terminaux',
       '/terminal/:terminalToken?',
       '/rgpd',
-      '/coffre-email',
       '/403',
       '/:pathMatch(.*)*',
     ])

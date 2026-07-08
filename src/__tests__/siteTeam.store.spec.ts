@@ -46,7 +46,7 @@ describe('useSiteTeamStore', () => {
 
   it('creates moderators and stores one-time temporary passwords', async () => {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-      expect(String(url)).toContain('/users/site-moderators')
+      expect(String(url)).toContain('/site/moderators')
       expect(init?.method).toBe('POST')
       return jsonResponse({ user: moderatorFixture, temporaryPassword: 'TempPass123!', temporaryPasswordGenerated: true })
     })
@@ -63,11 +63,11 @@ describe('useSiteTeamStore', () => {
   it('updates and resets moderators through scoped endpoints', async () => {
     const disabled = { ...moderatorFixture, isActive: false }
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-      if (String(url).endsWith('/users/site-moderators/mod-1/reset-password')) {
+      if (String(url).endsWith('/site/moderators/mod-1/reset-password')) {
         expect(init?.method).toBe('POST')
         return jsonResponse({ user: moderatorFixture, temporaryPassword: 'ResetPass123!' })
       }
-      if (String(url).endsWith('/users/site-moderators/mod-1')) {
+      if (String(url).endsWith('/site/moderators/mod-1')) {
         expect(init?.method).toBe('PATCH')
         return jsonResponse({ user: disabled })
       }

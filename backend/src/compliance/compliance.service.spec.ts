@@ -10,6 +10,7 @@ import { ComplianceService } from './compliance.service'
 const adminUser = { id: 'admin-1', role: 'admin', organizationId: 'org-1', siteId: null, buildingId: null } as any
 const dpoUser = { ...adminUser, id: 'dpo-1', role: 'dpo' } as any
 const siteUser = { ...adminUser, id: 'site-1', role: 'site_manager', siteId: 'site-1' } as any
+const analystUser = { ...adminUser, id: 'analyst-1', role: 'analyst' } as any
 
 const questionnaire = { id: 'q1', code: 'ITQ', title: 'ITQ', organizationId: 'org-1' }
 const submission = {
@@ -109,12 +110,14 @@ describe('ComplianceService', () => {
     expect(observability.recordPseudonymizedExport).toHaveBeenCalledWith(expect.objectContaining({ rowCount: 0, sourceRowCount: 1, suppressedByThreshold: true }))
   })
 
-  it('exports redacted rows for DPO users despite low group size', async () => {
-    const { service } = makeService({}, { STATISTICS_MIN_GROUP_SIZE: '5' })
+  it('exports redacted pseudonymized rows only when the anti-reidentification threshold is satisfied', async () => {
+    const { service } = makeService({}, { STATISTICS_MIN_GROUP_SIZE: '1' })
 
-    const result = await service.pseudonymizedExport(undefined, dpoUser, {} as any)
+    const result = await service.pseudonymizedExport(undefined, analystUser, {} as any)
 
     expect(result.suppressedByThreshold).toBe(false)
+    expect(result.containsDirectEmail).toBe(false)
+    expect(result.identityVaultExcluded).toBe(true)
     expect(result.rows[0]).toMatchObject({
       publicCode: 'ITQ-0001',
       questionnaireCode: 'ITQ',

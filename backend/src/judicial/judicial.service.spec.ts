@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('../prisma/prisma.service', () => ({ PrismaService: class PrismaService {} }))
@@ -115,32 +115,14 @@ describe('JudicialService', () => {
     await expect(executedOnly.service.close('jr-1', dpo, {}, request)).rejects.toBeInstanceOf(BadRequestException)
   })
 
-  it('executes validated requests with encrypted minimal export', async () => {
-    const key = Buffer.alloc(32, 7).toString('base64')
-    const { service, prisma, identityVault } = makeService({
-      judicialAccessRequest: {
-        findUnique: vi.fn(async () => ({ ...receivedRequest, status: 'validated', dpoValidationUserId: 'dpo-1', legalValidationUserId: 'legal-1', comments: 'ready' })),
-        update: vi.fn(async (args: any) => ({ ...receivedRequest, ...args.data })),
-      },
-    }, { JUDICIAL_EXPORT_KEY_B64: key, JUDICIAL_EXPORT_KEY_REF: 'test-key' })
+  it('refuses identity export execution through the main API and records the denied attempt', async () => {
+    const { service, audit, identityVault } = makeService()
 
     await expect(service.execute('jr-1', dpo, request)).rejects.toBeInstanceOf(ForbiddenException)
-    const result = await service.execute('jr-1', legal, request)
+    await expect(service.execute('jr-1', legal, request)).rejects.toBeInstanceOf(ForbiddenException)
 
-    expect(identityVault.loadJudicialIdentityRows).toHaveBeenCalledWith(['ITQ-0001', 'ITQ-0002'])
-    expect(prisma.judicialAccessRequest.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'executed', exportFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/) }) }))
-    expect(result.encryptedExport).toMatchObject({ algorithm: 'aes-256-gcm', keyRef: 'test-key', fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/), expiresInMinutes: 15 })
-    expect(result.encryptedExport.ciphertext).not.toContain('patient@example.test')
-  })
-
-  it('defends against missing, invalid-state and invalid-key execution', async () => {
-    await expect(makeService({ judicialAccessRequest: { findUnique: vi.fn(async () => null) } }).service.execute('missing', legal, request)).rejects.toBeInstanceOf(NotFoundException)
-
-    await expect(makeService({ judicialAccessRequest: { findUnique: vi.fn(async () => ({ ...receivedRequest, status: 'received' })) } }).service.execute('jr-1', legal, request)).rejects.toBeInstanceOf(BadRequestException)
-
-    const invalidKey = makeService({
-      judicialAccessRequest: { findUnique: vi.fn(async () => ({ ...receivedRequest, status: 'validated', dpoValidationUserId: 'dpo', legalValidationUserId: 'legal' })), update: vi.fn() },
-    }, { JUDICIAL_EXPORT_KEY_B64: Buffer.alloc(16).toString('base64') })
-    await expect(invalidKey.service.execute('jr-1', legal, request)).rejects.toBeInstanceOf(BadRequestException)
+    expect(identityVault.loadJudicialIdentityRows).not.toHaveBeenCalled()
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'judicial_access.execute_denied_dpo_console_required' }))
+    expect(identityVault.recordVaultAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'judicial_access.execute_denied_dpo_console_required' }))
   })
 })

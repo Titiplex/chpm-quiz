@@ -8,6 +8,8 @@ import { UsersService } from './users.service'
 
 const adminUser = { id: 'admin-1', role: 'admin', organizationId: 'org-1', siteId: null, buildingId: null } as any
 const siteUser = { id: 'site-user', role: 'site_manager', organizationId: 'org-1', siteId: 'site-1', buildingId: null } as any
+const siteAdmin = { id: 'site-admin-1', email: 'site.admin@example.test', displayName: 'Site Admin', role: 'site_manager', organizationId: 'org-1', siteId: 'site-1', buildingId: null, isActive: true, createdAt: new Date(), updatedAt: new Date(), site: { id: 'site-1', code: 'S1', name: 'Site 1' }, building: null }
+const site = { id: 'site-1', organizationId: 'org-1', code: 'S1', name: 'Site 1', country: 'France', timezone: 'Europe/Paris', organization: { id: 'org-1', code: 'ORG', name: 'Org' } }
 const moderator = { id: 'mod-1', email: 'mod@example.test', displayName: 'Mod', role: 'moderator', organizationId: 'org-1', siteId: 'site-1', buildingId: 'building-1', isActive: true, createdAt: new Date(), updatedAt: new Date(), site: { id: 'site-1', code: 'S1', name: 'Site 1' }, building: null }
 const building = { id: 'building-1', organizationId: 'org-1', siteId: 'site-1', code: 'B1', label: 'Bâtiment 1', city: 'Avignon', country: 'France', timezone: 'Europe/Paris', site: { id: 'site-1', code: 'S1', name: 'Site 1' } }
 const otherBuilding = { ...building, id: 'building-2', siteId: 'site-2' }
@@ -16,8 +18,12 @@ const request = { ip: '127.0.0.1', get: vi.fn(() => 'Vitest') } as any
 function makeService(overrides: Record<string, unknown> = {}) {
   const tx = {
     user: {
-      create: vi.fn(async (args: any) => ({ ...moderator, ...args.data, id: 'created-mod', site: building.site, building })),
-      update: vi.fn(async (args: any) => ({ ...moderator, ...args.data, site: building.site, building })),
+      create: vi.fn(async (args: any) => args.data.role === 'site_manager'
+        ? ({ ...siteAdmin, ...args.data, id: 'created-site-admin', site, building: null })
+        : ({ ...moderator, ...args.data, id: 'created-mod', site: building.site, building })),
+      update: vi.fn(async (args: any) => args.data.role === 'site_manager'
+        ? ({ ...siteAdmin, ...args.data, site, building: null })
+        : ({ ...moderator, ...args.data, site: building.site, building })),
     },
     session: { deleteMany: vi.fn(async () => ({ count: 1 })) },
     auditLog: { create: vi.fn(async () => undefined) },
@@ -28,6 +34,7 @@ function makeService(overrides: Record<string, unknown> = {}) {
       findUnique: vi.fn(async () => moderator),
     },
     building: { findUnique: vi.fn(async () => building) },
+    site: { findUnique: vi.fn(async () => site), findMany: vi.fn(async () => [site]) },
     $transaction: vi.fn(async (callback: any) => callback(tx)),
     ...overrides,
   }
@@ -63,6 +70,34 @@ describe('UsersService', () => {
     expect(result.user.role).toBe('moderator')
   })
 
+
+
+  it('lets a project admin create a site manager but not a DPO through the API service', async () => {
+    const { service, tx } = makeService({ user: { findUnique: vi.fn(async () => null), findMany: vi.fn(async () => []) } })
+
+    const result = await service.createSiteAdmin(adminUser, {
+      email: 'site.admin@example.test',
+      displayName: 'Responsable site',
+      siteId: site.id,
+      temporaryPassword: 'TempPass123!',
+    } as any, request)
+
+    expect(tx.user.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ role: 'site_manager', siteId: 'site-1' }) }))
+    expect(result.user.role).toBe('site_manager')
+    expect(result.user.role).not.toBe('dpo')
+  })
+
+  it('rejects moderator management by a project admin', async () => {
+    const { service } = makeService()
+
+    await expect(service.upsertSiteModerator(adminUser, {
+      email: 'mod@example.test',
+      displayName: 'Mod',
+      buildingId: building.id,
+      temporaryPassword: 'TempPass123!',
+    } as any, request)).rejects.toBeInstanceOf(ForbiddenException)
+  })
+
   it('rejects buildings outside a site manager perimeter', async () => {
     const { service } = makeService({ building: { findUnique: vi.fn(async () => otherBuilding) } })
 
@@ -74,10 +109,10 @@ describe('UsersService', () => {
     } as any, request)).rejects.toBeInstanceOf(ForbiddenException)
   })
 
-  it('updates and disables only moderators in scope', async () => {
+  it('updates and disables only moderators in the site-manager scope', async () => {
     const { service, tx } = makeService()
 
-    const result = await service.updateSiteModerator(adminUser, 'mod-1', { isActive: false, buildingId: building.id } as any, request)
+    const result = await service.updateSiteModerator(siteUser, 'mod-1', { isActive: false, buildingId: building.id } as any, request)
 
     expect(tx.user.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ isActive: false, buildingId: 'building-1' }) }))
     expect(tx.session.deleteMany).toHaveBeenCalledWith({ where: { userId: 'mod-1' } })
