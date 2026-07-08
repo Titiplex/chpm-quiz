@@ -144,7 +144,7 @@ export class StatsService {
       groups: this.groupBreakdown(scopedVersions, visibleSessionIds),
       popups: this.popupBreakdown(scopedVersions, visibleSessionIds),
       questions: this.questionBreakdown(scopedVersions, visibleSessionIds, user),
-      submissions: this.submissionBreakdown(scopedVersions),
+      submissions: this.canReadPseudonymizedSubmissions(user) ? this.submissionBreakdown(scopedVersions) : [],
     }
   }
 
@@ -664,7 +664,11 @@ export class StatsService {
   }
 
   private canReadFreeText(user?: AuthenticatedUser): boolean {
-    return ['admin', 'analyst', 'dpo'].includes(user?.role ?? '')
+    return user?.role === 'analyst'
+  }
+
+  private canReadPseudonymizedSubmissions(user?: AuthenticatedUser): boolean {
+    return user?.role === 'analyst'
   }
 
   private threshold(): number {

@@ -18,7 +18,7 @@ export class StatsController {
   ) {}
 
   @Get('questionnaires/:id')
-  @Roles('admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo')
+  @Roles('admin', 'site_manager', 'questionnaire_admin', 'analyst')
   async questionnaireStats(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -41,7 +41,7 @@ export class StatsController {
   }
 
   @Get('questions/:id')
-  @Roles('admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo')
+  @Roles('admin', 'site_manager', 'questionnaire_admin', 'analyst')
   async questionStats(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -60,7 +60,7 @@ export class StatsController {
   }
 
   @Get('submissions/:publicCode')
-  @Roles('admin', 'analyst', 'dpo')
+  @Roles('analyst')
   async submission(
     @Param('publicCode') publicCode: string,
     @CurrentUser() user: AuthenticatedUser,

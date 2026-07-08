@@ -26,14 +26,14 @@ export class QuestionnairesController {
   ) {}
 
   @Get()
-  @Roles('admin', 'moderator', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo')
+  @Roles('admin', 'moderator', 'site_manager', 'questionnaire_admin', 'analyst')
   async list(@CurrentUser() user: AuthenticatedUser) {
     const questionnaires = await this.questionnairesService.listForUser(user)
     return { questionnaires }
   }
 
   @Get(':id')
-  @Roles('admin', 'moderator', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo')
+  @Roles('admin', 'moderator', 'site_manager', 'questionnaire_admin', 'analyst')
   async get(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     const questionnaire = await this.questionnairesService.getOneForUser(id, user)
     return { questionnaire }

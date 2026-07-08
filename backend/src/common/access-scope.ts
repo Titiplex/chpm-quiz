@@ -27,7 +27,7 @@ export type ScopedInvitation = {
   questionnaireVersion?: ScopedVersion | null
 }
 
-const organizationWideRoles = new Set(['admin', 'dpo', 'technical_admin', 'judicial_officer', 'questionnaire_admin', 'analyst'])
+const organizationWideRoles = new Set(['admin', 'technical_admin', 'questionnaire_admin', 'analyst'])
 
 export function canAccessBuilding(user: AuthenticatedUser, building: ScopedBuilding): boolean {
   if (user.role === 'moderator') {
@@ -52,7 +52,7 @@ export function assertCanAccessBuilding(user: AuthenticatedUser, building: Scope
 }
 
 export function canAccessQuestionnaire(user: AuthenticatedUser, questionnaire: ScopedQuestionnaire): boolean {
-  if (user.role === 'admin' || user.role === 'dpo' || user.role === 'technical_admin' || user.role === 'judicial_officer' || user.role === 'analyst') {
+  if (user.role === 'admin' || user.role === 'analyst') {
     return sameOrganizationOrUnscoped(user, questionnaire.organizationId)
   }
 
