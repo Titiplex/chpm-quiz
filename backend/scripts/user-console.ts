@@ -1,9 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { createInterface } from 'node:readline/promises'
-import { stdin as input, stdout as output } from 'node:process'
 import { randomInt } from 'node:crypto'
 import { userInfo } from 'node:os'
 import { join } from 'node:path'
+import { stdin as input, stdout as output } from 'node:process'
+import { createInterface } from 'node:readline/promises'
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import bcrypt = require('bcryptjs')
@@ -11,37 +11,11 @@ import bcrypt = require('bcryptjs')
 import { roleProfiles, type UserRole } from '../src/auth/role-permissions'
 import { loadPrismaClient } from '../src/prisma/prisma-client.loader'
 
-const MANAGED_HUMAN_ROLES = [
-  'admin',
-  'site_manager',
-  'moderator',
-  'questionnaire_admin',
-  'analyst',
-  'dpo',
-  'judicial_officer',
-  'technical_admin',
-] as const satisfies readonly UserRole[]
-
-type ManagedHumanRole = (typeof MANAGED_HUMAN_ROLES)[number]
-type Command = 'create' | 'disable' | 'reset-password' | 'list' | 'help' | 'exit'
-type ScopeSelection = {
-  organizationId: string | null
-  siteId: string | null
-  buildingId: string | null
-  summary: string
-}
+const SENSITIVE_CONSOLE_ROLES = ['admin', 'dpo', 'technical_admin'] as const satisfies readonly UserRole[]
+type SensitiveConsoleRole = (typeof SENSITIVE_CONSOLE_ROLES)[number]
+type Command = 'create' | 'disable' | 'reset-password' | 'revoke-sessions' | 'list' | 'help' | 'exit'
 
 type OrganizationRow = { id: string; code: string; name: string }
-type SiteRow = { id: string; organizationId: string; code: string; name: string; organization: OrganizationRow }
-type BuildingRow = {
-  id: string
-  organizationId: string
-  siteId: string
-  code: string
-  label: string
-  site: SiteRow
-  organization: OrganizationRow
-}
 type UserWithScope = {
   id: string
   email: string
@@ -49,9 +23,14 @@ type UserWithScope = {
   role: string
   isActive: boolean
   organization?: OrganizationRow | null
-  site?: Pick<SiteRow, 'code' | 'name'> | null
-  building?: Pick<BuildingRow, 'code' | 'label'> | null
 } | null
+
+type ScopeSelection = {
+  organizationId: string | null
+  siteId: null
+  buildingId: null
+  summary: string
+}
 
 const commandAliases: Record<string, Command> = {
   c: 'create',
@@ -68,6 +47,10 @@ const commandAliases: Record<string, Command> = {
   'reset-password': 'reset-password',
   password: 'reset-password',
   mdp: 'reset-password',
+  revoke: 'revoke-sessions',
+  revoke_sessions: 'revoke-sessions',
+  'revoke-sessions': 'revoke-sessions',
+  sessions: 'revoke-sessions',
   l: 'list',
   list: 'list',
   liste: 'list',
@@ -103,41 +86,33 @@ async function main() {
     const command = commandAliases[raw.trim().toLowerCase()]
 
     if (!command) {
-      if (raw.trim() !== '') {
-        console.log('Commande inconnue. Tape `help` pour afficher les commandes disponibles.')
-      }
+      if (raw.trim() !== '') console.log('Commande inconnue. Tape `help`.')
       continue
     }
 
     try {
-      if (command === 'create') {
-        await createOrUpdateUserWizard()
-      } else if (command === 'disable') {
-        await disableUserWizard()
-      } else if (command === 'reset-password') {
-        await resetPasswordWizard()
-      } else if (command === 'list') {
-        await listUsers()
-      } else if (command === 'help') {
-        printHelp()
-      } else if (command === 'exit') {
-        break
-      }
+      if (command === 'create') await createOrUpdateSensitiveUserWizard()
+      else if (command === 'disable') await disableSensitiveUserWizard()
+      else if (command === 'reset-password') await resetSensitivePasswordWizard()
+      else if (command === 'revoke-sessions') await revokeSensitiveSessionsWizard()
+      else if (command === 'list') await listSensitiveUsers()
+      else if (command === 'help') printHelp()
+      else if (command === 'exit') break
     } catch (error) {
       console.error(`\nOpération annulée : ${error instanceof Error ? error.message : String(error)}\n`)
     }
   }
 }
 
-async function createOrUpdateUserWizard() {
-  console.log('\nCréation / mise à jour sécurisée d’un compte interne.\n')
+async function createOrUpdateSensitiveUserWizard() {
+  console.log('\nCréation / mise à jour d’un compte sensible local. Cette console ne crée pas de responsables de site ni de modérateurs.\n')
 
   const email = await promptEmail()
   const existingUser = await findUserByEmail(email)
-
   if (existingUser) {
     printUser(existingUser)
-    const proceed = await confirm('Ce compte existe déjà. Le mettre à jour ?', 'NON')
+    assertSensitiveConsoleRole(existingUser.role)
+    const proceed = await confirm('Ce compte sensible existe déjà. Le mettre à jour ?', 'NON')
     if (!proceed) {
       console.log('Aucune modification effectuée.\n')
       return
@@ -145,11 +120,11 @@ async function createOrUpdateUserWizard() {
   }
 
   const displayName = await promptRequired('Nom affiché', existingUser?.displayName ?? '')
-  const role = await promptRole(existingUser?.role as ManagedHumanRole | undefined)
-  const scope = await promptScopeForRole(role)
+  const role = await promptSensitiveRole(existingUser?.role as SensitiveConsoleRole | undefined)
+  const scope = await promptOrganizationScope()
   const passwordResult = await promptPasswordChoice()
 
-  await printMutationSummary({
+  printSensitiveMutationSummary({
     action: existingUser ? 'Mise à jour' : 'Création',
     email,
     displayName,
@@ -162,19 +137,18 @@ async function createOrUpdateUserWizard() {
   await requireTypedConfirmation(`Tapez "${confirmationWord}" pour appliquer`, confirmationWord)
 
   const passwordHash = await hashPassword(passwordResult.password)
-
   const savedUser = await prisma.$transaction(async (tx: any) => {
     const user = existingUser
       ? await tx.user.update({
-          where: { email },
+          where: { id: existingUser.id },
           data: {
             displayName,
             passwordHash,
             role,
             isActive: true,
             organizationId: scope.organizationId,
-            siteId: scope.siteId,
-            buildingId: scope.buildingId,
+            siteId: null,
+            buildingId: null,
           },
         })
       : await tx.user.create({
@@ -185,38 +159,25 @@ async function createOrUpdateUserWizard() {
             role,
             isActive: true,
             organizationId: scope.organizationId,
-            siteId: scope.siteId,
-            buildingId: scope.buildingId,
+            siteId: null,
+            buildingId: null,
           },
         })
 
     await tx.session.deleteMany({ where: { userId: user.id } })
-    await tx.auditLog.create({
-      data: {
-        actorUserId: null,
-        action: existingUser ? 'user.console.update' : 'user.console.create',
-        entityType: 'User',
-        entityId: user.id,
-        metadata: {
-          source: 'local-user-console',
-          osUser: getOsUser(),
-          email,
-          previousRole: existingUser?.role ?? null,
-          nextRole: role,
-          previousScope: existingUser ? formatExistingScope(existingUser) : null,
-          nextScope: scope.summary,
-          sessionsRevoked: true,
-        },
-        ipAddress: 'local-cli',
-        userAgent: `chpm-user-console ${process.version}`,
-      },
+    await writeConsoleAudit(tx, existingUser ? 'user.console.sensitive.update' : 'user.console.sensitive.create', user.id, {
+      email,
+      previousRole: existingUser?.role ?? null,
+      nextRole: role,
+      previousScope: existingUser ? formatExistingScope(existingUser) : null,
+      nextScope: scope.summary,
+      sessionsRevoked: true,
     })
-
     return user
   })
 
-  console.log(`\nCompte ${existingUser ? 'mis à jour' : 'créé'} : ${savedUser.email}`)
-  console.log('Les sessions existantes de ce compte ont été révoquées.')
+  console.log(`\nCompte sensible ${existingUser ? 'mis à jour' : 'créé'} : ${savedUser.email}`)
+  console.log('Les sessions existantes ont été révoquées.')
   if (passwordResult.generated) {
     console.log(`Mot de passe temporaire à transmettre par canal sûr : ${passwordResult.password}`)
     console.log('Ce mot de passe n’est pas stocké en clair et ne sera plus affiché.')
@@ -224,18 +185,9 @@ async function createOrUpdateUserWizard() {
   console.log('')
 }
 
-async function disableUserWizard() {
-  console.log('\nDésactivation d’un compte interne.\n')
-
-  const email = await promptEmail()
-  const user = await findUserByEmail(email)
-
-  if (!user) {
-    throw new Error('Aucun utilisateur trouvé avec cet email.')
-  }
-
-  assertManagedHumanRole(user.role)
-  printUser(user)
+async function disableSensitiveUserWizard() {
+  console.log('\nDésactivation d’un compte sensible.\n')
+  const user = await promptSensitiveUser()
 
   if (!user.isActive) {
     console.log('Ce compte est déjà désactivé.\n')
@@ -244,194 +196,131 @@ async function disableUserWizard() {
 
   if (user.role === 'admin') {
     const remainingAdmins = await prisma.user.count({
-      where: {
-        role: 'admin',
-        isActive: true,
-        NOT: { id: user.id },
-      },
+      where: { role: 'admin', isActive: true, NOT: { id: user.id } },
     })
-
-    if (remainingAdmins === 0) {
-      throw new Error('Refusé : impossible de désactiver le dernier administrateur global actif.')
-    }
+    if (remainingAdmins === 0) throw new Error('Refusé : impossible de désactiver le dernier administrateur projet actif.')
   }
 
-  await requireTypedConfirmation('Tapez "DESACTIVER" pour désactiver ce compte', 'DESACTIVER')
+  await requireTypedConfirmation('Tapez "DESACTIVER" pour désactiver et révoquer les sessions', 'DESACTIVER')
 
   await prisma.$transaction(async (tx: any) => {
-    await tx.user.update({
-      where: { id: user.id },
-      data: { isActive: false },
-    })
-    await tx.session.deleteMany({ where: { userId: user.id } })
-    await tx.auditLog.create({
-      data: {
-        actorUserId: null,
-        action: 'user.console.disable',
-        entityType: 'User',
-        entityId: user.id,
-        metadata: {
-          source: 'local-user-console',
-          osUser: getOsUser(),
-          email: user.email,
-          role: user.role,
-          scope: formatExistingScope(user),
-          sessionsRevoked: true,
-        },
-        ipAddress: 'local-cli',
-        userAgent: `chpm-user-console ${process.version}`,
-      },
+    await tx.user.update({ where: { id: user.id }, data: { isActive: false } })
+    const revoked = await tx.session.deleteMany({ where: { userId: user.id } })
+    await writeConsoleAudit(tx, 'user.console.sensitive.disable', user.id, {
+      email: user.email,
+      role: user.role,
+      scope: formatExistingScope(user),
+      sessionsRevoked: true,
+      revokedSessionCount: revoked.count,
     })
   })
 
   console.log(`\nCompte désactivé : ${user.email}`)
-  console.log('Les sessions existantes de ce compte ont été révoquées.\n')
+  console.log('Les sessions existantes ont été révoquées.\n')
 }
 
-async function resetPasswordWizard() {
-  console.log('\nRéinitialisation sécurisée du mot de passe.\n')
-
-  const email = await promptEmail()
-  const user = await findUserByEmail(email)
-
-  if (!user) {
-    throw new Error('Aucun utilisateur trouvé avec cet email.')
-  }
-
-  assertManagedHumanRole(user.role)
-  printUser(user)
-
+async function resetSensitivePasswordWizard() {
+  console.log('\nRéinitialisation d’un mot de passe de compte sensible.\n')
+  const user = await promptSensitiveUser()
   const passwordResult = await promptPasswordChoice()
   await requireTypedConfirmation('Tapez "RESET" pour changer le mot de passe et révoquer les sessions', 'RESET')
 
   const passwordHash = await hashPassword(passwordResult.password)
-
   await prisma.$transaction(async (tx: any) => {
-    await tx.user.update({
-      where: { id: user.id },
-      data: { passwordHash },
-    })
-    await tx.session.deleteMany({ where: { userId: user.id } })
-    await tx.auditLog.create({
-      data: {
-        actorUserId: null,
-        action: 'user.console.resetPassword',
-        entityType: 'User',
-        entityId: user.id,
-        metadata: {
-          source: 'local-user-console',
-          osUser: getOsUser(),
-          email: user.email,
-          role: user.role,
-          scope: formatExistingScope(user),
-          sessionsRevoked: true,
-        },
-        ipAddress: 'local-cli',
-        userAgent: `chpm-user-console ${process.version}`,
-      },
+    await tx.user.update({ where: { id: user.id }, data: { passwordHash, isActive: true } })
+    const revoked = await tx.session.deleteMany({ where: { userId: user.id } })
+    await writeConsoleAudit(tx, 'user.console.sensitive.resetPassword', user.id, {
+      email: user.email,
+      role: user.role,
+      scope: formatExistingScope(user),
+      sessionsRevoked: true,
+      revokedSessionCount: revoked.count,
     })
   })
 
   console.log(`\nMot de passe réinitialisé : ${user.email}`)
-  console.log('Les sessions existantes de ce compte ont été révoquées.')
-  if (passwordResult.generated) {
-    console.log(`Mot de passe temporaire à transmettre par canal sûr : ${passwordResult.password}`)
-    console.log('Ce mot de passe n’est pas stocké en clair et ne sera plus affiché.')
+  if (passwordResult.generated) console.log(`Mot de passe temporaire à transmettre par canal sûr : ${passwordResult.password}`)
+  console.log('Les sessions existantes ont été révoquées.\n')
+}
+
+async function revokeSensitiveSessionsWizard() {
+  console.log('\nRévocation des sessions d’un compte sensible.\n')
+  const user = await promptSensitiveUser()
+  await requireTypedConfirmation('Tapez "REVOQUER" pour révoquer les sessions', 'REVOQUER')
+
+  const revoked = await prisma.$transaction(async (tx: any) => {
+    const result = await tx.session.deleteMany({ where: { userId: user.id } })
+    await writeConsoleAudit(tx, 'user.console.sensitive.revokeSessions', user.id, {
+      email: user.email,
+      role: user.role,
+      scope: formatExistingScope(user),
+      sessionsRevoked: true,
+      revokedSessionCount: result.count,
+    })
+    return result
+  })
+
+  console.log(`\nSessions révoquées pour ${user.email} : ${revoked.count}.\n`)
+}
+
+async function listSensitiveUsers() {
+  const users = await prisma.user.findMany({
+    where: { role: { in: [...SENSITIVE_CONSOLE_ROLES] } },
+    orderBy: [{ role: 'asc' }, { email: 'asc' }],
+    include: { organization: true },
+  })
+
+  if (users.length === 0) {
+    console.log('\nAucun compte sensible trouvé.\n')
+    return
+  }
+
+  console.log('\nComptes sensibles :')
+  for (const user of users) {
+    console.log(`- ${user.email} | ${user.displayName} | ${roleProfiles[user.role as UserRole]?.shortLabel ?? user.role} | ${user.isActive ? 'actif' : 'désactivé'} | ${formatExistingScope(user)}`)
   }
   console.log('')
 }
 
-async function listUsers() {
-  const users = await prisma.user.findMany({
-    where: {
-      role: { in: [...MANAGED_HUMAN_ROLES] },
-    },
-    orderBy: [{ role: 'asc' }, { email: 'asc' }],
-    include: {
-      organization: true,
-      site: true,
-      building: true,
-    },
-  })
-
-  if (users.length === 0) {
-    console.log('\nAucun compte interne trouvé.\n')
-    return
-  }
-
-  console.log('\nComptes internes :')
-  for (const user of users) {
-    console.log(
-      `- ${user.email} | ${user.displayName} | ${roleProfiles[user.role as UserRole]?.shortLabel ?? user.role} | ${
-        user.isActive ? 'actif' : 'désactivé'
-      } | ${formatExistingScope(user)}`,
-    )
-  }
-  console.log('')
+async function promptSensitiveUser() {
+  const email = await promptEmail()
+  const user = await findUserByEmail(email)
+  if (!user) throw new Error('Aucun utilisateur trouvé avec cet email.')
+  assertSensitiveConsoleRole(user.role)
+  printUser(user)
+  return user
 }
 
 async function promptEmail(): Promise<string> {
   while (true) {
     const email = (await promptRequired('Email')).trim().toLowerCase()
-    if (emailRegex.test(email)) {
-      return email
-    }
+    if (emailRegex.test(email)) return email
     console.log('Format email invalide.')
   }
 }
 
-async function promptRole(defaultRole?: ManagedHumanRole): Promise<ManagedHumanRole> {
-  console.log('\nRôles disponibles :')
-  MANAGED_HUMAN_ROLES.forEach((role, index) => {
+async function promptSensitiveRole(defaultRole?: SensitiveConsoleRole): Promise<SensitiveConsoleRole> {
+  console.log('\nRôles sensibles créables localement :')
+  SENSITIVE_CONSOLE_ROLES.forEach((role, index) => {
     const profile = roleProfiles[role]
-    const defaultMarker = defaultRole === role ? ' [défaut]' : ''
-    console.log(`${index + 1}. ${profile.label} (${role}) — ${profile.scopeLabel}${defaultMarker}`)
+    const marker = defaultRole === role ? ' [défaut]' : ''
+    console.log(`${index + 1}. ${profile.label} (${role}) — ${profile.scopeLabel}${marker}`)
   })
 
   while (true) {
     const raw = (await ask(`Rôle${defaultRole ? ` [${defaultRole}]` : ''} : `)).trim().toLowerCase()
-    if (raw === '' && defaultRole) {
-      return defaultRole
-    }
-
+    if (raw === '' && defaultRole) return defaultRole
     const byIndex = Number(raw)
-    if (Number.isInteger(byIndex) && byIndex >= 1 && byIndex <= MANAGED_HUMAN_ROLES.length) {
-      const selectedRole = MANAGED_HUMAN_ROLES[byIndex - 1]
-      if (selectedRole) {
-        return selectedRole
-      }
+    if (Number.isInteger(byIndex) && byIndex >= 1 && byIndex <= SENSITIVE_CONSOLE_ROLES.length) {
+      return SENSITIVE_CONSOLE_ROLES[byIndex - 1]!
     }
-
-    const byName = MANAGED_HUMAN_ROLES.find((role) => role === raw)
-    if (byName) {
-      return byName
-    }
-
-    console.log('Choisir un numéro ou un identifiant de rôle valide.')
+    const byName = SENSITIVE_CONSOLE_ROLES.find((role) => role === raw)
+    if (byName) return byName
+    console.log('Choisir un numéro ou un identifiant de rôle sensible valide.')
   }
 }
 
-async function promptScopeForRole(role: ManagedHumanRole): Promise<ScopeSelection> {
-  if (role === 'moderator') {
-    const building = await selectBuilding()
-    return {
-      organizationId: building.organizationId,
-      siteId: building.siteId,
-      buildingId: building.id,
-      summary: `bâtiment ${building.code} — ${building.label}`,
-    }
-  }
-
-  if (role === 'site_manager') {
-    const site = await selectSite()
-    return {
-      organizationId: site.organizationId,
-      siteId: site.id,
-      buildingId: null,
-      summary: `site ${site.code} — ${site.name}`,
-    }
-  }
-
+async function promptOrganizationScope(): Promise<ScopeSelection> {
   const organization = await selectOrganizationOptional()
   return {
     organizationId: organization?.id ?? null,
@@ -443,112 +332,42 @@ async function promptScopeForRole(role: ManagedHumanRole): Promise<ScopeSelectio
 
 async function selectOrganizationOptional() {
   const organizations = (await prisma.organization.findMany({ orderBy: { code: 'asc' } })) as OrganizationRow[]
-
   if (organizations.length === 0) {
     console.log('\nAucune organisation trouvée : le compte sera global sans organisation explicite.')
     return null
   }
-
   if (organizations.length === 1) {
     const organization = organizations[0]!
-    const useDefault = await confirm(`Affecter à l’organisation ${organization.code} — ${organization.name} ?`, 'OUI')
-    return useDefault ? organization : null
+    return (await confirm(`Affecter à l’organisation ${organization.code} — ${organization.name} ?`, 'OUI')) ? organization : null
   }
 
   console.log('\nOrganisations disponibles :')
-  organizations.forEach((organization, index) => {
-    console.log(`${index + 1}. ${organization.code} — ${organization.name}`)
-  })
+  organizations.forEach((organization, index) => console.log(`${index + 1}. ${organization.code} — ${organization.name}`))
   console.log('0. Aucune organisation explicite')
 
   while (true) {
     const raw = (await ask('Organisation : ')).trim().toLowerCase()
-    if (raw === '0' || raw === '-' || raw === 'aucune') {
-      return null
-    }
-
+    if (raw === '0' || raw === '-' || raw === 'aucune') return null
     const organization = findByIndexOrCode(organizations, raw, 'code')
-    if (organization) {
-      return organization
-    }
-
+    if (organization) return organization
     console.log('Choisir un numéro, un code, ou 0.')
   }
 }
 
-async function selectSite() {
-  const sites = (await prisma.site.findMany({
-    orderBy: { code: 'asc' },
-    include: { organization: true },
-  })) as SiteRow[]
-
-  if (sites.length === 0) {
-    throw new Error('Aucun site trouvé. Crée ou seed les sites avant de créer un gestionnaire de site.')
-  }
-
-  console.log('\nSites disponibles :')
-  sites.forEach((site, index) => {
-    console.log(`${index + 1}. ${site.code} — ${site.name} (${site.organization.code})`)
-  })
-
-  while (true) {
-    const raw = (await ask('Site : ')).trim().toLowerCase()
-    const site = findByIndexOrCode(sites, raw, 'code')
-    if (site) {
-      return site
-    }
-
-    console.log('Choisir un numéro ou un code de site valide.')
-  }
-}
-
-async function selectBuilding() {
-  const buildings = (await prisma.building.findMany({
-    orderBy: { code: 'asc' },
-    include: { site: true, organization: true },
-  })) as BuildingRow[]
-
-  if (buildings.length === 0) {
-    throw new Error('Aucun bâtiment trouvé. Crée ou seed les bâtiments avant de créer un modérateur.')
-  }
-
-  console.log('\nBâtiments disponibles :')
-  buildings.forEach((building, index) => {
-    console.log(`${index + 1}. ${building.code} — ${building.label} (${building.site.code}, ${building.organization.code})`)
-  })
-
-  while (true) {
-    const raw = (await ask('Bâtiment : ')).trim().toLowerCase()
-    const building = findByIndexOrCode(buildings, raw, 'code')
-    if (building) {
-      return building
-    }
-
-    console.log('Choisir un numéro ou un code de bâtiment valide.')
-  }
-}
-
 async function promptPasswordChoice(): Promise<{ password: string; generated: boolean }> {
-  const generate = await confirm('Générer un mot de passe temporaire fort automatiquement ?', 'OUI')
-
-  if (generate) {
+  if (await confirm('Générer un mot de passe temporaire fort automatiquement ?', 'OUI')) {
     return { password: generateStrongPassword(), generated: true }
   }
 
   while (true) {
     const password = await askHidden('Mot de passe : ')
     const confirmation = await askHidden('Confirmation : ')
-
     if (password !== confirmation) {
       console.log('Les deux mots de passe ne correspondent pas.')
       continue
     }
-
     const error = validatePassword(password)
-    if (!error) {
-      return { password, generated: false }
-    }
-
+    if (!error) return { password, generated: false }
     console.log(error)
   }
 }
@@ -556,28 +375,21 @@ async function promptPasswordChoice(): Promise<{ password: string; generated: bo
 async function findUserByEmail(email: string) {
   return (await prisma.user.findUnique({
     where: { email },
-    include: {
-      organization: true,
-      site: true,
-      building: true,
-    },
+    include: { organization: true },
   })) as UserWithScope
 }
 
 function findByIndexOrCode<T extends Record<string, unknown>>(items: T[], raw: string, codeField: keyof T): T | null {
   const byIndex = Number(raw)
-  if (Number.isInteger(byIndex) && byIndex >= 1 && byIndex <= items.length) {
-    return items[byIndex - 1] ?? null
-  }
-
+  if (Number.isInteger(byIndex) && byIndex >= 1 && byIndex <= items.length) return items[byIndex - 1] ?? null
   return items.find((item) => String(item[codeField]).toLowerCase() === raw) ?? null
 }
 
-async function printMutationSummary(input: {
+function printSensitiveMutationSummary(input: {
   action: string
   email: string
   displayName: string
-  role: ManagedHumanRole
+  role: SensitiveConsoleRole
   scope: ScopeSelection
   passwordMode: string
 }) {
@@ -589,6 +401,8 @@ async function printMutationSummary(input: {
   console.log(`- Rôle : ${profile.label} (${input.role})`)
   console.log(`- Périmètre : ${input.scope.summary}`)
   console.log(`- Mot de passe : ${input.passwordMode}`)
+  console.log('- Création de DPO séparée de la création admin projet : oui')
+  console.log('- Responsables de site / modérateurs : non gérés ici, à gérer via le frontend selon la hiérarchie')
   console.log('- Audit : oui, action journalisée dans audit_logs')
   console.log('- Sessions existantes : révoquées')
 }
@@ -603,66 +417,30 @@ function printUser(user: NonNullable<UserWithScope>) {
   console.log('')
 }
 
-function formatExistingScope(user: {
-  organization?: { code: string; name: string } | null
-  site?: { code: string; name: string } | null
-  building?: { code: string; label: string } | null
-}) {
-  if (user.building) {
-    return `bâtiment ${user.building.code} — ${user.building.label}`
-  }
-
-  if (user.site) {
-    return `site ${user.site.code} — ${user.site.name}`
-  }
-
-  if (user.organization) {
-    return `organisation ${user.organization.code} — ${user.organization.name}`
-  }
-
-  return 'global sans organisation explicite'
+function formatExistingScope(user: { organization?: { code: string; name: string } | null }) {
+  return user.organization ? `organisation ${user.organization.code} — ${user.organization.name}` : 'global sans organisation explicite'
 }
 
-function assertManagedHumanRole(role: string): asserts role is ManagedHumanRole {
-  if (!MANAGED_HUMAN_ROLES.includes(role as ManagedHumanRole)) {
-    throw new Error(`Le rôle ${role} n’est pas géré par cette console humaine.`)
+function assertSensitiveConsoleRole(role: string): asserts role is SensitiveConsoleRole {
+  if (!SENSITIVE_CONSOLE_ROLES.includes(role as SensitiveConsoleRole)) {
+    throw new Error(`Le rôle ${role} n’est pas géré par cette console. Les responsables de site sont gérés par les admins projet dans le frontend ; les modérateurs par les responsables de site.`)
   }
 }
 
 function validatePassword(password: string): string | null {
-  if (password.length < 12) {
-    return 'Le mot de passe doit contenir au moins 12 caractères.'
-  }
-  if (!/[a-z]/.test(password)) {
-    return 'Le mot de passe doit contenir au moins une minuscule.'
-  }
-  if (!/[A-Z]/.test(password)) {
-    return 'Le mot de passe doit contenir au moins une majuscule.'
-  }
-  if (!/\d/.test(password)) {
-    return 'Le mot de passe doit contenir au moins un chiffre.'
-  }
-  if (!/[^A-Za-z0-9]/.test(password)) {
-    return 'Le mot de passe doit contenir au moins un caractère spécial.'
-  }
+  if (password.length < 12) return 'Le mot de passe doit contenir au moins 12 caractères.'
+  if (!/[a-z]/.test(password)) return 'Le mot de passe doit contenir au moins une minuscule.'
+  if (!/[A-Z]/.test(password)) return 'Le mot de passe doit contenir au moins une majuscule.'
+  if (!/\d/.test(password)) return 'Le mot de passe doit contenir au moins un chiffre.'
+  if (!/[^A-Za-z0-9]/.test(password)) return 'Le mot de passe doit contenir au moins un caractère spécial.'
   return null
 }
 
 function generateStrongPassword(): string {
-  const groups = [
-    'ABCDEFGHJKLMNPQRSTUVWXYZ',
-    'abcdefghijkmnopqrstuvwxyz',
-    '23456789',
-    '!@#$%*-_=+?',
-  ]
-
+  const groups = ['ABCDEFGHJKLMNPQRSTUVWXYZ', 'abcdefghijkmnopqrstuvwxyz', '23456789', '!@#$%*-_=+?']
   const chars = groups.join('')
   const password = groups.map((group) => pickChar(group))
-
-  while (password.length < generatedPasswordLength) {
-    password.push(pickChar(chars))
-  }
-
+  while (password.length < generatedPasswordLength) password.push(pickChar(chars))
   for (let index = password.length - 1; index > 0; index -= 1) {
     const swapIndex = randomInt(index + 1)
     const current = password[index]
@@ -672,15 +450,12 @@ function generateStrongPassword(): string {
       password[swapIndex] = current
     }
   }
-
   return password.join('')
 }
 
 function pickChar(chars: string): string {
   const char = chars[randomInt(chars.length)]
-  if (!char) {
-    throw new Error('jeu de caractères vide pour génération de mot de passe')
-  }
+  if (!char) throw new Error('jeu de caractères vide pour génération de mot de passe')
   return char
 }
 
@@ -693,12 +468,8 @@ async function promptRequired(label: string, defaultValue = ''): Promise<string>
   while (true) {
     const suffix = defaultValue ? ` [${defaultValue}]` : ''
     const value = (await ask(`${label}${suffix} : `)).trim()
-    if (value !== '') {
-      return value
-    }
-    if (defaultValue !== '') {
-      return defaultValue
-    }
+    if (value !== '') return value
+    if (defaultValue !== '') return defaultValue
     console.log('Valeur obligatoire.')
   }
 }
@@ -706,19 +477,13 @@ async function promptRequired(label: string, defaultValue = ''): Promise<string>
 async function confirm(question: string, defaultAnswer: 'OUI' | 'NON'): Promise<boolean> {
   const suffix = defaultAnswer === 'OUI' ? ' [O/n] ' : ' [o/N] '
   const answer = (await ask(`${question}${suffix}`)).trim().toLowerCase()
-
-  if (answer === '') {
-    return defaultAnswer === 'OUI'
-  }
-
+  if (answer === '') return defaultAnswer === 'OUI'
   return ['o', 'oui', 'y', 'yes'].includes(answer)
 }
 
 async function requireTypedConfirmation(label: string, expected: string) {
   const value = (await ask(`${label} : `)).trim()
-  if (value !== expected) {
-    throw new Error('confirmation textuelle invalide')
-  }
+  if (value !== expected) throw new Error('confirmation textuelle invalide')
 }
 
 async function ask(question: string): Promise<string> {
@@ -726,10 +491,7 @@ async function ask(question: string): Promise<string> {
 }
 
 async function askHidden(question: string): Promise<string> {
-  if (!process.stdin.isTTY) {
-    throw new Error('saisie masquée indisponible hors terminal interactif')
-  }
-
+  if (!process.stdin.isTTY) throw new Error('saisie masquée indisponible hors terminal interactif')
   rl.pause()
   output.write(question)
   input.setRawMode(true)
@@ -738,14 +500,12 @@ async function askHidden(question: string): Promise<string> {
 
   return new Promise((resolve, reject) => {
     let value = ''
-
     const cleanup = () => {
       input.setRawMode(false)
       input.off('data', onData)
       rl.resume()
       output.write('\n')
     }
-
     const onData = (chunk: string) => {
       for (const char of chunk) {
         if (char === '\u0003') {
@@ -753,45 +513,53 @@ async function askHidden(question: string): Promise<string> {
           reject(new Error('interrompu par Ctrl+C'))
           return
         }
-
         if (char === '\r' || char === '\n') {
           cleanup()
           resolve(value)
           return
         }
-
         if (char === '\u0008' || char === '\u007f') {
           value = value.slice(0, -1)
           continue
         }
-
         value += char
       }
     }
-
     input.on('data', onData)
   })
 }
 
+async function writeConsoleAudit(tx: any, action: string, entityId: string, metadata: Record<string, unknown>) {
+  await tx.auditLog.create({
+    data: {
+      actorUserId: null,
+      action,
+      entityType: 'User',
+      entityId,
+      metadata: {
+        source: 'local-sensitive-user-console',
+        osUser: getOsUser(),
+        denyByDefault: true,
+        ...metadata,
+      },
+      ipAddress: 'local-cli',
+      userAgent: `chpm-user-console ${process.version}`,
+    },
+  })
+}
 
 function resolveDatabaseUrl(): string {
   const url = process.env.OPERATIONAL_DATABASE_URL || process.env.DATABASE_URL
-  if (!url) {
-    throw new Error('DATABASE_URL ou OPERATIONAL_DATABASE_URL doit être défini dans backend/.env')
-  }
+  if (!url) throw new Error('DATABASE_URL ou OPERATIONAL_DATABASE_URL doit être défini dans backend/.env')
   return url
 }
 
 async function assertDatabaseTargetAllowed() {
   const productionLike = ['production', 'prod'].includes((process.env.NODE_ENV ?? '').toLowerCase())
     || ['production', 'prod'].includes((process.env.APP_ENV ?? '').toLowerCase())
-
   if (productionLike && process.env.CHPM_USER_CONSOLE_ALLOW_PRODUCTION !== 'true') {
-    throw new Error(
-      'Refusé : cette console est bloquée en environnement production. Définir CHPM_USER_CONSOLE_ALLOW_PRODUCTION=true uniquement après validation d’exploitation.',
-    )
+    throw new Error('Refusé : console bloquée en production sauf CHPM_USER_CONSOLE_ALLOW_PRODUCTION=true après validation exploitation.')
   }
-
   if (!isLocalDatabaseUrl(databaseUrl)) {
     console.log(`\nAttention : la base ciblée ne semble pas locale : ${redactDatabaseUrl(databaseUrl)}`)
     await requireTypedConfirmation('Tapez "BASE DISTANTE" pour continuer malgré ce risque', 'BASE DISTANTE')
@@ -809,39 +577,33 @@ function isLocalDatabaseUrl(rawUrl: string) {
 
 function printBanner() {
   console.log('\nCHPM User Console')
-  console.log('Console locale de gestion des comptes internes à responsabilité.')
+  console.log('Console locale de nomination des administrateurs projet / chercheurs, DPO et administrateurs techniques.')
   console.log(`Base ciblée : ${redactDatabaseUrl(databaseUrl)}`)
-  console.log('Aucun compte répondant ni service account n’est créé par cette console.')
-  console.log('')
+  console.log('Les responsables de site sont créés par les administrateurs projet dans le frontend.')
+  console.log('Les modérateurs sont créés par les responsables de site dans le frontend.')
+  console.log('Aucun compte répondant ni service account n’est créé ici.\n')
 }
 
 function printHelp() {
   console.log('Commandes :')
-  console.log('- create          créer ou mettre à jour un admin, modérateur, DPO, analyste, etc.')
-  console.log('- disable         désactiver un compte interne et révoquer ses sessions')
-  console.log('- reset-password  réinitialiser le mot de passe et révoquer les sessions')
-  console.log('- list            lister les comptes internes sans secrets')
-  console.log('- help            afficher cette aide')
-  console.log('- exit            quitter')
-  console.log('')
+  console.log('- create            créer ou mettre à jour un admin projet, DPO ou admin technique')
+  console.log('- disable           désactiver un compte sensible et révoquer ses sessions')
+  console.log('- reset-password    réinitialiser le mot de passe et révoquer les sessions')
+  console.log('- revoke-sessions   révoquer les sessions sans changer le mot de passe')
+  console.log('- list              lister les comptes sensibles sans secrets')
+  console.log('- help              afficher cette aide')
+  console.log('- exit              quitter\n')
 }
 
 function assertInteractiveTerminal() {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    throw new Error('Cette console doit être lancée depuis un terminal interactif local.')
-  }
+  if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error('Cette console doit être lancée depuis un terminal interactif local.')
 }
 
 function redactDatabaseUrl(rawUrl: string | undefined) {
-  if (!rawUrl) {
-    return 'non définie'
-  }
-
+  if (!rawUrl) return 'non définie'
   try {
     const url = new URL(rawUrl)
-    if (url.password) {
-      url.password = '***'
-    }
+    if (url.password) url.password = '***'
     return url.toString()
   } catch {
     return rawUrl.replace(/:\/\/([^:]+):([^@]+)@/, '://$1:***@')
@@ -849,37 +611,23 @@ function redactDatabaseUrl(rawUrl: string | undefined) {
 }
 
 function loadEnvFile(path: string) {
-  if (!existsSync(path)) {
-    return
-  }
-
+  if (!existsSync(path)) return
   const lines = readFileSync(path, 'utf8').split(/\r?\n/)
   for (const line of lines) {
     const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) {
-      continue
-    }
-
+    if (!trimmed || trimmed.startsWith('#')) continue
     const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/)
-    if (!match) {
-      continue
-    }
-
+    if (!match) continue
     const key = match[1]
     const rawValue = match[2]
-    if (!key || rawValue === undefined || process.env[key] !== undefined) {
-      continue
-    }
-
+    if (!key || rawValue === undefined || process.env[key] !== undefined) continue
     process.env[key] = unquoteEnvValue(rawValue)
   }
 }
 
 function unquoteEnvValue(rawValue: string) {
   const value = rawValue.trim()
-  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-    return value.slice(1, -1)
-  }
+  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) return value.slice(1, -1)
   return value
 }
 
