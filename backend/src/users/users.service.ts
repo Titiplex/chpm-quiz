@@ -9,11 +9,16 @@ import type { AuthenticatedUser } from '../auth/auth.types'
 import { canDelegateRole, roleProfiles } from '../auth/role-permissions'
 import { sameOrganizationOrUnscoped } from '../common/access-scope'
 import { PrismaService } from '../prisma/prisma.service'
+import { CreateSiteAdminDto } from './dto/create-site-admin.dto'
 import { CreateSiteModeratorDto } from './dto/create-site-moderator.dto'
+import { UpdateSiteAdminDto } from './dto/update-site-admin.dto'
 import { UpdateSiteModeratorDto } from './dto/update-site-moderator.dto'
 
-const scopedTeamRoles = ['site_manager', 'moderator'] as const
+const scopedTeamRoles = ['moderator'] as const
 const passwordLength = 20
+
+type OrganizationRow = { id: string; code: string; name: string }
+type SiteRow = { id: string; organizationId: string; code: string; name: string; country?: string; timezone?: string; organization?: OrganizationRow | null }
 
 type BuildingWithSite = {
   id: string
@@ -46,19 +51,245 @@ type UserWithScope = {
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async listManagedSites(actor: AuthenticatedUser) {
+    this.assertProjectAdmin(actor)
+
+    const sites = (await this.prisma.site.findMany({
+      where: actor.organizationId ? { organizationId: actor.organizationId } : {},
+      orderBy: [{ name: 'asc' }, { code: 'asc' }],
+      include: { organization: { select: { id: true, code: true, name: true } } },
+    })) as SiteRow[]
+
+    return sites.map((site) => ({
+      id: site.id,
+      code: site.code,
+      name: site.name,
+      organizationId: site.organizationId,
+      organization: site.organization
+        ? { id: site.organization.id, code: site.organization.code, name: site.organization.name }
+        : null,
+      country: site.country ?? null,
+      timezone: site.timezone ?? null,
+    }))
+  }
+
+  async listSiteAdmins(actor: AuthenticatedUser) {
+    this.assertProjectAdmin(actor)
+
+    const users = (await this.prisma.user.findMany({
+      where: this.siteAdminsWhere(actor),
+      orderBy: [{ displayName: 'asc' }, { email: 'asc' }],
+      include: {
+        site: { select: { id: true, code: true, name: true } },
+        building: { include: { site: { select: { id: true, code: true, name: true } } } },
+      },
+    })) as UserWithScope[]
+
+    return users.map((user) => this.toStaffUserDto(user))
+  }
+
+  async createSiteAdmin(actor: AuthenticatedUser, dto: CreateSiteAdminDto, request: Request) {
+    this.assertProjectAdmin(actor)
+
+    const site = await this.loadManagedSite(actor, dto.siteId)
+    const email = dto.email.trim().toLowerCase()
+    const displayName = dto.displayName.trim()
+    const temporaryPassword = dto.temporaryPassword ?? this.generateStrongPassword()
+    const passwordError = this.validatePassword(temporaryPassword)
+    if (passwordError) {
+      throw new BadRequestException(passwordError)
+    }
+
+    const existingUser = (await this.prisma.user.findUnique({
+      where: { email },
+      include: {
+        site: { select: { id: true, code: true, name: true } },
+        building: { include: { site: { select: { id: true, code: true, name: true } } } },
+      },
+    })) as UserWithScope | null
+
+    if (existingUser && existingUser.role !== 'site_manager') {
+      throw new ConflictException('Cet email correspond déjà à un compte qui n’est pas un responsable de site.')
+    }
+
+    if (existingUser) {
+      this.assertTargetSiteAdminInActorScope(actor, existingUser)
+    }
+
+    const passwordHash = await this.hashPassword(temporaryPassword)
+
+    const savedUser = (await this.prisma.$transaction(async (tx: any) => {
+      const user = existingUser
+        ? await tx.user.update({
+            where: { id: existingUser.id },
+            data: {
+              displayName,
+              passwordHash,
+              role: 'site_manager',
+              isActive: true,
+              organizationId: site.organizationId,
+              siteId: site.id,
+              buildingId: null,
+            },
+            include: {
+              site: { select: { id: true, code: true, name: true } },
+              building: { include: { site: { select: { id: true, code: true, name: true } } } },
+            },
+          })
+        : await tx.user.create({
+            data: {
+              email,
+              displayName,
+              passwordHash,
+              role: 'site_manager',
+              isActive: true,
+              organizationId: site.organizationId,
+              siteId: site.id,
+              buildingId: null,
+            },
+            include: {
+              site: { select: { id: true, code: true, name: true } },
+              building: { include: { site: { select: { id: true, code: true, name: true } } } },
+            },
+          })
+
+      await tx.session.deleteMany({ where: { userId: user.id } })
+      await this.writeAudit(tx, actor, request, {
+        action: existingUser ? 'user.siteAdmin.update' : 'user.siteAdmin.create',
+        entityId: user.id,
+        metadata: {
+          email,
+          siteId: site.id,
+          previousSiteId: existingUser?.siteId ?? null,
+          temporaryPasswordReturned: true,
+          sessionsRevoked: true,
+        },
+      })
+
+      return user
+    })) as UserWithScope
+
+    return {
+      user: this.toStaffUserDto(savedUser),
+      temporaryPassword,
+      temporaryPasswordGenerated: dto.temporaryPassword === undefined,
+    }
+  }
+
+  async updateSiteAdmin(actor: AuthenticatedUser, userId: string, dto: UpdateSiteAdminDto, request: Request) {
+    this.assertProjectAdmin(actor)
+    const target = await this.loadTargetSiteAdmin(actor, userId)
+
+    const data: Record<string, unknown> = {}
+    let nextSite: SiteRow | null = null
+
+    if (dto.displayName !== undefined) {
+      data.displayName = dto.displayName.trim()
+    }
+
+    if (dto.isActive !== undefined) {
+      data.isActive = dto.isActive
+    }
+
+    if (dto.siteId !== undefined) {
+      nextSite = await this.loadManagedSite(actor, dto.siteId)
+      data.organizationId = nextSite.organizationId
+      data.siteId = nextSite.id
+      data.buildingId = null
+    }
+
+    if (!Object.keys(data).length) {
+      throw new BadRequestException('Aucune modification demandée.')
+    }
+
+    const updated = (await this.prisma.$transaction(async (tx: any) => {
+      const user = await tx.user.update({
+        where: { id: target.id },
+        data,
+        include: {
+          site: { select: { id: true, code: true, name: true } },
+          building: { include: { site: { select: { id: true, code: true, name: true } } } },
+        },
+      })
+
+      if (dto.isActive === false || dto.siteId !== undefined) {
+        await tx.session.deleteMany({ where: { userId: user.id } })
+      }
+
+      await this.writeAudit(tx, actor, request, {
+        action: 'user.siteAdmin.patch',
+        entityId: user.id,
+        metadata: {
+          email: target.email,
+          previousSiteId: target.siteId,
+          nextSiteId: nextSite?.id ?? target.siteId,
+          isActiveChanged: dto.isActive !== undefined,
+          sessionsRevoked: dto.isActive === false || dto.siteId !== undefined,
+        },
+      })
+
+      return user
+    })) as UserWithScope
+
+    return { user: this.toStaffUserDto(updated) }
+  }
+
+  async resetSiteAdminPassword(actor: AuthenticatedUser, userId: string, request: Request) {
+    this.assertProjectAdmin(actor)
+    const target = await this.loadTargetSiteAdmin(actor, userId)
+    const temporaryPassword = this.generateStrongPassword()
+    const passwordHash = await this.hashPassword(temporaryPassword)
+
+    const updated = (await this.prisma.$transaction(async (tx: any) => {
+      const user = await tx.user.update({
+        where: { id: target.id },
+        data: { passwordHash, isActive: true },
+        include: {
+          site: { select: { id: true, code: true, name: true } },
+          building: { include: { site: { select: { id: true, code: true, name: true } } } },
+        },
+      })
+      await tx.session.deleteMany({ where: { userId: user.id } })
+      await this.writeAudit(tx, actor, request, {
+        action: 'user.siteAdmin.resetPassword',
+        entityId: user.id,
+        metadata: {
+          email: target.email,
+          siteId: target.siteId,
+          temporaryPasswordReturned: true,
+          sessionsRevoked: true,
+        },
+      })
+      return user
+    })) as UserWithScope
+
+    return {
+      user: this.toStaffUserDto(updated),
+      temporaryPassword,
+      temporaryPasswordGenerated: true,
+    }
+  }
+
+  async revokeSiteAdminSessions(actor: AuthenticatedUser, userId: string, request: Request) {
+    this.assertProjectAdmin(actor)
+    const target = await this.loadTargetSiteAdmin(actor, userId)
+    const result = await this.revokeSessions(actor, target, 'user.siteAdmin.revokeSessions', request)
+    return { user: this.toStaffUserDto(target), revokedSessionCount: result.count }
+  }
+
   async listSiteTeam(actor: AuthenticatedUser) {
     this.assertCanUseScopedTeamAdministration(actor)
 
-    const users = await this.prisma.user.findMany({
+    const users = (await this.prisma.user.findMany({
       where: this.siteTeamWhere(actor),
       orderBy: [{ role: 'asc' }, { displayName: 'asc' }, { email: 'asc' }],
       include: {
         site: { select: { id: true, code: true, name: true } },
         building: { include: { site: { select: { id: true, code: true, name: true } } } },
       },
-    }) as UserWithScope[]
+    })) as UserWithScope[]
 
-    return users.map((user) => this.toSiteTeamUserDto(user))
+    return users.map((user) => this.toStaffUserDto(user))
   }
 
   async upsertSiteModerator(actor: AuthenticatedUser, dto: CreateSiteModeratorDto, request: Request) {
@@ -73,13 +304,13 @@ export class UsersService {
       throw new BadRequestException(passwordError)
     }
 
-    const existingUser = await this.prisma.user.findUnique({
+    const existingUser = (await this.prisma.user.findUnique({
       where: { email },
       include: {
         site: { select: { id: true, code: true, name: true } },
         building: { include: { site: { select: { id: true, code: true, name: true } } } },
       },
-    }) as UserWithScope | null
+    })) as UserWithScope | null
 
     if (existingUser && existingUser.role !== 'moderator') {
       throw new ConflictException('Cet email correspond déjà à un compte qui n’est pas un modérateur.')
@@ -91,7 +322,7 @@ export class UsersService {
 
     const passwordHash = await this.hashPassword(temporaryPassword)
 
-    const savedUser = await this.prisma.$transaction(async (tx: any) => {
+    const savedUser = (await this.prisma.$transaction(async (tx: any) => {
       const user = existingUser
         ? await tx.user.update({
             where: { id: existingUser.id },
@@ -140,11 +371,11 @@ export class UsersService {
         },
       })
 
-      return user as UserWithScope
-    })
+      return user
+    })) as UserWithScope
 
     return {
-      user: this.toSiteTeamUserDto(savedUser),
+      user: this.toStaffUserDto(savedUser),
       temporaryPassword,
       temporaryPasswordGenerated: dto.temporaryPassword === undefined,
     }
@@ -176,7 +407,7 @@ export class UsersService {
       throw new BadRequestException('Aucune modification demandée.')
     }
 
-    const updated = await this.prisma.$transaction(async (tx: any) => {
+    const updated = (await this.prisma.$transaction(async (tx: any) => {
       const user = await tx.user.update({
         where: { id: target.id },
         data,
@@ -202,10 +433,10 @@ export class UsersService {
         },
       })
 
-      return user as UserWithScope
-    })
+      return user
+    })) as UserWithScope
 
-    return { user: this.toSiteTeamUserDto(updated) }
+    return { user: this.toStaffUserDto(updated) }
   }
 
   async resetSiteModeratorPassword(actor: AuthenticatedUser, userId: string, request: Request) {
@@ -214,7 +445,7 @@ export class UsersService {
     const temporaryPassword = this.generateStrongPassword()
     const passwordHash = await this.hashPassword(temporaryPassword)
 
-    const updated = await this.prisma.$transaction(async (tx: any) => {
+    const updated = (await this.prisma.$transaction(async (tx: any) => {
       const user = await tx.user.update({
         where: { id: target.id },
         data: { passwordHash, isActive: true },
@@ -234,21 +465,45 @@ export class UsersService {
           sessionsRevoked: true,
         },
       })
-      return user as UserWithScope
-    })
+      return user
+    })) as UserWithScope
 
     return {
-      user: this.toSiteTeamUserDto(updated),
+      user: this.toStaffUserDto(updated),
       temporaryPassword,
       temporaryPasswordGenerated: true,
     }
   }
 
+  async revokeSiteModeratorSessions(actor: AuthenticatedUser, userId: string, request: Request) {
+    this.assertCanUseScopedTeamAdministration(actor)
+    const target = await this.loadTargetModerator(actor, userId)
+    const result = await this.revokeSessions(actor, target, 'user.siteModerator.revokeSessions', request)
+    return { user: this.toStaffUserDto(target), revokedSessionCount: result.count }
+  }
+
+  private async loadManagedSite(actor: AuthenticatedUser, siteId: string): Promise<SiteRow> {
+    const site = (await this.prisma.site.findUnique({
+      where: { id: siteId },
+      include: { organization: { select: { id: true, code: true, name: true } } },
+    })) as SiteRow | null
+
+    if (!site) {
+      throw new NotFoundException('Site introuvable')
+    }
+
+    if (!sameOrganizationOrUnscoped(actor, site.organizationId)) {
+      throw new ForbiddenException('Site hors organisation utilisateur')
+    }
+
+    return site
+  }
+
   private async loadManagedBuilding(actor: AuthenticatedUser, buildingId: string): Promise<BuildingWithSite> {
-    const building = await this.prisma.building.findUnique({
+    const building = (await this.prisma.building.findUnique({
       where: { id: buildingId },
       include: { site: { select: { id: true, code: true, name: true } } },
-    }) as BuildingWithSite | null
+    })) as BuildingWithSite | null
 
     if (!building) {
       throw new NotFoundException('Bâtiment introuvable')
@@ -265,14 +520,31 @@ export class UsersService {
     return building
   }
 
-  private async loadTargetModerator(actor: AuthenticatedUser, userId: string): Promise<UserWithScope> {
-    const target = await this.prisma.user.findUnique({
+  private async loadTargetSiteAdmin(actor: AuthenticatedUser, userId: string): Promise<UserWithScope> {
+    const target = (await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
         site: { select: { id: true, code: true, name: true } },
         building: { include: { site: { select: { id: true, code: true, name: true } } } },
       },
-    }) as UserWithScope | null
+    })) as UserWithScope | null
+
+    if (!target || target.role !== 'site_manager') {
+      throw new NotFoundException('Responsable de site introuvable dans votre périmètre')
+    }
+
+    this.assertTargetSiteAdminInActorScope(actor, target)
+    return target
+  }
+
+  private async loadTargetModerator(actor: AuthenticatedUser, userId: string): Promise<UserWithScope> {
+    const target = (await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        site: { select: { id: true, code: true, name: true } },
+        building: { include: { site: { select: { id: true, code: true, name: true } } } },
+      },
+    })) as UserWithScope | null
 
     if (!target || target.role !== 'moderator') {
       throw new NotFoundException('Modérateur introuvable dans votre périmètre')
@@ -282,16 +554,32 @@ export class UsersService {
     return target
   }
 
+  private assertTargetSiteAdminInActorScope(actor: AuthenticatedUser, target: UserWithScope): void {
+    this.assertProjectAdmin(actor)
+
+    if (!sameOrganizationOrUnscoped(actor, target.organizationId)) {
+      throw new NotFoundException('Responsable de site introuvable dans votre périmètre')
+    }
+  }
+
   private assertTargetModeratorInActorScope(actor: AuthenticatedUser, target: UserWithScope): void {
     if (!sameOrganizationOrUnscoped(actor, target.organizationId)) {
       throw new NotFoundException('Modérateur introuvable dans votre périmètre')
     }
 
-    if (actor.role === 'site_manager') {
-      if (!actor.siteId || target.siteId !== actor.siteId) {
-        throw new NotFoundException('Modérateur introuvable dans votre site')
-      }
+    if (actor.role === 'site_manager' && (!actor.siteId || target.siteId !== actor.siteId)) {
+      throw new NotFoundException('Modérateur introuvable dans votre site')
     }
+  }
+
+  private siteAdminsWhere(actor: AuthenticatedUser) {
+    const base: Record<string, unknown> = { role: 'site_manager' }
+
+    if (actor.organizationId) {
+      base.organizationId = actor.organizationId
+    }
+
+    return base
   }
 
   private siteTeamWhere(actor: AuthenticatedUser) {
@@ -308,28 +596,31 @@ export class UsersService {
     return base
   }
 
-  private assertCanUseScopedTeamAdministration(actor: AuthenticatedUser): void {
-    if (actor.role === 'admin') {
-      if (!canDelegateRole('admin', 'site_manager') || !canDelegateRole('admin', 'moderator')) {
-        throw new ForbiddenException('Hiérarchie RBAC incohérente')
-      }
-      return
+  private assertProjectAdmin(actor: AuthenticatedUser): void {
+    if (actor.role !== 'admin') {
+      throw new ForbiddenException('Seul un administrateur projet peut gérer les responsables de site')
     }
 
+    if (!canDelegateRole('admin', 'site_manager')) {
+      throw new ForbiddenException('Hiérarchie RBAC incohérente : admin projet ne délègue pas les responsables de site')
+    }
+  }
+
+  private assertCanUseScopedTeamAdministration(actor: AuthenticatedUser): void {
     if (actor.role === 'site_manager') {
       if (!canDelegateRole('site_manager', 'moderator')) {
         throw new ForbiddenException('Ce rôle ne peut pas déléguer la modération')
       }
       if (!actor.siteId) {
-        throw new ForbiddenException('Gestionnaire de site sans site affecté')
+        throw new ForbiddenException('Responsable de site sans site affecté')
       }
       return
     }
 
-    throw new ForbiddenException('Rôle non autorisé à gérer une équipe de site')
+    throw new ForbiddenException('Seul un responsable de site peut gérer les modérateurs de son site')
   }
 
-  private toSiteTeamUserDto(user: UserWithScope) {
+  private toStaffUserDto(user: UserWithScope) {
     return {
       id: user.id,
       email: user.email,
@@ -364,6 +655,25 @@ export class UsersService {
     }
   }
 
+  private async revokeSessions(actor: AuthenticatedUser, target: UserWithScope, action: string, request: Request) {
+    return this.prisma.$transaction(async (tx: any) => {
+      const result = await tx.session.deleteMany({ where: { userId: target.id } })
+      await this.writeAudit(tx, actor, request, {
+        action,
+        entityId: target.id,
+        metadata: {
+          email: target.email,
+          role: target.role,
+          siteId: target.siteId,
+          buildingId: target.buildingId,
+          sessionsRevoked: true,
+          revokedSessionCount: result.count,
+        },
+      })
+      return result as { count: number }
+    })
+  }
+
   private async writeAudit(tx: any, actor: AuthenticatedUser, request: Request, input: { action: string; entityId: string; metadata: Record<string, unknown> }) {
     await tx.auditLog.create({
       data: {
@@ -372,7 +682,7 @@ export class UsersService {
         entityType: 'User',
         entityId: input.entityId,
         metadata: {
-          source: 'site-team-api',
+          source: 'staff-management-api',
           actorRole: actor.role,
           ...input.metadata,
         },
