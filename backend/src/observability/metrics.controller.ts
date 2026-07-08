@@ -11,7 +11,7 @@ export class MetricsController {
   constructor(private readonly observability: ObservabilityService) {}
 
   @Get()
-  @Roles('technical_admin', 'admin', 'dpo')
+  @Roles('technical_admin')
   metrics(): { metrics: unknown } {
     return { metrics: this.observability.snapshot() }
   }

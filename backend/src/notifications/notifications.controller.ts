@@ -15,7 +15,7 @@ export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
   @Get('subscriptions')
-  @Roles('admin', 'moderator', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo')
+  @Roles('admin', 'moderator', 'site_manager', 'questionnaire_admin', 'analyst')
   async list(@CurrentUser() user: AuthenticatedUser) {
     const subscriptions = await this.notificationsService.list(user)
     return { subscriptions }
@@ -23,14 +23,14 @@ export class NotificationsController {
 
 
   @Post('daily-digests/run')
-  @Roles('admin', 'dpo', 'technical_admin')
+  @Roles('admin', 'technical_admin')
   async runDailyDigests() {
     const result = await this.notificationsService.processDueDailyDigests()
     return { result }
   }
 
   @Post('subscriptions')
-  @Roles('admin', 'moderator', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo')
+  @Roles('admin', 'moderator', 'site_manager', 'questionnaire_admin', 'analyst')
   async upsert(
     @Body() dto: UpsertNotificationSubscriptionDto,
     @CurrentUser() user: AuthenticatedUser,

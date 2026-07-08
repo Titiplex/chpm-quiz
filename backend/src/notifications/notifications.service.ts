@@ -34,12 +34,12 @@ type QueuedDigestMetadata = {
 }
 
 const notificationEventPolicy: Record<string, string[]> = {
-  submission_received: ['admin', 'moderator', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo'],
-  difficult_question: ['admin', 'questionnaire_admin', 'analyst', 'dpo'],
-  invitation_expired: ['admin', 'moderator', 'site_manager', 'dpo'],
-  campaign_finished: ['admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo'],
-  double_submission_attempt: ['admin', 'technical_admin', 'dpo'],
-  judicial_access_executed: ['admin', 'dpo', 'judicial_officer', 'technical_admin'],
+  submission_received: ['admin', 'moderator', 'site_manager', 'questionnaire_admin', 'analyst'],
+  difficult_question: ['admin', 'questionnaire_admin', 'analyst'],
+  invitation_expired: ['admin', 'moderator', 'site_manager'],
+  campaign_finished: ['admin', 'site_manager', 'questionnaire_admin', 'analyst'],
+  double_submission_attempt: ['technical_admin'],
+  judicial_access_executed: ['judicial_officer', 'technical_admin'],
 }
 
 @Injectable()

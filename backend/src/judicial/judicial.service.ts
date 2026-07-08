@@ -130,77 +130,31 @@ export class JudicialService {
 
   async execute(id: string, user: AuthenticatedUser, request: Request) {
     if (user.role !== 'judicial_officer') {
-      throw new ForbiddenException('Exécution réservée au responsable accès judiciaire')
+      throw new ForbiddenException('Exécution réservée au responsable procédure')
     }
 
-    const judicialRequest = await this.getRequest(id)
-
-    if (judicialRequest.status !== 'validated') {
-      throw new BadRequestException('La demande doit avoir une validation DPO et une validation juridique avant exécution')
-    }
-
-    if (!judicialRequest.dpoValidationUserId || !judicialRequest.legalValidationUserId) {
-      throw new BadRequestException('Double validation incomplète : DPO et juridique sont obligatoires')
-    }
-
-    const rows = await this.identityVaultService.loadJudicialIdentityRows(judicialRequest.requestedPublicCodes)
-
-    const exportPayload = {
-      requestReference: judicialRequest.requestReference,
-      exportedAt: new Date().toISOString(),
-      rowCount: rows.length,
-      rows,
-    }
-    const encryptedExport = this.encryptExport(exportPayload)
-    const exportFingerprint = createHash('sha256').update(encryptedExport.ciphertext).digest('hex')
-
-    const updated = await this.prisma.judicialAccessRequest.update({
-      where: { id },
-      data: {
-        status: 'executed',
-        executedAt: new Date(),
-        executedByUserId: user.id,
-        exportFingerprint,
-        comments: this.appendComment(judicialRequest.comments, user, `Export minimal chiffré exécuté (${rows.length} ligne(s)).`),
+    await this.auditService.log({
+      actor: user,
+      action: 'judicial_access.execute_denied_dpo_console_required',
+      entityType: 'JudicialAccessRequest',
+      entityId: id,
+      request,
+      metadata: {
+        reason: 'Les exports code-email ne sont plus exposés par l’API principale. Utiliser npm run dpo:console avec compte DPO, justification, procédure et codes explicites.',
       },
     })
 
     await this.identityVaultService.recordVaultAudit({
       actorUserId: user.id,
-      action: 'judicial_access.execute',
+      action: 'judicial_access.execute_denied_dpo_console_required',
       requestId: id,
       ipAddress: request.ip,
       metadata: {
-        requestReference: judicialRequest.requestReference,
-        requestedPublicCodeCount: judicialRequest.requestedPublicCodes.length,
-        exportedRowCount: rows.length,
-        exportFingerprint,
+        reason: 'api_main_identity_export_disabled',
       },
     })
 
-    await this.auditService.log({
-      actor: user,
-      action: 'judicial_access.execute',
-      entityType: 'JudicialAccessRequest',
-      entityId: id,
-      request,
-      metadata: {
-        requestReference: judicialRequest.requestReference,
-        requestedPublicCodeCount: judicialRequest.requestedPublicCodes.length,
-        exportedRowCount: rows.length,
-        exportFingerprint,
-      },
-    })
-
-    return {
-      judicialRequest: updated,
-      encryptedExport: {
-        ...encryptedExport,
-        fingerprint: exportFingerprint,
-        expiresInMinutes: 15,
-        warning: 'Exporter immédiatement vers le coffre documentaire. Le serveur ne conserve pas le contenu de l’export.',
-      },
-    }
+    throw new ForbiddenException('Export code-email refusé via API principale : utiliser la console DPO dédiée et auditée.')
   }
 
   async close(id: string, user: AuthenticatedUser, dto: JudicialWorkflowCommentDto, request: Request) {

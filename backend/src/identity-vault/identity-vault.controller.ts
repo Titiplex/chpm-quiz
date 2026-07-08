@@ -15,14 +15,14 @@ export class IdentityVaultController {
   constructor(private readonly identityVaultService: IdentityVaultService) {}
 
   @Get('status')
-  @Roles('dpo', 'judicial_officer', 'technical_admin')
+  @Roles('technical_admin')
   async status(@CurrentUser() user: AuthenticatedUser, @Req() request: Request) {
     const status = await this.identityVaultService.status(user, request)
     return { status }
   }
 
   @Post('access-attempt')
-  @Roles('admin', 'site_manager', 'moderator', 'questionnaire_admin', 'analyst', 'dpo', 'judicial_officer', 'technical_admin')
+  @Roles('technical_admin')
   async recordAccessAttempt(
     @Body() dto: IdentityVaultAccessAttemptDto,
     @CurrentUser() user: AuthenticatedUser,

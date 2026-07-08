@@ -211,7 +211,7 @@ export class ComplianceService {
     })
 
     const threshold = this.statisticsThreshold()
-    const suppressedByThreshold = submissions.length > 0 && submissions.length < threshold && user.role !== 'dpo'
+    const suppressedByThreshold = submissions.length > 0 && submissions.length < threshold
     const rows = suppressedByThreshold
       ? []
       : submissions.map((submission: any) => ({
@@ -298,7 +298,7 @@ export class ComplianceService {
       return { building: { siteId: user.siteId } }
     }
 
-    if (user.buildingId && user.role !== 'admin' && user.role !== 'dpo') {
+    if (user.buildingId && user.role !== 'admin') {
       return { buildingId: user.buildingId }
     }
 
