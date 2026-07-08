@@ -44,6 +44,8 @@ import type {
   TerminalDevicesResponse,
   TerminalDeviceMutationResponse,
   TerminalSessionResponse,
+  SubmitPaperResponsesRequest,
+  SubmitPaperResponsesResponse,
   SubmitResponse,
   UpdateQuestionGroupRequest,
   UpdateQuestionnaireRequest,
@@ -433,6 +435,12 @@ export async function demoApiRequest<T>(path: string, options: DemoRequestOption
 
   if (method === 'POST' && route === '/moderation/invitations') {
     return asResponse<T>(createInvitation(options.body as CreateInvitationRequest))
+  }
+
+
+  const paperEntryMatch = route.match(/^\/moderation\/invitations\/([^/]+)\/paper-entry$/)
+  if (paperEntryMatch?.[1] && method === 'POST') {
+    return asResponse<T>(submitPaperResponses(paperEntryMatch[1], options.body as SubmitPaperResponsesRequest) satisfies SubmitPaperResponsesResponse)
   }
 
   const resendMatch = route.match(/^\/moderation\/invitations\/([^/]+)\/resend$/)
@@ -1449,6 +1457,159 @@ function resendInvitation(invitationId: string): { invitation: ApiInvitation } {
   invitation.status = invitation.status === 'pending' ? 'sent' : invitation.status
   saveInvitations(invitations)
   return { invitation }
+}
+
+function submitPaperResponses(invitationId: string, payload: SubmitPaperResponsesRequest): SubmitPaperResponsesResponse {
+  const invitations = getInvitations()
+  const invitation = invitations.find((candidate) => candidate.id === invitationId)
+
+  if (!invitation) {
+    throw new Error('Invitation papier introuvable dans la démo.')
+  }
+
+  if (invitation.deliveryMode !== 'paper_form') {
+    throw new Error('La saisie manuelle est réservée aux versions papier.')
+  }
+
+  if (['submitted', 'cancelled', 'blocked', 'expired'].includes(invitation.status)) {
+    throw new Error('Cette invitation papier ne peut plus être saisie.')
+  }
+
+  assertBuildingInCurrentUserScope(invitation.building)
+
+  const questionnaire = getQuestionnaires().find((candidate) => candidate.versionId === invitation.questionnaireVersionId)
+  if (!questionnaire) {
+    throw new Error('Questionnaire papier introuvable dans la démo.')
+  }
+
+  const questions = questionnaire.groups.flatMap((group) => group.questions)
+  const questionById = new Map(questions.map((question) => [question.id, question]))
+  const answers = payload.answers ?? []
+  const answerQuestionIds = new Set(answers.map((answer) => answer.questionId))
+
+  for (const question of questions) {
+    if (question.isRequired && question.responseType !== 'information' && !answerQuestionIds.has(question.id)) {
+      throw new Error(`Question obligatoire sans réponse : ${question.code}`)
+    }
+  }
+
+  const token = `demo-paper-${invitation.publicCode.toLowerCase()}`
+  const sessions = getRespondentSessions()
+  const session = sessions[token] ?? createRespondentSession(token, questionnaire, invitation.building, invitation.publicCode, 'draft', {
+    ...invitation,
+    deliveryMode: 'paper_form',
+    assistanceMode: 'full_assisted_entry',
+    status: 'draft',
+    startedAt: invitation.startedAt ?? nowIso(),
+  })
+
+  const warnings: Array<{ questionId: string; reason: string | null }> = []
+
+  for (const answerInput of answers) {
+    const sourceQuestion = questionById.get(answerInput.questionId)
+    if (!sourceQuestion) {
+      throw new Error('Une réponse papier cible une question inconnue.')
+    }
+
+    validateDemoPaperAnswer(sourceQuestion, answerInput.value)
+    const targetQuestion = findRespondentQuestion(session, answerInput.questionId)
+    const warning = isPotentiallyIdentifying(answerInput.value)
+      ? 'Le champ semble contenir une information potentiellement identifiante.'
+      : null
+
+    targetQuestion.answer = {
+      id: createId('answer'),
+      questionId: answerInput.questionId,
+      value: answerInput.value,
+      identifiabilityWarning: Boolean(warning),
+      warningReason: warning,
+    }
+
+    if (warning) {
+      warnings.push({ questionId: answerInput.questionId, reason: warning })
+    }
+  }
+
+  const submittedAt = nowIso()
+  session.responseSession.status = 'locked'
+  session.responseSession.submittedAt = submittedAt
+  session.responseSession.lockedAt = submittedAt
+  session.responseSession.currentPage = Math.max(1, session.questionnaire.groups.length)
+  session.invitation.status = 'submitted'
+  session.invitation.deliveryMode = 'paper_form'
+  session.invitation.assistanceMode = 'full_assisted_entry'
+
+  const answerCount = session.questionnaire.groups.reduce(
+    (total, group) => total + group.questions.filter((question) => question.answer).length,
+    0,
+  )
+
+  sessions[token] = session
+  saveRespondentSessions(sessions)
+
+  const updatedInvitation: ApiInvitation = {
+    ...invitation,
+    status: 'submitted',
+    startedAt: invitation.startedAt ?? submittedAt,
+    submittedAt,
+    responseStatus: 'locked',
+    assistanceMode: 'full_assisted_entry',
+  }
+
+  saveInvitations(invitations.map((candidate) => candidate.id === invitation.id ? updatedInvitation : candidate))
+
+  appendAuditLog('response.paper_entry.submit', 'Invitation', invitation.id, invitation.publicCode, {
+    questionnaireVersionId: questionnaire.versionId,
+    questionnaireTitle: questionnaire.title,
+    answerCount,
+    moderatorNote: payload.moderatorNote || undefined,
+    directEmailVisible: false,
+    simulation: true,
+  })
+  notifyDemoSubmission(session, answerCount, submittedAt)
+
+  return {
+    invitation: updatedInvitation,
+    warnings,
+    submission: {
+      id: createId('submission'),
+      publicCode: invitation.publicCode,
+      submittedAt,
+      answerCount,
+    },
+  }
+}
+
+function validateDemoPaperAnswer(question: ApiQuestion, value: unknown): void {
+  const responseType = question.responseType ?? question.type
+
+  if (responseType === 'information') return
+
+  if (responseType === 'single_choice') {
+    const validValues = new Set((question.options ?? []).map((option) => option.value))
+    if (typeof value !== 'string' || !validValues.has(value)) {
+      throw new Error(`Réponse invalide pour ${question.code}.`)
+    }
+  } else if (responseType === 'multiple_choice') {
+    const validValues = new Set((question.options ?? []).map((option) => option.value))
+    if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || !validValues.has(item))) {
+      throw new Error(`Réponse invalide pour ${question.code}.`)
+    }
+  } else if (responseType === 'likert') {
+    const scale = question.likertScale
+    const minValue = scale?.minValue ?? 1
+    const maxValue = minValue + (scale?.points ?? 0) - 1
+    if (value === 'not_applicable' && scale?.allowNotApplicable) return
+    if (typeof value !== 'number' || value < minValue || value > maxValue) {
+      throw new Error(`Réponse invalide pour ${question.code}.`)
+    }
+  } else if (responseType === 'number') {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      throw new Error(`Réponse numérique invalide pour ${question.code}.`)
+    }
+  } else if (typeof value !== 'string') {
+    throw new Error(`Réponse invalide pour ${question.code}.`)
+  }
 }
 
 function registerTerminalDevice(payload: RegisterTerminalDeviceRequest): RegisterTerminalDeviceResponse {

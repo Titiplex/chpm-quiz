@@ -110,6 +110,49 @@ describe('useModerationStore', () => {
     expect(store.invitations[0]?.sentAt).toBe('2026-01-02T09:00:00.000Z')
   })
 
+
+  it('submits paper responses and replaces the invitation with the locked result', async () => {
+    const submittedPaperInvitation = {
+      ...invitationFixture,
+      id: 'invitation-paper',
+      status: 'submitted' as const,
+      deliveryMode: 'paper_form' as const,
+      submittedAt: '2026-01-03T10:00:00.000Z',
+      responseStatus: 'locked' as const,
+    }
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith('/moderation/invitations/invitation-paper/paper-entry')) {
+        expect(init?.method).toBe('POST')
+        expect(JSON.parse(String(init!.body))).toMatchObject({
+          answers: [{ questionId: 'question-1', value: 2 }],
+        })
+        return jsonResponse({
+          invitation: submittedPaperInvitation,
+          submission: {
+            id: 'submission-paper',
+            publicCode: submittedPaperInvitation.publicCode,
+            submittedAt: submittedPaperInvitation.submittedAt,
+            answerCount: 1,
+          },
+          warnings: [],
+        })
+      }
+
+      return jsonResponse({ message: 'unexpected route' }, 500)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const store = useModerationStore()
+    store.invitations = [{ ...invitationFixture, id: 'invitation-paper', deliveryMode: 'paper_form' }]
+    const response = await store.submitPaperResponses('invitation-paper', {
+      answers: [{ questionId: 'question-1', value: 2 }],
+    })
+
+    expect(response.submission.answerCount).toBe(1)
+    expect(store.invitations[0]).toEqual(submittedPaperInvitation)
+    expect(store.status).toBe('ready')
+  })
+
   it('sets error states on failed reads and mutations', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ message: 'Service indisponible' }, 503)))
 

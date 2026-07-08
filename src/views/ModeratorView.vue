@@ -10,9 +10,10 @@ import SiteTeamPanel from '@/components/moderation/SiteTeamPanel.vue'
 import { appConfig } from '@/config/env'
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
 import { useCatalogStore } from '@/stores/catalog'
+import { downloadQuestionnairePdf } from '@/services/questionnairePdf'
 import { useModerationStore } from '@/stores/moderation'
 import { useSessionStore } from '@/stores/session'
-import type { ApiInvitation } from '@shared/types/api'
+import type { ApiInvitation, ApiQuestion, ApiQuestionnaire } from '@shared/types/api'
 import type { AssistanceMode, InvitationDeliveryMode, InvitationStatus } from '@shared/types/domain'
 
 const catalog = useCatalogStore()
@@ -21,6 +22,12 @@ const session = useSessionStore()
 const copiedLink = ref<'respondent' | 'terminal' | 'registered' | null>(null)
 const showInvitationModal = ref(false)
 const showTerminalRegistrationModal = ref(false)
+const showPaperEntryModal = ref(false)
+const paperEntryInvitation = ref<ApiInvitation | null>(null)
+const paperEntryAnswers = reactive<Record<string, unknown>>({})
+const paperEntryNote = ref('')
+const paperEntryError = ref<string | null>(null)
+const paperEntrySuccess = ref<string | null>(null)
 
 const form = reactive({
   questionnaireVersionId: '',
@@ -61,6 +68,10 @@ const requiresEmail = computed(() => form.deliveryMode === 'email' || form.deliv
 const requiresTerminal = computed(() => form.deliveryMode === 'onsite_terminal')
 const isPaperForm = computed(() => form.deliveryMode === 'paper_form')
 const isRefusalRecord = computed(() => form.deliveryMode === 'refusal_record')
+const selectedQuestionnaire = computed(() => findQuestionnaireByVersionId(form.questionnaireVersionId))
+const paperEntryQuestionnaire = computed(() => paperEntryInvitation.value ? findQuestionnaireByVersionId(paperEntryInvitation.value.questionnaireVersionId) : null)
+const paperEntryQuestions = computed(() => paperEntryQuestionnaire.value?.groups.flatMap((group) => group.questions) ?? [])
+const missingPaperEntryRequiredQuestions = computed(() => paperEntryQuestions.value.filter((question) => question.isRequired && question.responseType !== 'information' && !hasPaperAnswer(question)))
 const invitationActionDisabled = computed(() => (
   moderation.status === 'creating'
   || !questionnaires.value.length
@@ -78,6 +89,124 @@ watch(
     }
   },
 )
+
+
+function findQuestionnaireByVersionId(versionId: string): ApiQuestionnaire | null {
+  return catalog.publishedQuestionnaires.find((questionnaire) => questionnaire.versionId === versionId) ?? null
+}
+
+function downloadBlankQuestionnairePdf(): void {
+  if (!selectedQuestionnaire.value) return
+
+  downloadQuestionnairePdf({
+    questionnaire: selectedQuestionnaire.value,
+    generatedBy: session.user?.displayName ?? null,
+  })
+}
+
+function downloadInvitationQuestionnairePdf(invitation: ApiInvitation): void {
+  const questionnaire = findQuestionnaireByVersionId(invitation.questionnaireVersionId)
+  if (!questionnaire) return
+
+  downloadQuestionnairePdf({
+    questionnaire,
+    publicCode: invitation.publicCode,
+    buildingLabel: invitation.building.label,
+    generatedBy: session.user?.displayName ?? null,
+  })
+}
+
+function openPaperEntry(invitation: ApiInvitation): void {
+  paperEntryInvitation.value = invitation
+  paperEntryError.value = null
+  paperEntrySuccess.value = null
+  paperEntryNote.value = ''
+
+  for (const key of Object.keys(paperEntryAnswers)) {
+    delete paperEntryAnswers[key]
+  }
+
+  for (const question of findQuestionnaireByVersionId(invitation.questionnaireVersionId)?.groups.flatMap((group) => group.questions) ?? []) {
+    if (question.responseType === 'multiple_choice') {
+      paperEntryAnswers[question.id] = []
+    }
+  }
+
+  showPaperEntryModal.value = true
+}
+
+function paperQuestionValue(question: ApiQuestion): unknown {
+  return paperEntryAnswers[question.id] ?? (question.responseType === 'multiple_choice' ? [] : '')
+}
+
+function setPaperAnswer(question: ApiQuestion, value: unknown): void {
+  paperEntryAnswers[question.id] = value
+}
+
+function togglePaperMultipleChoice(question: ApiQuestion, value: string): void {
+  const current = Array.isArray(paperEntryAnswers[question.id]) ? [...paperEntryAnswers[question.id] as string[]] : []
+  paperEntryAnswers[question.id] = current.includes(value)
+    ? current.filter((item) => item !== value)
+    : [...current, value]
+}
+
+function isPaperOptionSelected(question: ApiQuestion, value: string): boolean {
+  const current = paperEntryAnswers[question.id]
+  return Array.isArray(current) && current.includes(value)
+}
+
+function hasPaperAnswer(question: ApiQuestion): boolean {
+  const value = paperEntryAnswers[question.id]
+  if (question.responseType === 'information') return true
+  if (Array.isArray(value)) return value.length > 0
+  if (value === null || value === undefined) return false
+  if (typeof value === 'string') return value.trim().length > 0
+  return true
+}
+
+function paperAnswersPayload(): Array<{ questionId: string; value: unknown }> {
+  return paperEntryQuestions.value
+    .filter((question) => question.responseType !== 'information')
+    .filter((question) => hasPaperAnswer(question))
+    .map((question) => ({ questionId: question.id, value: normalizePaperAnswer(question, paperEntryAnswers[question.id]) }))
+}
+
+function normalizePaperAnswer(question: ApiQuestion, value: unknown): unknown {
+  if (question.responseType === 'number') {
+    const numericValue = Number(value)
+    return Number.isFinite(numericValue) ? numericValue : value
+  }
+
+  return value
+}
+
+async function submitPaperEntry(): Promise<void> {
+  if (!paperEntryInvitation.value) return
+
+  paperEntryError.value = null
+  paperEntrySuccess.value = null
+
+  if (missingPaperEntryRequiredQuestions.value.length) {
+    paperEntryError.value = `${missingPaperEntryRequiredQuestions.value.length} question(s) obligatoire(s) restent sans réponse.`
+    return
+  }
+
+  try {
+    const response = await moderation.submitPaperResponses(paperEntryInvitation.value.id, {
+      answers: paperAnswersPayload(),
+      moderatorNote: paperEntryNote.value.trim() || undefined,
+    })
+    paperEntrySuccess.value = `Saisie papier verrouillée pour le code ${response.submission.publicCode}.`
+    showPaperEntryModal.value = false
+    await moderation.refresh()
+  } catch (caught) {
+    paperEntryError.value = caught instanceof Error ? caught.message : 'Saisie papier impossible.'
+  }
+}
+
+function canEnterPaperResponses(invitation: ApiInvitation): boolean {
+  return invitation.deliveryMode === 'paper_form' && !['submitted', 'cancelled', 'blocked', 'expired'].includes(invitation.status)
+}
 
 async function submitInvitation() {
   copiedLink.value = null
@@ -177,6 +306,27 @@ function invitationSubmitLabel(): string {
   if (isRefusalRecord.value) return 'Enregistrer le refus'
   return 'Envoyer l\'invitation'
 }
+
+function paperLikertValues(question: ApiQuestion): number[] {
+  if (!question.likertScale) return []
+  const minValue = question.likertScale.minValue ?? 1
+  return Array.from({ length: question.likertScale.points }, (_, index) => minValue + index)
+}
+
+function paperLikertLabel(question: ApiQuestion, value: number): string {
+  const scale = question.likertScale
+  if (!scale) return String(value)
+  const values = paperLikertValues(question)
+  const index = values.indexOf(value)
+  const lastIndex = values.length - 1
+  const neutralIndex = Math.floor(lastIndex / 2)
+
+  if (index <= 0) return scale.leftAnchor || `Valeur ${value}`
+  if (index === lastIndex) return scale.rightAnchor || `Valeur ${value}`
+  if (scale.neutralLabel && index === neutralIndex) return scale.neutralLabel
+  return `Valeur ${value}`
+}
+
 </script>
 
 <template>
@@ -208,12 +358,18 @@ function invitationSubmitLabel(): string {
       >
         <form @submit.prevent="submitInvitation">
           <label class="form-label fw-semibold" for="questionnaire-select">Questionnaire</label>
-          <select id="questionnaire-select" v-model="form.questionnaireVersionId" class="form-select mb-3" required>
+          <select id="questionnaire-select" v-model="form.questionnaireVersionId" class="form-select mb-2" required>
             <option value="" disabled>Choisir un questionnaire</option>
             <option v-for="questionnaire in questionnaires" :key="questionnaire.versionId" :value="questionnaire.versionId">
               {{ questionnaire.title }} · v{{ questionnaire.versionLabel }}
             </option>
           </select>
+          <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+            <button class="btn btn-outline-primary btn-sm" type="button" :disabled="!selectedQuestionnaire" @click="downloadBlankQuestionnairePdf">
+              Télécharger le PDF vierge
+            </button>
+            <span class="small" style="color: var(--chm-muted);">Support imprimable généré depuis la version publiée sélectionnée.</span>
+          </div>
 
           <label class="form-label fw-semibold" for="building-select">Bâtiment</label>
           <select id="building-select" v-model="form.buildingId" class="form-select mb-3" required>
@@ -295,6 +451,14 @@ function invitationSubmitLabel(): string {
             </template>
             <template v-else>
               <strong>{{ moderation.lastCreatedInvitation?.deliveryMode === 'refusal_record' ? 'Refus enregistré.' : moderation.lastCreatedInvitation?.deliveryMode === 'paper_form' ? 'Version papier enregistrée.' : 'Invitation affectée au terminal.' }}</strong>
+              <template v-if="moderation.lastCreatedInvitation?.deliveryMode === 'paper_form'">
+                <button class="btn btn-sm btn-outline-primary mt-2 me-2" type="button" @click="downloadInvitationQuestionnairePdf(moderation.lastCreatedInvitation)">
+                  Télécharger le PDF avec code
+                </button>
+                <button class="btn btn-sm btn-primary mt-2" type="button" @click="openPaperEntry(moderation.lastCreatedInvitation)">
+                  Saisir les réponses papier
+                </button>
+              </template>
               <template v-if="moderation.lastCreatedTerminalLink">
                 <a class="d-block text-break small mt-1" :href="moderation.lastCreatedTerminalLink">{{ moderation.lastCreatedTerminalLink }}</a>
                 <button class="btn btn-sm btn-outline-primary mt-2" type="button" @click="copyLink('terminal', moderation.lastCreatedTerminalLink)">
@@ -333,6 +497,138 @@ function invitationSubmitLabel(): string {
             </button>
           </div>
         </form>
+      </ModalPanel>
+
+      <ModalPanel
+        v-model="showPaperEntryModal"
+        title="Saisie des réponses papier"
+        eyebrow="Double saisie modérateur"
+        description="Recopiez uniquement les réponses inscrites sur le formulaire papier. La soumission sera verrouillée sous le code public, sans contact email/SMS."
+        size="xl"
+      >
+        <div v-if="paperEntryInvitation && paperEntryQuestionnaire">
+          <div class="alert alert-info rounded-3">
+            <strong>Code public : {{ paperEntryInvitation.publicCode }}</strong><br />
+            Questionnaire : {{ paperEntryQuestionnaire.title }} · Bâtiment : {{ paperEntryInvitation.building.label }}
+          </div>
+
+          <div v-if="paperEntryError" class="alert alert-danger rounded-3" role="alert">{{ paperEntryError }}</div>
+          <div v-if="paperEntrySuccess" class="alert alert-success rounded-3" role="status">{{ paperEntrySuccess }}</div>
+
+          <form @submit.prevent="submitPaperEntry">
+            <div v-for="group in paperEntryQuestionnaire.groups" :key="group.id" class="paper-entry-group mb-4">
+              <h3 class="h5 fw-bold">{{ group.title }}</h3>
+              <p v-if="group.description" class="small" style="color: var(--chm-muted);">{{ group.description }}</p>
+
+              <div v-for="question in group.questions" :key="question.id" class="question-row mb-3">
+                <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+                  <span class="badge-soft">{{ question.code }} · {{ question.responseType }}</span>
+                  <span v-if="question.isRequired" class="badge-soft warning">Obligatoire</span>
+                </div>
+                <label class="form-label fw-semibold">{{ question.label }}</label>
+                <p v-if="question.helperText" class="small" style="color: var(--chm-muted);">{{ question.helperText }}</p>
+
+                <div v-if="question.responseType === 'likert' && question.likertScale" class="likert-scale mb-2">
+                  <div v-for="value in paperLikertValues(question)" :key="value" class="likert-choice">
+                    <span class="likert-choice-label">{{ paperLikertLabel(question, value) }}</span>
+                    <button
+                      class="likert-dot border-0"
+                      :class="Number(paperQuestionValue(question)) === value ? 'active' : ''"
+                      type="button"
+                      @click="setPaperAnswer(question, value)"
+                    >
+                      {{ value }}
+                    </button>
+                  </div>
+                  <div v-if="question.likertScale.allowNotApplicable" class="likert-choice">
+                    <span class="likert-choice-label">Sans objet</span>
+                    <button
+                      class="btn btn-sm likert-extra-button"
+                      :class="paperQuestionValue(question) === 'not_applicable' ? 'btn-primary' : 'btn-outline-primary'"
+                      type="button"
+                      @click="setPaperAnswer(question, 'not_applicable')"
+                    >
+                      Non applicable
+                    </button>
+                  </div>
+                </div>
+
+                <div v-else-if="question.responseType === 'single_choice'" class="d-grid gap-2 mb-2">
+                  <button
+                    v-for="option in question.options"
+                    :key="option.id"
+                    class="btn text-start"
+                    :class="paperQuestionValue(question) === option.value ? 'btn-primary' : 'btn-outline-primary'"
+                    type="button"
+                    @click="setPaperAnswer(question, option.value)"
+                  >
+                    {{ option.label }}
+                  </button>
+                </div>
+
+                <div v-else-if="question.responseType === 'multiple_choice'" class="d-grid gap-2 mb-2">
+                  <button
+                    v-for="option in question.options"
+                    :key="option.id"
+                    class="btn text-start"
+                    :class="isPaperOptionSelected(question, option.value) ? 'btn-primary' : 'btn-outline-primary'"
+                    type="button"
+                    @click="togglePaperMultipleChoice(question, option.value)"
+                  >
+                    {{ option.label }}
+                  </button>
+                </div>
+
+                <input
+                  v-else-if="question.responseType === 'number'"
+                  class="form-control mb-2"
+                  type="number"
+                  :value="String(paperQuestionValue(question) ?? '')"
+                  @input="setPaperAnswer(question, ($event.target as HTMLInputElement).value)"
+                />
+
+                <input
+                  v-else-if="question.responseType === 'date'"
+                  class="form-control mb-2"
+                  type="date"
+                  :value="String(paperQuestionValue(question) ?? '')"
+                  @input="setPaperAnswer(question, ($event.target as HTMLInputElement).value)"
+                />
+
+                <div v-else-if="question.responseType === 'information'" class="alert alert-info rounded-3 mb-2">
+                  Information seulement, aucune réponse à saisir.
+                </div>
+
+                <textarea
+                  v-else
+                  class="form-control mb-2"
+                  rows="3"
+                  :value="String(paperQuestionValue(question) ?? '')"
+                  @input="setPaperAnswer(question, ($event.target as HTMLTextAreaElement).value)"
+                ></textarea>
+              </div>
+            </div>
+
+            <label class="form-label fw-semibold" for="paper-entry-note">Note interne optionnelle</label>
+            <textarea id="paper-entry-note" v-model="paperEntryNote" class="form-control mb-3" rows="2" maxlength="500" placeholder="Ex. formulaire relu avec le répondant, rature illisible à la question X…"></textarea>
+
+            <div v-if="missingPaperEntryRequiredQuestions.length" class="alert alert-warning rounded-3">
+              {{ missingPaperEntryRequiredQuestions.length }} question(s) obligatoire(s) restent sans réponse.
+            </div>
+
+            <div class="d-flex flex-wrap gap-2 justify-content-between">
+              <button class="btn btn-outline-primary" type="button" @click="paperEntryInvitation && downloadInvitationQuestionnairePdf(paperEntryInvitation)">
+                Retélécharger le PDF
+              </button>
+              <button class="btn btn-primary" type="submit" :disabled="moderation.status === 'creating'">
+                {{ moderation.status === 'creating' ? 'Verrouillage…' : 'Verrouiller la saisie papier' }}
+              </button>
+            </div>
+          </form>
+        </div>
+        <div v-else class="alert alert-warning rounded-3">
+          Questionnaire introuvable dans le catalogue local. Actualisez le catalogue ou vérifiez que la version est publiée.
+        </div>
       </ModalPanel>
 
       <div class="action-strip mb-4">
@@ -434,7 +730,11 @@ function invitationSubmitLabel(): string {
                 <td class="small">{{ invitation.building.label }}</td>
                 <td><span class="badge-soft" :class="statusTone(invitation.status)">{{ invitationStatusLabel(invitation) }}</span></td>
                 <td>
-                  <button v-if="canResend(invitation)" class="btn btn-sm btn-outline-primary" type="button" @click="resend(invitation)">Relancer</button>
+                  <div class="d-flex flex-wrap gap-2 justify-content-end">
+                    <button v-if="invitation.deliveryMode === 'paper_form'" class="btn btn-sm btn-outline-primary" type="button" @click="downloadInvitationQuestionnairePdf(invitation)">PDF</button>
+                    <button v-if="canEnterPaperResponses(invitation)" class="btn btn-sm btn-primary" type="button" @click="openPaperEntry(invitation)">Saisir</button>
+                    <button v-if="canResend(invitation)" class="btn btn-sm btn-outline-primary" type="button" @click="resend(invitation)">Relancer</button>
+                  </div>
                 </td>
               </tr>
               <tr v-if="!moderation.invitations.length">

@@ -446,6 +446,23 @@ export interface CreateInvitationResponse {
   terminalDispatchLink?: string | null
 }
 
+
+export interface SubmitPaperResponsesRequest {
+  answers: Array<{ questionId: string; value: unknown }>
+  moderatorNote?: string
+}
+
+export interface SubmitPaperResponsesResponse {
+  invitation: ApiInvitation
+  submission: {
+    id: string
+    publicCode: string
+    submittedAt: string
+    answerCount: number
+  }
+  warnings: Array<{ questionId: string; reason: string | null }>
+}
+
 export interface RespondentAnswer {
   id: string
   questionId: string

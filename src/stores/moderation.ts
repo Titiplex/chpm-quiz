@@ -10,6 +10,8 @@ import type {
   InvitationsResponse,
   RegisterTerminalDeviceRequest,
   RegisterTerminalDeviceResponse,
+  SubmitPaperResponsesRequest,
+  SubmitPaperResponsesResponse,
   TerminalDevicesResponse,
 } from '@shared/types/api'
 
@@ -125,6 +127,27 @@ export const useModerationStore = defineStore('moderation', () => {
     await fetchTerminalDevices()
   }
 
+  async function submitPaperResponses(invitationId: string, payload: SubmitPaperResponsesRequest): Promise<SubmitPaperResponsesResponse> {
+    status.value = 'creating'
+    error.value = null
+
+    try {
+      const response = await apiRequest<SubmitPaperResponsesResponse>(`/moderation/invitations/${invitationId}/paper-entry`, {
+        method: 'POST',
+        body: payload,
+      })
+      invitations.value = invitations.value.map((invitation) =>
+        invitation.id === invitationId ? response.invitation : invitation,
+      )
+      status.value = 'ready'
+      return response
+    } catch (caught) {
+      status.value = 'error'
+      error.value = caught instanceof Error ? caught.message : 'Saisie papier impossible.'
+      throw caught
+    }
+  }
+
   return {
     invitations,
     terminalDevices,
@@ -141,5 +164,6 @@ export const useModerationStore = defineStore('moderation', () => {
     createInvitation,
     registerTerminalDevice,
     resendInvitation,
+    submitPaperResponses,
   }
 })

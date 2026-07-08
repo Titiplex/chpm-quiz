@@ -182,3 +182,29 @@ Le panel statistiques distingue désormais les réponses effectives du suivi d'i
 - les versions papier sont enregistrées sans email, SMS, téléphone ni lien répondant.
 
 Ces données servent au pilotage opérationnel de la démo et restent agrégées dans le panel statistiques.
+
+## Questionnaires papier et saisie manuelle
+
+Le front permet maintenant au modérateur de produire un PDF imprimable depuis la version publiée sélectionnée dans `/moderation`. Le bouton **Télécharger le PDF vierge** génère un formulaire papier localement dans le navigateur, sans appel API et sans exposer de donnée d'identité.
+
+Pour une passation papier réelle, le modérateur choisit le canal **Version papier · sans email/SMS** lors de la création d'une invitation. La ligne reçoit un code public, puis le PDF peut être téléchargé avec ce code. Après récupération du formulaire complété, le modérateur clique sur **Saisir** dans l'historique des invitations, recopie les réponses et verrouille la saisie. La soumission créée est pseudonymisée par code public et alimente les statistiques comme une soumission normale.
+
+Endpoint backend ajouté pour le mode connecté :
+
+```text
+POST /moderation/invitations/:id/paper-entry
+```
+
+Le payload attendu est :
+
+```json
+{
+  "answers": [
+    { "questionId": "uuid-question", "value": 3 }
+  ],
+  "moderatorNote": "note interne optionnelle"
+}
+```
+
+Les réponses papier sont réservées au canal `paper_form`. Les lignes `refusal_record` ne créent jamais de soumission.
+
