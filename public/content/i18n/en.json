@@ -3,6 +3,8 @@
   "app.mode.connected": "Connected product",
   "app.githubPages": "GitHub Pages",
   "app.loading": "Loading…",
+  "i18n.language": "Interface language",
+  "i18n.language.short": "Language",
   "nav.static.moderator": "Moderator view",
   "nav.static.questionnaire": "Patient questionnaire",
   "nav.home": "Home",

@@ -1,11 +1,14 @@
 # Modifier les textes et traductions sans toucher au code
 
-Les textes mutualisés du front sont exposés dans des fichiers JSON éditables :
+Les textes mutualisés du front sont exposés dans des fichiers JSON éditables dans `public/content/i18n/` :
 
-- `public/content/i18n/fr.json` pour le français ;
-- `public/content/i18n/en.json` pour l’anglais.
+- `fr.json` pour le français, langue de référence et fallback obligatoire ;
+- `en.json` pour l’anglais ;
+- tout autre fichier `<code-langue>.json`, par exemple `de.json`, `es.json` ou `it.json`.
 
-Ces fichiers sont servis tels quels par le front. En production, il est donc possible de corriger un libellé, une consigne ou une traduction en remplaçant le fichier JSON publié, sans modifier les composants Vue ni recompiler l’application, si l’infrastructure permet de publier le dossier `public/content` indépendamment.
+Ces fichiers concernent uniquement l’interface globale : navigation, connexion, boutons communs, messages d’accès, etc. Ils ne traduisent pas le contenu clinique des questionnaires. Les questionnaires gardent leur propre workflow de version/traduction.
+
+Le front lit `public/content/i18n/locales.json` au démarrage pour savoir quelles langues afficher dans le sélecteur global. Ce manifeste est généré automatiquement à partir des fichiers JSON présents dans le dossier.
 
 ## Règles d’édition
 
@@ -34,17 +37,41 @@ npm run content:i18n:check
 
 La commande vérifie que :
 
-- `fr.json` et `en.json` existent ;
-- les deux fichiers contiennent les mêmes clés ;
+- `fr.json` existe comme langue de référence ;
+- tous les fichiers `*.json` du dossier, sauf `locales.json`, contiennent les mêmes clés que `fr.json` ;
 - chaque valeur est une chaîne non vide ;
 - les variables entre accolades sont conservées d’une langue à l’autre.
 
-## Ajouter une langue plus tard
+## Ajouter une langue
 
-Le socle actuel expose `fr` et `en`. Pour une troisième langue, il faudra :
+1. Copier `public/content/i18n/fr.json` vers un nouveau fichier nommé avec le code langue :
 
-1. créer `public/content/i18n/<langue>.json` ;
-2. ajouter le code langue dans `supportedLocales` côté `src/i18n/index.ts` ;
-3. ajouter cette langue dans `scripts/validate-i18n-content.mjs` ;
-4. traduire toutes les clés existantes ;
-5. lancer `npm run content:i18n:check`.
+   ```sh
+   cp public/content/i18n/fr.json public/content/i18n/de.json
+   ```
+
+2. Traduire uniquement les valeurs à droite des clés.
+3. Vérifier le fichier :
+
+   ```sh
+   npm run content:i18n:check
+   ```
+
+4. Régénérer la liste des langues visibles :
+
+   ```sh
+   npm run content:i18n:manifest
+   ```
+
+Le manifeste produit ressemble à ceci :
+
+```json
+{
+  "locales": [
+    { "code": "fr", "label": "French", "nativeLabel": "Français", "direction": "ltr" },
+    { "code": "de", "label": "German", "nativeLabel": "Deutsch", "direction": "ltr" }
+  ]
+}
+```
+
+Le serveur de développement et le build régénèrent ce manifeste automatiquement avant de démarrer ou de compiler. La commande manuelle sert surtout à contrôler le résultat avant commit.

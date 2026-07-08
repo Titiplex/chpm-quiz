@@ -1,19 +1,31 @@
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { readdirSync, readFileSync } from 'node:fs'
+import { basename, resolve } from 'node:path'
 
-const LOCALES = ['fr', 'en']
 const I18N_DIR = resolve('public/content/i18n')
+const REFERENCE_LOCALE = 'fr'
 
-function readCatalog(locale) {
-  const file = resolve(I18N_DIR, `${locale}.json`)
+function localeFiles() {
+  return readdirSync(I18N_DIR, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name)
+    .filter((name) => name.endsWith('.json') && name !== 'locales.json')
+    .sort((left, right) => {
+      if (left === `${REFERENCE_LOCALE}.json`) return -1
+      if (right === `${REFERENCE_LOCALE}.json`) return 1
+      return left.localeCompare(right)
+    })
+}
+
+function readCatalog(file) {
+  const path = resolve(I18N_DIR, file)
   try {
-    const payload = JSON.parse(readFileSync(file, 'utf8'))
+    const payload = JSON.parse(readFileSync(path, 'utf8'))
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       throw new Error('Le fichier doit contenir un objet JSON clé → texte.')
     }
     return payload
   } catch (error) {
-    throw new Error(`${file}: ${error instanceof Error ? error.message : String(error)}`)
+    throw new Error(`${path}: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 
@@ -21,12 +33,19 @@ function placeholders(value) {
   return [...String(value).matchAll(/\{([a-zA-Z0-9_]+)\}/g)].map((match) => match[1]).sort()
 }
 
-const catalogs = Object.fromEntries(LOCALES.map((locale) => [locale, readCatalog(locale)]))
-const referenceLocale = 'fr'
-const referenceKeys = Object.keys(catalogs[referenceLocale]).sort()
+const files = localeFiles()
+const locales = files.map((file) => basename(file, '.json'))
 const errors = []
 
-for (const locale of LOCALES) {
+if (!files.includes(`${REFERENCE_LOCALE}.json`)) {
+  errors.push(`${REFERENCE_LOCALE}.json est requis comme langue de référence.`)
+}
+
+const catalogs = Object.fromEntries(files.map((file) => [basename(file, '.json'), readCatalog(file)]))
+const referenceCatalog = catalogs[REFERENCE_LOCALE]
+const referenceKeys = referenceCatalog ? Object.keys(referenceCatalog).sort() : []
+
+for (const locale of locales) {
   const catalog = catalogs[locale]
   const keys = Object.keys(catalog).sort()
   const missing = referenceKeys.filter((key) => !keys.includes(key))
@@ -42,7 +61,7 @@ for (const locale of LOCALES) {
       continue
     }
 
-    const expectedPlaceholders = placeholders(catalogs[referenceLocale][key]).join(',')
+    const expectedPlaceholders = placeholders(referenceCatalog[key]).join(',')
     const actualPlaceholders = placeholders(value).join(',')
     if (expectedPlaceholders !== actualPlaceholders) {
       errors.push(`${locale}: placeholders incohérents pour ${key} ; attendu {${expectedPlaceholders}}, obtenu {${actualPlaceholders}}`)
@@ -55,5 +74,5 @@ if (errors.length) {
   for (const error of errors) console.error(`- ${error}`)
   process.exitCode = 1
 } else {
-  console.log(`Validation i18n OK (${referenceKeys.length} clés, ${LOCALES.length} langues).`)
+  console.log(`Validation i18n OK (${referenceKeys.length} clés, ${locales.length} langues : ${locales.join(', ')}).`)
 }

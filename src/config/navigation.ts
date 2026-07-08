@@ -9,56 +9,65 @@ export interface NavigationItem {
   description: string
 }
 
-export const navigationItems: NavigationItem[] = [
+interface NavigationDefinition {
+  labelKey: string
+  to: string
+  roles: UserRole[]
+  descriptionKey: string
+}
+
+const navigationDefinitions: NavigationDefinition[] = [
   {
-    label: t('nav.home'),
+    labelKey: 'nav.home',
     to: '/',
     roles: ['admin', 'moderator', 'site_manager', 'questionnaire_admin', 'analyst', 'technical_admin', 'judicial_officer'],
-    description: t('nav.home.description'),
+    descriptionKey: 'nav.home.description',
   },
   {
-    label: t('nav.projectAdministration'),
+    labelKey: 'nav.projectAdministration',
     to: '/administration-projet',
     roles: ['admin'],
-    description: t('nav.projectAdministration.description'),
+    descriptionKey: 'nav.projectAdministration.description',
   },
   {
-    label: t('nav.admin'),
+    labelKey: 'nav.admin',
     to: '/admin',
     roles: ['admin', 'questionnaire_admin'],
-    description: t('nav.admin.description'),
+    descriptionKey: 'nav.admin.description',
   },
   {
-    label: t('nav.moderation'),
+    labelKey: 'nav.moderation',
     to: '/moderation',
     roles: ['moderator', 'site_manager'],
-    description: t('nav.moderation.description'),
+    descriptionKey: 'nav.moderation.description',
   },
   {
-    label: t('nav.respondentPreview'),
+    labelKey: 'nav.respondentPreview',
     to: '/questionnaire',
     roles: ['admin', 'moderator', 'questionnaire_admin'],
-    description: t('nav.respondentPreview.description'),
+    descriptionKey: 'nav.respondentPreview.description',
   },
   {
-    label: t('nav.stats'),
+    labelKey: 'nav.stats',
     to: '/stats',
     roles: ['admin', 'site_manager', 'questionnaire_admin', 'analyst'],
-    description: t('nav.stats.description'),
+    descriptionKey: 'nav.stats.description',
   },
   {
-    label: t('nav.terminals'),
+    labelKey: 'nav.terminals',
     to: '/terminaux',
     roles: ['admin', 'site_manager', 'moderator', 'technical_admin'],
-    description: t('nav.terminals.description'),
+    descriptionKey: 'nav.terminals.description',
   },
   {
-    label: t('nav.rgpd'),
+    labelKey: 'nav.rgpd',
     to: '/rgpd',
     roles: ['admin', 'analyst', 'technical_admin', 'judicial_officer'],
-    description: t('nav.rgpd.description'),
+    descriptionKey: 'nav.rgpd.description',
   },
 ]
+
+export const navigationItems: NavigationItem[] = navigationDefinitions.map(resolveNavigationItem)
 
 export const defaultPathByRole: Record<UserRole, string> = {
   admin: '/administration-projet',
@@ -74,5 +83,16 @@ export const defaultPathByRole: Record<UserRole, string> = {
 }
 
 export function getVisibleNavigation(role: UserRole): NavigationItem[] {
-  return navigationItems.filter((item) => hasRoleAccess(role, item.roles))
+  return navigationDefinitions
+    .filter((item) => hasRoleAccess(role, item.roles))
+    .map(resolveNavigationItem)
+}
+
+function resolveNavigationItem(item: NavigationDefinition): NavigationItem {
+  return {
+    label: t(item.labelKey),
+    to: item.to,
+    roles: item.roles,
+    description: t(item.descriptionKey),
+  }
 }

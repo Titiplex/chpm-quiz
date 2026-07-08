@@ -85,13 +85,22 @@ HTTP-only.
 
 ## Textes et i18n éditables
 
-Les libellés mutualisés du front sont dans `public/content/i18n/fr.json` et `public/content/i18n/en.json`. Ces fichiers JSON peuvent être relus par un métier ou traducteur sans modifier les composants Vue.
+Les libellés mutualisés du front sont dans `public/content/i18n/*.json`. Le sélecteur global de langue est visible dans la barre supérieure pour tous les profils, y compris avant connexion et sur GitHub Pages.
 
-Validation :
+Pour ajouter une langue sans modifier le code Vue/TypeScript :
+
+1. copier `public/content/i18n/fr.json` vers `public/content/i18n/<code>.json`, par exemple `de.json` ;
+2. traduire uniquement les valeurs ;
+3. lancer la validation.
+
+Validation et manifeste dynamique :
 
 ```sh
 npm run content:i18n:check
+npm run content:i18n:manifest
 ```
+
+Le build et le serveur de dev régénèrent automatiquement `public/content/i18n/locales.json`. C’est ce manifeste qui rend les langues visibles dans l’interface ; personne n’a besoin d’ajouter le code langue dans les composants.
 
 La procédure d’édition est documentée dans `docs/content/i18n-editing.md`.
 

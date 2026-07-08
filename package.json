@@ -48,7 +48,11 @@
     "preprod:down": "docker compose -f docker-compose.preprod.yml --env-file .env.preprod down",
     "preprod:logs": "docker compose -f docker-compose.preprod.yml --env-file .env.preprod logs -f --tail=200",
     "backup:encrypted": "docker compose -f docker-compose.preprod.yml --env-file .env.preprod run --rm encrypted-backup",
-    "content:i18n:check": "node scripts/validate-i18n-content.mjs"
+    "content:i18n:check": "node scripts/validate-i18n-content.mjs",
+    "content:i18n:manifest": "node scripts/generate-i18n-manifest.mjs",
+    "predev": "npm run content:i18n:manifest",
+    "predev:frontend": "npm run content:i18n:manifest",
+    "prebuild-only": "npm run content:i18n:manifest"
   },
   "dependencies": {
     "bootstrap": "5.3.8",

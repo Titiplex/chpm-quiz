@@ -1,0 +1,16 @@
+{
+  "locales": [
+    {
+      "code": "fr",
+      "label": "French",
+      "nativeLabel": "Français",
+      "direction": "ltr"
+    },
+    {
+      "code": "en",
+      "label": "English",
+      "nativeLabel": "English",
+      "direction": "ltr"
+    }
+  ]
+}

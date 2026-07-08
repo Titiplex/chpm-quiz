@@ -129,6 +129,35 @@ body {
   font-weight: 700;
 }
 
+
+.language-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.25rem 0.35rem 0.25rem 0.65rem;
+  border: 1px solid var(--chm-line);
+  border-radius: 999px;
+  background: #fff;
+}
+
+.language-switcher-label {
+  color: var(--chm-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.language-switcher .form-select {
+  width: auto;
+  min-width: 7.5rem;
+  border: 0;
+  color: var(--chm-text);
+  font-weight: 700;
+  background-color: transparent;
+  box-shadow: none;
+}
+
 /* ---- User Menu ------------------------------------------------------------ */
 .user-menu {
   display: inline-flex;
@@ -1119,6 +1148,17 @@ details:not([open]) > .builder-disclosure-summary::after {
   .hero-card,
   .question-row {
     border-radius: var(--chm-radius-md);
+  }
+
+
+  .language-switcher {
+    width: 100%;
+    justify-content: space-between;
+    border-radius: var(--chm-radius-md);
+  }
+
+  .language-switcher .form-select {
+    width: 100%;
   }
 
   .user-menu,
