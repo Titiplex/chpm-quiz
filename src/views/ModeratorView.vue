@@ -26,6 +26,7 @@ const form = reactive({
   questionnaireVersionId: '',
   buildingId: '',
   email: 'personne.exemple@domaine.org',
+  phone: '+33600000000',
   deliveryMode: 'email_simulation' as InvitationDeliveryMode,
   terminalDeviceId: '',
   assistanceMode: 'none' as AssistanceMode,
@@ -77,7 +78,8 @@ async function submitInvitation() {
   await moderation.createInvitation({
     questionnaireVersionId: form.questionnaireVersionId,
     buildingId: form.buildingId,
-    email: form.deliveryMode === 'onsite_terminal' ? undefined : form.email,
+    email: form.deliveryMode === 'email' || form.deliveryMode === 'email_simulation' ? form.email : undefined,
+    phone: form.deliveryMode === 'sms' || form.deliveryMode === 'sms_simulation' ? form.phone : undefined,
     deliveryMode: form.deliveryMode,
     terminalDeviceId: form.deliveryMode === 'onsite_terminal' ? form.terminalDeviceId : undefined,
     assistanceMode: form.assistanceMode,
@@ -131,6 +133,8 @@ function deliveryLabel(mode: InvitationDeliveryMode): string {
   return {
     email: 'Email',
     email_simulation: 'Email simulé',
+    sms: 'SMS',
+    sms_simulation: 'SMS simulé',
     onsite_terminal: 'Terminal',
   }[mode]
 }
@@ -152,7 +156,7 @@ function canResend(invitation: ApiInvitation): boolean {
     <div class="container-fluid px-4 px-xl-5">
       <PageHeader
         title="Modération"
-        :description="appConfig.demoMode ? 'Invitez des répondants par email ou affectez une invitation à un terminal hospitalier.' : 'Invitez des répondants par email ou affectez une invitation à un terminal hospitalier de votre bâtiment.'"
+        :description="appConfig.demoMode ? 'Invitez des répondants par email, par SMS ou affectez une invitation à un terminal hospitalier.' : 'Invitez des répondants par email, par SMS ou affectez une invitation à un terminal hospitalier de votre bâtiment.'"
         :badge="appConfig.demoMode ? 'Démo' : 'Connecté'"
       >
         <template #actions>
@@ -171,7 +175,7 @@ function canResend(invitation: ApiInvitation): boolean {
         v-model="showInvitationModal"
         title="Nouvelle invitation"
         eyebrow="Diffusion contrôlée"
-        description="Le formulaire est isolé de la page pour éviter d’écraser le suivi quotidien. Aucun email n’est affiché dans les tableaux métier."
+        description="Le formulaire est isolé de la page pour éviter d’écraser le suivi quotidien. Aucun email ni téléphone n’est affiché en clair dans les tableaux métier."
         size="lg"
       >
         <form @submit.prevent="submitInvitation">
@@ -195,6 +199,8 @@ function canResend(invitation: ApiInvitation): boolean {
           <select id="delivery-mode" v-model="form.deliveryMode" class="form-select mb-3" required>
             <option value="email_simulation">Email simulé</option>
             <option value="email">Email réel</option>
+            <option value="sms_simulation">SMS simulé</option>
+            <option value="sms">SMS réel</option>
             <option value="onsite_terminal">Terminal hospitalier</option>
           </select>
 
@@ -215,9 +221,15 @@ function canResend(invitation: ApiInvitation): boolean {
             </select>
           </template>
 
-          <template v-else>
+          <template v-else-if="form.deliveryMode === 'email' || form.deliveryMode === 'email_simulation'">
             <label class="form-label fw-semibold" for="respondent-email">Email du répondant</label>
             <input id="respondent-email" v-model="form.email" class="form-control mb-4" type="email" required />
+          </template>
+
+          <template v-else>
+            <label class="form-label fw-semibold" for="respondent-phone">Téléphone du répondant</label>
+            <input id="respondent-phone" v-model="form.phone" class="form-control mb-2" type="tel" inputmode="tel" autocomplete="tel" placeholder="+33600000000" required />
+            <p class="small mb-4" style="color: var(--chm-muted);">Format recommandé : E.164, par exemple +33600000000. Le numéro est conservé dans le coffre identité, pas dans les tableaux métier.</p>
           </template>
 
           <div class="row g-3 mb-4">
@@ -236,7 +248,7 @@ function canResend(invitation: ApiInvitation): boolean {
           </div>
 
           <button class="btn btn-primary w-100 btn-lg" :disabled="moderation.status === 'creating' || !questionnaires.length || (form.deliveryMode === 'onsite_terminal' && !form.terminalDeviceId)">
-            {{ moderation.status === 'creating' ? 'Envoi…' : form.deliveryMode === 'onsite_terminal' ? 'Envoyer au terminal' : 'Envoyer l\'invitation' }}
+            {{ moderation.status === 'creating' ? 'Envoi…' : form.deliveryMode === 'onsite_terminal' ? 'Envoyer au terminal' : form.deliveryMode === 'sms' || form.deliveryMode === 'sms_simulation' ? 'Envoyer le SMS' : 'Envoyer l\'invitation' }}
           </button>
 
           <div v-if="moderation.lastCreatedLink || moderation.lastCreatedTerminalLink || moderation.lastCreatedInvitation" class="alert alert-info rounded-3 mt-3 mb-0">
@@ -301,10 +313,11 @@ function canResend(invitation: ApiInvitation): boolean {
       </div>
 
       <div class="row g-3 mb-4">
-        <div class="col-md-3"><KpiCard label="Invitations" :value="String(total.sent)" icon="📨" /></div>
-        <div class="col-md-3"><KpiCard label="Soumises" :value="String(total.submitted)" tone="success" icon="✅" /></div>
-        <div class="col-md-3"><KpiCard label="Terminal" :value="String(total.onsiteTerminal)" tone="warning" icon="🖥️" /></div>
-        <div class="col-md-3"><KpiCard label="Taux" :value="responseRate" /></div>
+        <div class="col-md-6 col-xl"><KpiCard label="Invitations" :value="String(total.sent)" icon="📨" /></div>
+        <div class="col-md-6 col-xl"><KpiCard label="Soumises" :value="String(total.submitted)" tone="success" icon="✅" /></div>
+        <div class="col-md-6 col-xl"><KpiCard label="SMS" :value="String(total.sms)" tone="warning" icon="📱" /></div>
+        <div class="col-md-6 col-xl"><KpiCard label="Terminal" :value="String(total.onsiteTerminal)" tone="warning" icon="🖥️" /></div>
+        <div class="col-md-6 col-xl"><KpiCard label="Taux" :value="responseRate" /></div>
       </div>
 
       <div v-if="canAdministerTerminals" class="action-strip mb-4">
@@ -383,7 +396,7 @@ function canResend(invitation: ApiInvitation): boolean {
               <tr v-for="invitation in moderation.invitations" :key="invitation.id">
                 <td class="fw-semibold" style="font-family: monospace; font-size:0.88rem;">{{ invitation.publicCode }}</td>
                 <td><span class="badge-soft">{{ deliveryLabel(invitation.deliveryMode) }}</span></td>
-                <td class="small" style="color: var(--chm-muted);">{{ invitation.deliveryMode === 'onsite_terminal' ? invitation.terminalDevice?.label ?? '—' : invitation.maskedEmail ?? '—' }}</td>
+                <td class="small" style="color: var(--chm-muted);">{{ invitation.deliveryMode === 'onsite_terminal' ? invitation.terminalDevice?.label ?? '—' : invitation.deliveryMode === 'sms' || invitation.deliveryMode === 'sms_simulation' ? invitation.maskedPhone ?? '—' : invitation.maskedEmail ?? '—' }}</td>
                 <td class="small">{{ invitation.questionnaireTitle }}</td>
                 <td class="small">{{ invitation.building.label }}</td>
                 <td><span class="badge-soft" :class="statusTone(invitation.status)">{{ statusLabel(invitation.status) }}</span></td>

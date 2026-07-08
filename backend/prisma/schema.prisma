@@ -74,6 +74,8 @@ enum ResponseSessionStatus {
 enum InvitationDeliveryMode {
   email
   email_simulation
+  sms
+  sms_simulation
   onsite_terminal
   @@schema("public")
 }
@@ -452,18 +454,24 @@ model IdentityVaultEntry {
   invitationId           String     @unique @db.Uuid
   invitation             Invitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
   uniqueCode             String     @unique @map("publicCode")
-  encryptedEmail         String     @map("emailCiphertext")
-  emailHash              String
+  contactChannel         String     @default("email")
+  encryptedEmail         String?    @map("emailCiphertext")
+  emailHash              String?
+  encryptedPhone         String?    @map("phoneCiphertext")
+  phoneHash              String?
   questionnaireVersionId String     @db.Uuid
   buildingId             String     @db.Uuid
   createdByUserId        String?    @db.Uuid
   createdAt              DateTime   @default(now())
   lastEmailSentAt        DateTime?
+  lastSmsSentAt          DateTime?
   deletionScheduledAt    DateTime?
   deletedAt              DateTime?
 
   @@map("email_identities")
+  @@index([contactChannel])
   @@index([emailHash])
+  @@index([phoneHash])
   @@index([uniqueCode])
   @@schema("identity")
 }

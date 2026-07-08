@@ -9,6 +9,7 @@ import { AccessTokenService } from '../security/access-token.service'
 import { IdentityVaultService } from '../identity-vault/identity-vault.service'
 import { MailQueueService } from '../mail/mail-queue.service'
 import { PrismaService } from '../prisma/prisma.service'
+import { SmsQueueService } from '../sms/sms-queue.service'
 import { CreateInvitationDto } from './dto/create-invitation.dto'
 import { RegisterTerminalDeviceDto } from './dto/register-terminal-device.dto'
 
@@ -22,6 +23,7 @@ export class ModerationService {
     private readonly accessTokenService: AccessTokenService,
     private readonly identityVaultService: IdentityVaultService,
     private readonly mailQueue: MailQueueService,
+    private readonly smsQueue: SmsQueueService,
     private readonly auditService: AuditService,
     private readonly config: ConfigService,
   ) {}
@@ -217,14 +219,25 @@ export class ModerationService {
       }
     }
 
-    if (!dto.email) {
+    const isSms = deliveryMode === 'sms' || deliveryMode === 'sms_simulation'
+    const isEmail = deliveryMode === 'email' || deliveryMode === 'email_simulation'
+
+    if (isEmail && !dto.email) {
       throw new BadRequestException('Une adresse email est requise pour ce mode d’envoi')
     }
 
-    const duplicate = await this.identityVaultService.hasExistingIdentityForEmail(dto.questionnaireVersionId, dto.email)
+    if (isSms && !dto.phone) {
+      throw new BadRequestException('Un numéro de téléphone est requis pour ce mode d’envoi')
+    }
+
+    const duplicate = isSms
+      ? await this.identityVaultService.hasExistingIdentityForPhone(dto.questionnaireVersionId, dto.phone!)
+      : await this.identityVaultService.hasExistingIdentityForEmail(dto.questionnaireVersionId, dto.email!)
 
     if (duplicate) {
-      throw new BadRequestException('Une invitation active existe déjà pour cet email et cette version')
+      throw new BadRequestException(isSms
+        ? 'Une invitation active existe déjà pour ce téléphone et cette version'
+        : 'Une invitation active existe déjà pour cet email et cette version')
     }
 
     const invitation = await this.prisma.invitation.create({
@@ -247,32 +260,61 @@ export class ModerationService {
     })
 
     try {
-      await this.identityVaultService.createEmailIdentity({
-        invitationId: invitation.id,
-        publicCode,
-        email: dto.email,
-        questionnaireVersionId: dto.questionnaireVersionId,
-        buildingId: dto.buildingId,
-        createdByUserId: user.id,
-        request,
-      })
+      if (isSms) {
+        await this.identityVaultService.createPhoneIdentity({
+          invitationId: invitation.id,
+          publicCode,
+          phone: dto.phone!,
+          questionnaireVersionId: dto.questionnaireVersionId,
+          buildingId: dto.buildingId,
+          createdByUserId: user.id,
+          request,
+        })
 
-      const emailJobId = this.mailQueue.enqueue(this.buildInvitationMail({
-        invitation,
-        recipientEmail: dto.email,
-        token,
-        template: 'invitation',
-      }))
+        const smsJobId = this.smsQueue.enqueue(this.buildInvitationSms({
+          invitation,
+          recipientPhone: dto.phone!,
+          token,
+          template: 'invitation',
+        }))
 
-      await this.identityVaultService.recordDeliveryEvent({
-        invitationId: invitation.id,
-        publicCode,
-        eventType: deliveryMode === 'email' ? 'invitation_email_queued' : 'dev_invitation_email_queued',
-        metadata: {
-          note: deliveryMode === 'email' ? 'Invitation transmise à la queue email' : 'Invitation email simulée en développement',
-          jobId: emailJobId,
-        },
-      })
+        await this.identityVaultService.recordDeliveryEvent({
+          invitationId: invitation.id,
+          publicCode,
+          eventType: deliveryMode === 'sms' ? 'invitation_sms_queued' : 'dev_invitation_sms_queued',
+          metadata: {
+            note: deliveryMode === 'sms' ? 'Invitation transmise à la queue SMS' : 'Invitation SMS simulée en développement',
+            jobId: smsJobId,
+          },
+        })
+      } else {
+        await this.identityVaultService.createEmailIdentity({
+          invitationId: invitation.id,
+          publicCode,
+          email: dto.email!,
+          questionnaireVersionId: dto.questionnaireVersionId,
+          buildingId: dto.buildingId,
+          createdByUserId: user.id,
+          request,
+        })
+
+        const emailJobId = this.mailQueue.enqueue(this.buildInvitationMail({
+          invitation,
+          recipientEmail: dto.email!,
+          token,
+          template: 'invitation',
+        }))
+
+        await this.identityVaultService.recordDeliveryEvent({
+          invitationId: invitation.id,
+          publicCode,
+          eventType: deliveryMode === 'email' ? 'invitation_email_queued' : 'dev_invitation_email_queued',
+          metadata: {
+            note: deliveryMode === 'email' ? 'Invitation transmise à la queue email' : 'Invitation email simulée en développement',
+            jobId: emailJobId,
+          },
+        })
+      }
     } catch (error) {
       await this.prisma.invitation.delete({ where: { id: invitation.id } }).catch(() => undefined)
       throw error
@@ -294,8 +336,13 @@ export class ModerationService {
       },
     })
 
+    const hydratedInvitation = await this.prisma.invitation.findUnique({
+      where: { id: invitation.id },
+      include: this.invitationInclude(),
+    })
+
     return {
-      invitation: this.toInvitationDto(invitation),
+      invitation: this.toInvitationDto(hydratedInvitation ?? invitation),
       accessToken: this.canExposeRespondentToken() ? token : null,
       devAccessLink: this.canExposeRespondentToken() ? this.respondentLink(token) : null,
       terminalDispatchLink: null,
@@ -320,6 +367,7 @@ export class ModerationService {
     }
 
     const isTerminal = invitation.deliveryMode === 'onsite_terminal'
+    const isSms = invitation.deliveryMode === 'sms' || invitation.deliveryMode === 'sms_simulation'
     const refreshedToken = isTerminal ? null : this.accessTokenService.create(invitation.publicCode)
     const updated = await this.prisma.invitation.update({
       where: { id: invitation.id },
@@ -332,28 +380,41 @@ export class ModerationService {
       include: this.invitationInclude(),
     })
 
-    let emailJobId: string | null = null
+    let deliveryJobId: string | null = null
     if (!isTerminal && refreshedToken) {
-      const identity = await this.identityVaultService.loadOutboundEmailForInvitation(invitation.id)
-      if (!identity) {
-        throw new BadRequestException('Relance impossible : identité email introuvable ou supprimée')
+      if (isSms) {
+        const identity = await this.identityVaultService.loadOutboundPhoneForInvitation(invitation.id)
+        if (!identity) {
+          throw new BadRequestException('Relance impossible : identité téléphone introuvable ou supprimée')
+        }
+        deliveryJobId = this.smsQueue.enqueue(this.buildInvitationSms({
+          invitation: updated,
+          recipientPhone: identity.phone,
+          token: refreshedToken.token,
+          template: 'reminder',
+        }))
+      } else {
+        const identity = await this.identityVaultService.loadOutboundEmailForInvitation(invitation.id)
+        if (!identity) {
+          throw new BadRequestException('Relance impossible : identité email introuvable ou supprimée')
+        }
+        deliveryJobId = this.mailQueue.enqueue(this.buildInvitationMail({
+          invitation: updated,
+          recipientEmail: identity.email,
+          token: refreshedToken.token,
+          template: 'reminder',
+        }))
       }
-      emailJobId = this.mailQueue.enqueue(this.buildInvitationMail({
-        invitation: updated,
-        recipientEmail: identity.email,
-        token: refreshedToken.token,
-        template: 'reminder',
-      }))
     }
 
     await this.identityVaultService.recordDeliveryEvent({
       invitationId: invitation.id,
       publicCode: invitation.publicCode,
-      eventType: isTerminal ? 'terminal_invitation_redispatched' : 'invitation_reminder_queued',
+      eventType: isTerminal ? 'terminal_invitation_redispatched' : isSms ? 'invitation_sms_reminder_queued' : 'invitation_reminder_queued',
       metadata: {
-        note: isTerminal ? 'Invitation réattribuée au terminal hospitalier' : 'Relance email transmise à la queue',
+        note: isTerminal ? 'Invitation réattribuée au terminal hospitalier' : isSms ? 'Relance SMS transmise à la queue' : 'Relance email transmise à la queue',
         terminalDeviceId: invitation.terminalDeviceId ?? undefined,
-        jobId: emailJobId ?? undefined,
+        jobId: deliveryJobId ?? undefined,
       },
     })
 
@@ -411,14 +472,26 @@ export class ModerationService {
       })
 
       if (invitation.deliveryMode !== 'onsite_terminal') {
-        const identity = await this.identityVaultService.loadOutboundEmailForInvitation(invitation.id)
-        if (identity) {
-          this.mailQueue.enqueue(this.buildInvitationMail({
-            invitation: { ...invitation, status: 'expired' },
-            recipientEmail: identity.email,
-            token: null,
-            template: 'expiration',
-          }))
+        if (invitation.deliveryMode === 'sms' || invitation.deliveryMode === 'sms_simulation') {
+          const identity = await this.identityVaultService.loadOutboundPhoneForInvitation(invitation.id)
+          if (identity) {
+            this.smsQueue.enqueue(this.buildInvitationSms({
+              invitation: { ...invitation, status: 'expired' },
+              recipientPhone: identity.phone,
+              token: null,
+              template: 'expiration',
+            }))
+          }
+        } else {
+          const identity = await this.identityVaultService.loadOutboundEmailForInvitation(invitation.id)
+          if (identity) {
+            this.mailQueue.enqueue(this.buildInvitationMail({
+              invitation: { ...invitation, status: 'expired' },
+              recipientEmail: identity.email,
+              token: null,
+              template: 'expiration',
+            }))
+          }
         }
       }
     }
@@ -440,6 +513,9 @@ export class ModerationService {
     return {
       building: true,
       terminalDevice: { include: { building: true } },
+      identityVaultEntry: {
+        select: { encryptedEmail: true, encryptedPhone: true },
+      },
       responseSession: {
         include: {
           submission: true,
@@ -456,7 +532,8 @@ export class ModerationService {
       status: invitation.status,
       deliveryMode: invitation.deliveryMode ?? 'email_simulation',
       assistanceMode: invitation.assistanceMode ?? 'none',
-      maskedEmail: null,
+      maskedEmail: invitation.identityVaultEntry?.encryptedEmail ? 'email masqué' : null,
+      maskedPhone: invitation.identityVaultEntry?.encryptedPhone ? 'téléphone masqué' : null,
       questionnaireVersionId: invitation.questionnaireVersionId,
       questionnaireTitle: invitation.questionnaireVersion?.questionnaire?.title ?? null,
       versionLabel: invitation.questionnaireVersion?.versionLabel ?? null,
@@ -485,18 +562,53 @@ export class ModerationService {
   }
 
 
-  private resolveDeliveryMode(deliveryMode?: string): 'email' | 'email_simulation' | 'onsite_terminal' {
+  private resolveDeliveryMode(deliveryMode?: string): 'email' | 'email_simulation' | 'sms' | 'sms_simulation' | 'onsite_terminal' {
     const resolved = deliveryMode ?? (this.config.get<string>('NODE_ENV') === 'production' ? 'email' : 'email_simulation')
 
-    if (resolved === 'email_simulation' && this.config.get<string>('NODE_ENV') === 'production') {
-      throw new BadRequestException('Le mode email_simulation est interdit en production')
+    if ((resolved === 'email_simulation' || resolved === 'sms_simulation') && this.config.get<string>('NODE_ENV') === 'production') {
+      throw new BadRequestException('Les modes de simulation sont interdits en production')
     }
 
-    if (resolved === 'email' || resolved === 'email_simulation' || resolved === 'onsite_terminal') {
+    if (resolved === 'email' || resolved === 'email_simulation' || resolved === 'sms' || resolved === 'sms_simulation' || resolved === 'onsite_terminal') {
       return resolved
     }
 
     throw new BadRequestException('Mode de livraison invalide')
+  }
+
+  private buildInvitationSms(input: { invitation: any; recipientPhone: string; token: string | null; template: 'invitation' | 'reminder' | 'expiration' }) {
+    const questionnaireTitle = input.invitation.questionnaireVersion?.questionnaire?.title ?? 'questionnaire CHPM'
+    const link = input.token ? this.respondentLink(input.token) : null
+    const textByTemplate = {
+      invitation: [
+        `CHPM : vous êtes invité(e) à répondre au questionnaire ${questionnaireTitle}.`,
+        `Code ${input.invitation.publicCode}.`,
+        link ? `Lien sécurisé : ${link}` : 'Lien indisponible.',
+        `Expiration : ${new Date(input.invitation.expiresAt).toLocaleString('fr-FR')}.`,
+      ],
+      reminder: [
+        `CHPM : rappel pour le questionnaire ${questionnaireTitle}.`,
+        `Code ${input.invitation.publicCode}.`,
+        link ? `Lien : ${link}` : 'Lien indisponible.',
+      ],
+      expiration: [
+        `CHPM : l'invitation au questionnaire ${questionnaireTitle} est expirée.`,
+        `Code ${input.invitation.publicCode}.`,
+      ],
+    }
+
+    return {
+      template: input.template,
+      to: { phone: input.recipientPhone },
+      text: textByTemplate[input.template].join(' '),
+      invitationId: input.invitation.id,
+      publicCode: input.invitation.publicCode,
+      metadata: {
+        questionnaireVersionId: input.invitation.questionnaireVersionId,
+        deliveryMode: input.invitation.deliveryMode,
+        expiresAt: input.invitation.expiresAt?.toISOString?.() ?? String(input.invitation.expiresAt),
+      },
+    }
   }
 
   private buildInvitationMail(input: { invitation: any; recipientEmail: string; token: string | null; template: 'invitation' | 'reminder' | 'expiration' }) {

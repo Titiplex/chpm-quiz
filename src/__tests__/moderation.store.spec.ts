@@ -32,7 +32,7 @@ describe('useModerationStore', () => {
 
     expect(store.status).toBe('ready')
     expect(store.terminalDevices).toEqual([terminalDeviceFixture])
-    expect(store.totals).toEqual({ sent: 3, submitted: 1, pending: 1, blocked: 1, onsiteTerminal: 1 })
+    expect(store.totals).toEqual({ sent: 3, submitted: 1, pending: 1, blocked: 1, onsiteTerminal: 1, sms: 0 })
   })
 
   it('creates invitations, tracks launch links and refreshes terminal inventory', async () => {

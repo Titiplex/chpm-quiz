@@ -31,6 +31,7 @@ export const useModerationStore = defineStore('moderation', () => {
     pending: invitations.value.filter((invitation) => ['sent', 'opened', 'in_progress', 'draft'].includes(invitation.status)).length,
     blocked: invitations.value.filter((invitation) => ['blocked', 'expired', 'cancelled'].includes(invitation.status)).length,
     onsiteTerminal: invitations.value.filter((invitation) => invitation.deliveryMode === 'onsite_terminal').length,
+    sms: invitations.value.filter((invitation) => invitation.deliveryMode === 'sms' || invitation.deliveryMode === 'sms_simulation').length,
   }))
 
   async function fetchInvitations(): Promise<void> {

@@ -122,6 +122,7 @@ export const invitationFixture: ApiInvitation = {
   deliveryMode: 'email_simulation',
   assistanceMode: 'none',
   maskedEmail: 'p***@example.test',
+  maskedPhone: null,
   questionnaireVersionId: 'version-1',
   questionnaireTitle: questionnaireFixture.title,
   versionLabel: '1.0',

@@ -1381,8 +1381,10 @@ function createInvitation(payload: CreateInvitationRequest): CreateInvitationRes
   if (deliveryMode === 'onsite_terminal') {
     if (!terminalDevice) throw new Error('Terminal de démonstration introuvable.')
     if (terminalDevice.building.id !== building.id) throw new Error('Le terminal choisi est hors du bâtiment sélectionné.')
-  } else if (!payload.email) {
+  } else if ((deliveryMode === 'email' || deliveryMode === 'email_simulation') && !payload.email) {
     throw new Error('Adresse email requise pour une invitation email.')
+  } else if ((deliveryMode === 'sms' || deliveryMode === 'sms_simulation') && !payload.phone) {
+    throw new Error('Numéro de téléphone requis pour une invitation SMS.')
   }
 
   const invitations = getInvitations()
@@ -1396,7 +1398,8 @@ function createInvitation(payload: CreateInvitationRequest): CreateInvitationRes
     status: 'sent',
     deliveryMode,
     assistanceMode,
-    maskedEmail: deliveryMode === 'onsite_terminal' ? null : maskEmail(payload.email),
+    maskedEmail: deliveryMode === 'email' || deliveryMode === 'email_simulation' ? maskEmail(payload.email) : null,
+    maskedPhone: deliveryMode === 'sms' || deliveryMode === 'sms_simulation' ? maskPhone(payload.phone) : null,
     questionnaireVersionId: payload.questionnaireVersionId,
     questionnaireTitle: questionnaire.title,
     versionLabel: questionnaire.versionLabel,
@@ -2068,6 +2071,7 @@ function createInitialInvitations(): ApiInvitation[] {
     deliveryMode: index === 5 ? 'onsite_terminal' : 'email_simulation',
     assistanceMode: index === 5 ? 'technical_help' : 'none',
     maskedEmail: index === 5 ? null : `r***.${index + 1}@example.org`,
+    maskedPhone: null,
     questionnaireVersionId: CHPM_VERSION_ID,
     questionnaireTitle: 'Questionnaire CHPM',
     versionLabel: '1.4',
@@ -2090,6 +2094,7 @@ function createInitialInvitations(): ApiInvitation[] {
       deliveryMode: 'onsite_terminal',
       assistanceMode: 'none',
       maskedEmail: null,
+      maskedPhone: null,
       questionnaireVersionId: ITQ_VERSION_ID,
       questionnaireTitle: 'International Trauma Questionnaire (ITQ)',
       versionLabel: '1.0-cn2r',
@@ -2110,6 +2115,7 @@ function createInitialInvitations(): ApiInvitation[] {
       deliveryMode: 'email_simulation',
       assistanceMode: 'none',
       maskedEmail: 'i***@example.org',
+      maskedPhone: null,
       questionnaireVersionId: ITQ_VERSION_ID,
       questionnaireTitle: 'International Trauma Questionnaire (ITQ)',
       versionLabel: '1.0-cn2r',
@@ -2130,9 +2136,31 @@ function createInitialInvitations(): ApiInvitation[] {
       deliveryMode: 'email_simulation',
       assistanceMode: 'none',
       maskedEmail: 'l***@example.org',
+      maskedPhone: null,
       questionnaireVersionId: LEC5_VERSION_ID,
       questionnaireTitle: 'Inventaire des événements de vie — LEC-5',
       versionLabel: '1.0-papier-demo',
+      building: mtl,
+      terminalDevice: null,
+      terminalDispatchedAt: null,
+      expiresAt: addDaysIso(30),
+      sentAt: nowIso(),
+      openedAt: null,
+      startedAt: null,
+      submittedAt: null,
+      responseStatus: null,
+    },
+    {
+      id: 'demo-invitation-sms-open',
+      publicCode: 'SMS-0001',
+      status: 'sent',
+      deliveryMode: 'sms_simulation',
+      assistanceMode: 'none',
+      maskedEmail: null,
+      maskedPhone: '•••• 0000',
+      questionnaireVersionId: ITQ_VERSION_ID,
+      questionnaireTitle: 'International Trauma Questionnaire (ITQ)',
+      versionLabel: '1.0-cn2r',
       building: mtl,
       terminalDevice: null,
       terminalDispatchedAt: null,
@@ -2150,6 +2178,7 @@ function createInitialInvitations(): ApiInvitation[] {
       deliveryMode: 'email_simulation',
       assistanceMode: 'none',
       maskedEmail: 'p***@example.org',
+      maskedPhone: null,
       questionnaireVersionId: CHPM_VERSION_ID,
       questionnaireTitle: 'Questionnaire CHPM',
       versionLabel: '1.4',
@@ -2170,6 +2199,7 @@ function createInitialInvitations(): ApiInvitation[] {
       deliveryMode: 'email_simulation',
       assistanceMode: 'none',
       maskedEmail: 'e***@example.org',
+      maskedPhone: null,
       questionnaireVersionId: CHPM_VERSION_ID,
       questionnaireTitle: 'Questionnaire CHPM',
       versionLabel: '1.4',
@@ -2828,6 +2858,17 @@ function createStats(questionnaireId: string): StatsResponse['stats'] {
         submissionRate: 83,
       },
       {
+        mode: 'sms_simulation',
+        label: 'SMS simulé',
+        invited: 1,
+        opened: 1,
+        started: 1,
+        submitted: 1,
+        openingRate: 100,
+        startRate: 100,
+        submissionRate: 100,
+      },
+      {
         mode: 'onsite_terminal',
         label: 'Terminal hospitalier',
         invited: 2,
@@ -3136,8 +3177,10 @@ function getIdentityVaultStatus(): IdentityVaultStatusResponse {
       identityTable: 'identity.email_identities',
       model: 'IdentityVaultEntry',
       directEmailVisibleInAdmin: false,
+      directPhoneVisibleInAdmin: false,
       currentRole: currentUser?.role ?? 'respondent',
       currentRoleCanExecuteEmailAccess: currentUser?.role === 'judicial_officer',
+      currentRoleCanExecuteIdentityAccess: currentUser?.role === 'judicial_officer',
       accessMode: 'workflow judiciaire uniquement, double validation DPO + juridique',
       audit: ['AuditLog', 'IdentityVaultAuditLog'],
     },
@@ -3289,6 +3332,12 @@ function maskEmail(email?: string): string {
   const [localPart = '', domain = 'domaine.org'] = (email ?? 'x@domaine.org').split('@')
   const first = localPart[0] ?? 'x'
   return `${first}***@${domain}`
+}
+
+function maskPhone(phone?: string): string {
+  const digits = (phone ?? '').replace(/\D/g, '')
+  if (digits.length < 4) return 'téléphone masqué'
+  return `•••• ${digits.slice(-4)}`
 }
 
 function isPotentiallyIdentifying(value: unknown): boolean {

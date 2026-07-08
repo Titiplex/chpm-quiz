@@ -47,12 +47,42 @@ export class EmailCryptoService {
     ]).toString('utf8')
   }
 
+  encryptContact(value: string): string {
+    const normalized = value.trim()
+    const iv = randomBytes(IV_LENGTH)
+    const cipher = createCipheriv(ALGORITHM, this.encryptionKey(), iv, { authTagLength: AUTH_TAG_LENGTH })
+    cipher.setAAD(Buffer.from(EMAIL_CIPHER_VERSION, 'utf8'))
+    const ciphertext = Buffer.concat([cipher.update(normalized, 'utf8'), cipher.final()])
+    const authTag = cipher.getAuthTag()
+
+    return [
+      EMAIL_CIPHER_VERSION,
+      iv.toString('base64url'),
+      authTag.toString('base64url'),
+      ciphertext.toString('base64url'),
+    ].join('.')
+  }
+
+  decryptContact(payload: string): string {
+    return this.decryptEmail(payload)
+  }
+
   hashEmail(email: string): string {
     return createHmac('sha256', this.hashPepper()).update(this.normalize(email)).digest('hex')
   }
 
+  hashContact(value: string): string {
+    return createHmac('sha256', this.hashPepper()).update(value.trim()).digest('hex')
+  }
+
   normalize(email: string): string {
     return email.trim().toLowerCase()
+  }
+
+  normalizePhone(phone: string): string {
+    const compact = phone.trim().replace(/[\s().-]+/g, '')
+    if (compact.startsWith('00')) return `+${compact.slice(2)}`
+    return compact
   }
 
   maskEmail(email: string): string {
@@ -70,6 +100,12 @@ export class EmailCryptoService {
     const maskedDomain = domainName.length <= 2 ? `${domainName[0] ?? '*'}*` : `${domainName.slice(0, 2)}***`
 
     return `${visibleLocal}@${maskedDomain}${suffix ? `.${suffix}` : ''}`
+  }
+
+  maskPhone(phone: string): string {
+    const normalized = this.normalizePhone(phone)
+    const visible = normalized.replace(/\D/g, '').slice(-4)
+    return visible ? `•••• ${visible}` : 'téléphone masqué'
   }
 
   maskEncryptedEmail(payload: string): string {

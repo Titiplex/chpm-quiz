@@ -412,6 +412,14 @@ async function main() {
     'ITQ-0001',
     'itq.demo@example.org',
   )
+  const itqSmsDemoToken = await createSeedSmsInvitation(
+    itqVersion.id,
+    moderator.id,
+    buildingByCode.get('MTL-A')!.id,
+    buildingByCode.get('MTL-A')!.siteId,
+    'ITQ-SMS-0001',
+    '+33600000000',
+  )
   const lec5DemoToken = await createSeedInvitation(
     lec5Version.id,
     moderator.id,
@@ -482,6 +490,7 @@ async function main() {
   console.log(`Questionnaire ITQ seedé : version publiée, 20 écrans dont 18 items cotés, 1 question par page, bulles d’information activées.`)
   console.log(`Questionnaire LEC-5 seedé : version papier de démonstration, 17 situations en choix multiples, question d’événement le plus difficile et champ Autre.`)
   console.log(`Lien répondant ITQ de démonstration : /r/${itqDemoToken}`)
+  console.log(`Lien répondant ITQ SMS simulé de démonstration : /r/${itqSmsDemoToken}`)
   console.log(`Lien répondant LEC-5 de démonstration : /r/${lec5DemoToken}`)
   console.log(`Lien terminal hospitalier de démonstration : /terminal/${terminalSeeds[0]?.terminalToken}`)
   console.log(`Invitation ITQ affectée au terminal : ${terminalInvitation.publicCode}`)
@@ -1283,6 +1292,7 @@ async function createSeedInvitation(
       identityVaultEntry: {
         create: {
           uniqueCode: publicCode,
+          contactChannel: 'email',
           encryptedEmail: encryptEmail(email),
           emailHash: hashEmail(email),
           questionnaireVersionId,
@@ -1297,6 +1307,63 @@ async function createSeedInvitation(
           eventType: 'dev_link_created',
           metadata: { seeded: true, accessLink: `/r/${token}` },
         },
+      },
+    },
+  })
+
+  return token
+}
+
+async function createSeedSmsInvitation(
+  questionnaireVersionId: string,
+  moderatorId: string,
+  buildingId: string,
+  siteId: string,
+  publicCode: string,
+  phone: string,
+) {
+  const token = createRespondentToken(publicCode)
+  const normalizedPhone = normalizePhone(phone)
+
+  await prisma.invitation.create({
+    data: {
+      questionnaireVersionId,
+      buildingId,
+      siteId,
+      createdByUserId: moderatorId,
+      publicCode,
+      tokenHash: sha256(token),
+      status: 'opened',
+      deliveryMode: 'sms_simulation',
+      notifyModerator: true,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      sentAt: new Date(),
+      openedAt: new Date(),
+      identityVaultEntry: {
+        create: {
+          uniqueCode: publicCode,
+          contactChannel: 'sms',
+          encryptedPhone: encryptContact(normalizedPhone),
+          phoneHash: hashContact(normalizedPhone),
+          questionnaireVersionId,
+          buildingId,
+          createdByUserId: moderatorId,
+          lastSmsSentAt: new Date(),
+        },
+      },
+      deliveryEvents: {
+        create: [
+          {
+            publicCode,
+            eventType: 'dev_invitation_sms_queued',
+            metadata: { seeded: true, accessLink: `/r/${token}`, provider: 'simulation' },
+          },
+          {
+            publicCode,
+            eventType: 'link_opened',
+            metadata: { seeded: true, channel: 'sms_simulation' },
+          },
+        ],
       },
     },
   })
@@ -2182,7 +2249,11 @@ function minutesBefore(date: Date, minutes: number): Date {
 }
 
 function encryptEmail(email: string): string {
-  const normalizedEmail = email.trim().toLowerCase()
+  return encryptContact(email.trim().toLowerCase())
+}
+
+function encryptContact(value: string): string {
+  const normalizedValue = value.trim()
   const version = 'v1'
   const iv = randomBytes(12)
   const key = process.env.EMAIL_ENCRYPTION_KEY_B64
@@ -2195,14 +2266,23 @@ function encryptEmail(email: string): string {
 
   const cipher = createCipheriv('aes-256-gcm', key, iv, { authTagLength: 16 })
   cipher.setAAD(Buffer.from(version, 'utf8'))
-  const ciphertext = Buffer.concat([cipher.update(normalizedEmail, 'utf8'), cipher.final()])
+  const ciphertext = Buffer.concat([cipher.update(normalizedValue, 'utf8'), cipher.final()])
   const tag = cipher.getAuthTag()
 
   return [version, iv.toString('base64url'), tag.toString('base64url'), ciphertext.toString('base64url')].join('.')
 }
 
 function hashEmail(email: string): string {
-  return createHmac('sha256', emailHashPepper).update(email.trim().toLowerCase()).digest('hex')
+  return hashContact(email.trim().toLowerCase())
+}
+
+function normalizePhone(phone: string): string {
+  const compact = phone.trim().replace(/[\s().-]/g, '')
+  return compact.startsWith('00') ? `+${compact.slice(2)}` : compact
+}
+
+function hashContact(value: string): string {
+  return createHmac('sha256', emailHashPepper).update(value.trim()).digest('hex')
 }
 
 function createRespondentToken(publicCode: string): string {

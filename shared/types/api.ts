@@ -365,6 +365,7 @@ export interface ApiInvitation {
   deliveryMode: InvitationDeliveryMode
   assistanceMode: AssistanceMode
   maskedEmail: string | null
+  maskedPhone: string | null
   questionnaireVersionId: string
   questionnaireTitle: string | null
   versionLabel: string | null
@@ -430,6 +431,7 @@ export interface CreateInvitationRequest {
   questionnaireVersionId: string
   buildingId: string
   email?: string
+  phone?: string
   deliveryMode?: InvitationDeliveryMode
   terminalDeviceId?: string
   assistanceMode?: AssistanceMode
@@ -718,8 +720,10 @@ export interface IdentityVaultStatusResponse {
     identityTable: string
     model: string
     directEmailVisibleInAdmin: boolean
+    directPhoneVisibleInAdmin?: boolean
     currentRole: UserRole
     currentRoleCanExecuteEmailAccess: boolean
+    currentRoleCanExecuteIdentityAccess?: boolean
     accessMode: string
     audit: string[]
   }

@@ -174,6 +174,7 @@ export class TerminalService {
       deliveryMode: invitation.deliveryMode,
       assistanceMode: invitation.assistanceMode ?? 'none',
       maskedEmail: null,
+      maskedPhone: null,
       questionnaireVersionId: invitation.questionnaireVersionId,
       questionnaireTitle: invitation.questionnaireVersion?.questionnaire?.title ?? null,
       versionLabel: invitation.questionnaireVersion?.versionLabel ?? null,
