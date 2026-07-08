@@ -97,13 +97,14 @@ export class StatsService {
     )
 
     const scopedInvitations = scopedVersions.flatMap((version: any) => version.invitations)
+    const eligibleInvitations = scopedInvitations.filter((invitation: any) => !this.isRefusalRecord(invitation))
     const scopedSubmissions = scopedVersions.flatMap((version: any) => version.submissions)
-    const totalInvited = scopedInvitations.length
-    const totalOpened = scopedInvitations.filter((invitation: any) => this.isOpened(invitation)).length
-    const totalStarted = scopedInvitations.filter((invitation: any) => this.isStarted(invitation)).length
+    const totalInvited = eligibleInvitations.length
+    const totalOpened = eligibleInvitations.filter((invitation: any) => this.isOpened(invitation)).length
+    const totalStarted = eligibleInvitations.filter((invitation: any) => this.isStarted(invitation)).length
     const totalSubmitted = scopedSubmissions.length
-    const totalExpired = scopedInvitations.filter((invitation: any) => invitation.status === 'expired').length
-    const telemetryEvents = scopedInvitations.flatMap((invitation: any) => invitation.responseSession?.telemetryEvents ?? [])
+    const totalExpired = eligibleInvitations.filter((invitation: any) => invitation.status === 'expired').length
+    const telemetryEvents = eligibleInvitations.flatMap((invitation: any) => invitation.responseSession?.telemetryEvents ?? [])
     const totalDurations = telemetryEvents
       .filter((event: any) => event.eventType === 'questionnaire_total_time')
       .map((event: any) => event.durationMs)
@@ -136,11 +137,12 @@ export class StatsService {
         resumes: telemetryEvents.filter((event: any) => event.eventType === 'questionnaire_resume').length,
         medianTotalDurationMs: this.median(totalDurations),
       },
+      fieldTracking: this.fieldTrackingBreakdown(scopedInvitations),
       versions: scopedVersions.map((version: any) => this.versionStats(version)),
-      buildings: this.buildingBreakdown(scopedInvitations),
-      sites: this.siteBreakdown(scopedInvitations),
+      buildings: this.buildingBreakdown(eligibleInvitations),
+      sites: this.siteBreakdown(eligibleInvitations),
       languages: this.languageBreakdown(scopedVersions),
-      deliveryModes: this.deliveryModeBreakdown(scopedInvitations),
+      deliveryModes: this.deliveryModeBreakdown(eligibleInvitations),
       groups: this.groupBreakdown(scopedVersions, visibleSessionIds),
       popups: this.popupBreakdown(scopedVersions, visibleSessionIds),
       questions: this.questionBreakdown(scopedVersions, visibleSessionIds, user),
@@ -253,9 +255,10 @@ export class StatsService {
   }
 
   private versionStats(version: any) {
-    const invited = version.invitations.length
-    const opened = version.invitations.filter((invitation: any) => this.isOpened(invitation)).length
-    const started = version.invitations.filter((invitation: any) => this.isStarted(invitation)).length
+    const invitations = version.invitations.filter((invitation: any) => !this.isRefusalRecord(invitation))
+    const invited = invitations.length
+    const opened = invitations.filter((invitation: any) => this.isOpened(invitation)).length
+    const started = invitations.filter((invitation: any) => this.isStarted(invitation)).length
     const submitted = version.submissions.length
     const abandoned = Math.max(started - submitted, 0)
 
@@ -349,7 +352,7 @@ export class StatsService {
       const language = version.language ?? 'unknown'
       const row = byLanguage.get(language) ?? { invited: 0, submitted: 0, versionCount: 0 }
       row.versionCount += 1
-      row.invited += version.invitations?.length ?? 0
+      row.invited += (version.invitations?.filter((invitation: any) => !this.isRefusalRecord(invitation)).length ?? 0)
       row.submitted += version.submissions?.length ?? 0
       byLanguage.set(language, row)
     }
@@ -398,6 +401,7 @@ export class StatsService {
       email: 'Email réel',
       email_simulation: 'Email simulé',
       onsite_terminal: 'Terminal hospitalier',
+      paper_form: 'Version papier',
     }
 
     const byMode = new Map<string, { invited: number; opened: number; started: number; submitted: number }>()
@@ -423,6 +427,31 @@ export class StatsService {
       startRate: this.percent(row.started, row.invited),
       submissionRate: this.percent(row.submitted, row.invited),
     }))
+  }
+
+  private fieldTrackingBreakdown(invitations: any[]) {
+    const refused = invitations.filter((invitation: any) => this.isRefusalRecord(invitation)).length
+    const invited = invitations.filter((invitation: any) => !this.isRefusalRecord(invitation)).length
+    const approached = invited + refused
+    const noDigitalContactInvitations = invitations.filter((invitation: any) => this.isNoDigitalContactMode(invitation))
+    const noDigitalContact = noDigitalContactInvitations.length
+    const onsiteTerminal = noDigitalContactInvitations.filter((invitation: any) => invitation.deliveryMode === 'onsite_terminal').length
+    const paperForms = noDigitalContactInvitations.filter((invitation: any) => invitation.deliveryMode === 'paper_form').length
+    const digitalContact = invitations.filter((invitation: any) => this.isDigitalContactMode(invitation)).length
+    const pendingWithoutDigitalContact = noDigitalContactInvitations.filter((invitation: any) => invitation.status !== 'submitted').length
+
+    return {
+      approached,
+      invited,
+      refused,
+      refusalRate: this.percent(refused, approached),
+      noDigitalContact,
+      noDigitalContactRate: this.percent(noDigitalContact, invited),
+      onsiteTerminal,
+      paperForms,
+      digitalContact,
+      pendingWithoutDigitalContact,
+    }
   }
 
   private groupBreakdown(versions: any[], visibleSessionIds?: Set<string>) {
@@ -629,6 +658,21 @@ export class StatsService {
 
   private percent(numerator: number, denominator: number): number {
     return denominator === 0 ? 0 : Math.round((numerator / denominator) * 100)
+  }
+
+  private isRefusalRecord(invitation: any): boolean {
+    return invitation.deliveryMode === 'refusal_record'
+  }
+
+  private isNoDigitalContactMode(invitation: any): boolean {
+    return invitation.deliveryMode === 'onsite_terminal' || invitation.deliveryMode === 'paper_form'
+  }
+
+  private isDigitalContactMode(invitation: any): boolean {
+    return invitation.deliveryMode === 'email'
+      || invitation.deliveryMode === 'email_simulation'
+      || invitation.deliveryMode === 'sms'
+      || invitation.deliveryMode === 'sms_simulation'
   }
 
   private isOpened(invitation: any): boolean {

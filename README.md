@@ -172,3 +172,13 @@ Fichiers clés :
 - `docs/production/` et `docs/recette/` : procédures et matrices go/no-go.
 
 Le go production réel reste conditionné à la validation DPO, au test de restauration, à la recette sécurité/accessibilité et à l'authentification interne définitive.
+
+## Suivi terrain dans les statistiques
+
+Le panel statistiques distingue désormais les réponses effectives du suivi d'inclusion terrain :
+
+- les refus de répondre sont enregistrés par le modérateur comme des lignes `refusal_record` ; ils ne créent pas de soumission et n'entrent pas dans le taux de soumission ;
+- les personnes sans contact numérique sont comptées via les modes `onsite_terminal` et `paper_form` ;
+- les versions papier sont enregistrées sans email, SMS, téléphone ni lien répondant.
+
+Ces données servent au pilotage opérationnel de la démo et restent agrégées dans le panel statistiques.

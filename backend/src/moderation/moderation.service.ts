@@ -217,6 +217,65 @@ export class ModerationService {
       }
     }
 
+    if (deliveryMode === 'paper_form' || deliveryMode === 'refusal_record') {
+      const isRefusal = deliveryMode === 'refusal_record'
+      const invitation = await this.prisma.invitation.create({
+        data: {
+          questionnaireVersionId: dto.questionnaireVersionId,
+          buildingId: dto.buildingId,
+          siteId: building.siteId,
+          createdByUserId: user.id,
+          publicCode,
+          tokenHash,
+          status: isRefusal ? 'cancelled' : 'sent',
+          deliveryMode,
+          assistanceMode,
+          notifyModerator: dto.notifyModerator ?? false,
+          notifyAdmins: dto.notifyAdmins ?? false,
+          expiresAt,
+          sentAt: isRefusal ? null : new Date(),
+          cancelledAt: isRefusal ? new Date() : null,
+        },
+        include: this.invitationInclude(),
+      })
+
+      await this.identityVaultService.recordDeliveryEvent({
+        invitationId: invitation.id,
+        publicCode,
+        eventType: isRefusal ? 'participation_refusal_recorded' : 'paper_form_recorded',
+        metadata: {
+          note: isRefusal
+            ? 'Refus de répondre déclaré par le modérateur avant collecte de contact numérique'
+            : 'Passation papier déclarée par le modérateur pour une personne sans contact numérique',
+          questionnaireVersionId: dto.questionnaireVersionId,
+          buildingId: dto.buildingId,
+          refusalReason: isRefusal ? dto.refusalReason?.trim() || undefined : undefined,
+        },
+      })
+
+      await this.auditService.log({
+        actor: user,
+        action: isRefusal ? 'participation.refusal.record' : 'invitation.create.paper_form',
+        entityType: 'Invitation',
+        entityId: invitation.id,
+        publicCode,
+        request,
+        metadata: {
+          questionnaireVersionId: dto.questionnaireVersionId,
+          buildingId: dto.buildingId,
+          deliveryMode,
+          refusalReason: isRefusal ? dto.refusalReason?.trim() || undefined : undefined,
+        },
+      })
+
+      return {
+        invitation: this.toInvitationDto(invitation),
+        accessToken: null,
+        devAccessLink: null,
+        terminalDispatchLink: null,
+      }
+    }
+
     if (!dto.email) {
       throw new BadRequestException('Une adresse email est requise pour ce mode d’envoi')
     }
@@ -317,6 +376,10 @@ export class ModerationService {
 
     if (invitation.status === 'submitted' || invitation.status === 'cancelled' || invitation.status === 'blocked') {
       throw new BadRequestException('Cette invitation ne peut pas être relancée')
+    }
+
+    if (invitation.deliveryMode === 'paper_form' || invitation.deliveryMode === 'refusal_record') {
+      throw new BadRequestException('Les lignes papier et les refus ne peuvent pas être relancés')
     }
 
     const isTerminal = invitation.deliveryMode === 'onsite_terminal'
@@ -485,14 +548,18 @@ export class ModerationService {
   }
 
 
-  private resolveDeliveryMode(deliveryMode?: string): 'email' | 'email_simulation' | 'onsite_terminal' {
+  private resolveDeliveryMode(deliveryMode?: string): 'email' | 'email_simulation' | 'onsite_terminal' | 'paper_form' | 'refusal_record' {
     const resolved = deliveryMode ?? (this.config.get<string>('NODE_ENV') === 'production' ? 'email' : 'email_simulation')
 
     if (resolved === 'email_simulation' && this.config.get<string>('NODE_ENV') === 'production') {
       throw new BadRequestException('Le mode email_simulation est interdit en production')
     }
 
-    if (resolved === 'email' || resolved === 'email_simulation' || resolved === 'onsite_terminal') {
+    if (resolved === 'email'
+      || resolved === 'email_simulation'
+      || resolved === 'onsite_terminal'
+      || resolved === 'paper_form'
+      || resolved === 'refusal_record') {
       return resolved
     }
 

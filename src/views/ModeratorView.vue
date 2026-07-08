@@ -28,6 +28,7 @@ const form = reactive({
   email: 'personne.exemple@domaine.org',
   deliveryMode: 'email_simulation' as InvitationDeliveryMode,
   terminalDeviceId: '',
+  refusalReason: '',
   assistanceMode: 'none' as AssistanceMode,
   notifyModerator: true,
   notifyAdmins: false,
@@ -53,13 +54,19 @@ const questionnaires = computed(() =>
 )
 const total = computed(() => moderation.totals)
 const canAdministerTerminals = computed(() => ['admin', 'site_manager', 'technical_admin'].includes(session.currentRole))
-const responseRate = computed(() => {
-  if (total.value.sent === 0) return '0 %'
-  return `${Math.round((total.value.submitted / total.value.sent) * 100)} %`
-})
 const compatibleTerminalDevices = computed(() =>
   moderation.terminalDevices.filter((device) => device.building.id === form.buildingId && device.status === 'active'),
 )
+const requiresEmail = computed(() => form.deliveryMode === 'email' || form.deliveryMode === 'email_simulation')
+const requiresTerminal = computed(() => form.deliveryMode === 'onsite_terminal')
+const isPaperForm = computed(() => form.deliveryMode === 'paper_form')
+const isRefusalRecord = computed(() => form.deliveryMode === 'refusal_record')
+const invitationActionDisabled = computed(() => (
+  moderation.status === 'creating'
+  || !questionnaires.value.length
+  || (requiresTerminal.value && !form.terminalDeviceId)
+  || (requiresEmail.value && !form.email)
+))
 
 
 watch(
@@ -77,9 +84,10 @@ async function submitInvitation() {
   await moderation.createInvitation({
     questionnaireVersionId: form.questionnaireVersionId,
     buildingId: form.buildingId,
-    email: form.deliveryMode === 'onsite_terminal' ? undefined : form.email,
+    email: requiresEmail.value ? form.email : undefined,
     deliveryMode: form.deliveryMode,
-    terminalDeviceId: form.deliveryMode === 'onsite_terminal' ? form.terminalDeviceId : undefined,
+    terminalDeviceId: requiresTerminal.value ? form.terminalDeviceId : undefined,
+    refusalReason: isRefusalRecord.value ? form.refusalReason : undefined,
     assistanceMode: form.assistanceMode,
     notifyModerator: form.notifyModerator,
     notifyAdmins: form.notifyAdmins,
@@ -132,7 +140,22 @@ function deliveryLabel(mode: InvitationDeliveryMode): string {
     email: 'Email',
     email_simulation: 'Email simulé',
     onsite_terminal: 'Terminal',
+    paper_form: 'Papier',
+    refusal_record: 'Refus',
   }[mode]
+}
+
+function invitationStatusLabel(invitation: ApiInvitation): string {
+  if (invitation.deliveryMode === 'refusal_record') return 'Refus enregistré'
+  if (invitation.deliveryMode === 'paper_form' && invitation.status === 'sent') return 'Papier remis'
+  return statusLabel(invitation.status)
+}
+
+function invitationDestination(invitation: ApiInvitation): string {
+  if (invitation.deliveryMode === 'onsite_terminal') return invitation.terminalDevice?.label ?? 'Terminal non renseigné'
+  if (invitation.deliveryMode === 'paper_form') return 'Version papier remise'
+  if (invitation.deliveryMode === 'refusal_record') return 'Aucun contact collecté'
+  return invitation.maskedEmail ?? '—'
 }
 
 function statusTone(status: InvitationStatus): 'success' | 'warning' | 'danger' | 'neutral' {
@@ -143,7 +166,16 @@ function statusTone(status: InvitationStatus): 'success' | 'warning' | 'danger' 
 }
 
 function canResend(invitation: ApiInvitation): boolean {
+  if (invitation.deliveryMode === 'paper_form' || invitation.deliveryMode === 'refusal_record') return false
   return !['submitted', 'cancelled', 'blocked', 'expired'].includes(invitation.status)
+}
+
+function invitationSubmitLabel(): string {
+  if (moderation.status === 'creating') return 'Enregistrement…'
+  if (requiresTerminal.value) return 'Envoyer au terminal'
+  if (isPaperForm.value) return 'Enregistrer la version papier'
+  if (isRefusalRecord.value) return 'Enregistrer le refus'
+  return 'Envoyer l\'invitation'
 }
 </script>
 
@@ -152,7 +184,7 @@ function canResend(invitation: ApiInvitation): boolean {
     <div class="container-fluid px-4 px-xl-5">
       <PageHeader
         title="Modération"
-        :description="appConfig.demoMode ? 'Invitez des répondants par email ou affectez une invitation à un terminal hospitalier.' : 'Invitez des répondants par email ou affectez une invitation à un terminal hospitalier de votre bâtiment.'"
+        :description="appConfig.demoMode ? 'Suivez les invitations, les refus et les passations sans contact numérique.' : 'Suivez les invitations, les refus et les passations sans contact numérique de votre périmètre.'"
         :badge="appConfig.demoMode ? 'Démo' : 'Connecté'"
       >
         <template #actions>
@@ -195,10 +227,12 @@ function canResend(invitation: ApiInvitation): boolean {
           <select id="delivery-mode" v-model="form.deliveryMode" class="form-select mb-3" required>
             <option value="email_simulation">Email simulé</option>
             <option value="email">Email réel</option>
-            <option value="onsite_terminal">Terminal hospitalier</option>
+            <option value="onsite_terminal">Terminal hospitalier · sans email/SMS</option>
+            <option value="paper_form">Version papier · sans email/SMS</option>
+            <option value="refusal_record">Refus de répondre · aucun contact collecté</option>
           </select>
 
-          <template v-if="form.deliveryMode === 'onsite_terminal'">
+          <template v-if="requiresTerminal">
             <label class="form-label fw-semibold" for="terminal-select">Terminal cible</label>
             <select id="terminal-select" v-model="form.terminalDeviceId" class="form-select mb-3" required>
               <option value="" disabled>Choisir un terminal actif</option>
@@ -215,9 +249,21 @@ function canResend(invitation: ApiInvitation): boolean {
             </select>
           </template>
 
-          <template v-else>
+          <template v-else-if="requiresEmail">
             <label class="form-label fw-semibold" for="respondent-email">Email du répondant</label>
             <input id="respondent-email" v-model="form.email" class="form-control mb-4" type="email" required />
+          </template>
+          <template v-else-if="isPaperForm">
+            <div class="alert alert-warning rounded-3 mb-4">
+              Aucune donnée de contact n’est collectée. La ligne sert uniquement à compter une passation papier dans les statistiques terrain.
+            </div>
+          </template>
+          <template v-else-if="isRefusalRecord">
+            <label class="form-label fw-semibold" for="refusal-reason">Motif interne optionnel</label>
+            <textarea id="refusal-reason" v-model="form.refusalReason" class="form-control mb-4" rows="2" maxlength="300" placeholder="Ex. refuse de donner un email/téléphone, refuse le questionnaire, indisponible…"></textarea>
+            <div class="alert alert-warning rounded-3 mb-4">
+              Le refus est agrégé dans les statistiques. Aucun email, SMS, téléphone ou identité patient n’est demandé.
+            </div>
           </template>
 
           <div class="row g-3 mb-4">
@@ -235,8 +281,8 @@ function canResend(invitation: ApiInvitation): boolean {
             </div>
           </div>
 
-          <button class="btn btn-primary w-100 btn-lg" :disabled="moderation.status === 'creating' || !questionnaires.length || (form.deliveryMode === 'onsite_terminal' && !form.terminalDeviceId)">
-            {{ moderation.status === 'creating' ? 'Envoi…' : form.deliveryMode === 'onsite_terminal' ? 'Envoyer au terminal' : 'Envoyer l\'invitation' }}
+          <button class="btn btn-primary w-100 btn-lg" :disabled="invitationActionDisabled">
+            {{ invitationSubmitLabel() }}
           </button>
 
           <div v-if="moderation.lastCreatedLink || moderation.lastCreatedTerminalLink || moderation.lastCreatedInvitation" class="alert alert-info rounded-3 mt-3 mb-0">
@@ -248,7 +294,7 @@ function canResend(invitation: ApiInvitation): boolean {
               </button>
             </template>
             <template v-else>
-              <strong>Invitation affectée au terminal.</strong>
+              <strong>{{ moderation.lastCreatedInvitation?.deliveryMode === 'refusal_record' ? 'Refus enregistré.' : moderation.lastCreatedInvitation?.deliveryMode === 'paper_form' ? 'Version papier enregistrée.' : 'Invitation affectée au terminal.' }}</strong>
               <template v-if="moderation.lastCreatedTerminalLink">
                 <a class="d-block text-break small mt-1" :href="moderation.lastCreatedTerminalLink">{{ moderation.lastCreatedTerminalLink }}</a>
                 <button class="btn btn-sm btn-outline-primary mt-2" type="button" @click="copyLink('terminal', moderation.lastCreatedTerminalLink)">
@@ -257,7 +303,7 @@ function canResend(invitation: ApiInvitation): boolean {
               </template>
             </template>
             <p v-if="moderation.lastCreatedInvitation" class="small mb-0 mt-2" style="color: var(--chm-muted);">
-              Code : {{ moderation.lastCreatedInvitation.publicCode }} · {{ statusLabel(moderation.lastCreatedInvitation.status) }}
+              Code : {{ moderation.lastCreatedInvitation.publicCode }} · {{ invitationStatusLabel(moderation.lastCreatedInvitation) }}
             </p>
           </div>
         </form>
@@ -303,8 +349,8 @@ function canResend(invitation: ApiInvitation): boolean {
       <div class="row g-3 mb-4">
         <div class="col-md-3"><KpiCard label="Invitations" :value="String(total.sent)" icon="📨" /></div>
         <div class="col-md-3"><KpiCard label="Soumises" :value="String(total.submitted)" tone="success" icon="✅" /></div>
-        <div class="col-md-3"><KpiCard label="Terminal" :value="String(total.onsiteTerminal)" tone="warning" icon="🖥️" /></div>
-        <div class="col-md-3"><KpiCard label="Taux" :value="responseRate" /></div>
+        <div class="col-md-3"><KpiCard label="Sans email/SMS" :value="String(total.noDigitalContact)" tone="warning" icon="🖥️" /></div>
+        <div class="col-md-3"><KpiCard label="Refus" :value="String(total.refused)" tone="danger" /></div>
       </div>
 
       <div v-if="canAdministerTerminals" class="action-strip mb-4">
@@ -383,10 +429,10 @@ function canResend(invitation: ApiInvitation): boolean {
               <tr v-for="invitation in moderation.invitations" :key="invitation.id">
                 <td class="fw-semibold" style="font-family: monospace; font-size:0.88rem;">{{ invitation.publicCode }}</td>
                 <td><span class="badge-soft">{{ deliveryLabel(invitation.deliveryMode) }}</span></td>
-                <td class="small" style="color: var(--chm-muted);">{{ invitation.deliveryMode === 'onsite_terminal' ? invitation.terminalDevice?.label ?? '—' : invitation.maskedEmail ?? '—' }}</td>
+                <td class="small" style="color: var(--chm-muted);">{{ invitationDestination(invitation) }}</td>
                 <td class="small">{{ invitation.questionnaireTitle }}</td>
                 <td class="small">{{ invitation.building.label }}</td>
-                <td><span class="badge-soft" :class="statusTone(invitation.status)">{{ statusLabel(invitation.status) }}</span></td>
+                <td><span class="badge-soft" :class="statusTone(invitation.status)">{{ invitationStatusLabel(invitation) }}</span></td>
                 <td>
                   <button v-if="canResend(invitation)" class="btn btn-sm btn-outline-primary" type="button" @click="resend(invitation)">Relancer</button>
                 </td>

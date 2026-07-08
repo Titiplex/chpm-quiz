@@ -25,13 +25,23 @@ export const useModerationStore = defineStore('moderation', () => {
   const lastRegisteredTerminalLink = ref<string | null>(null)
   const lastCreatedInvitation = ref<ApiInvitation | null>(null)
 
-  const totals = computed(() => ({
-    sent: invitations.value.length,
-    submitted: invitations.value.filter((invitation) => invitation.status === 'submitted').length,
-    pending: invitations.value.filter((invitation) => ['sent', 'opened', 'in_progress', 'draft'].includes(invitation.status)).length,
-    blocked: invitations.value.filter((invitation) => ['blocked', 'expired', 'cancelled'].includes(invitation.status)).length,
-    onsiteTerminal: invitations.value.filter((invitation) => invitation.deliveryMode === 'onsite_terminal').length,
-  }))
+  const totals = computed(() => {
+    const refused = invitations.value.filter((invitation) => invitation.deliveryMode === 'refusal_record').length
+    const invited = invitations.value.filter((invitation) => invitation.deliveryMode !== 'refusal_record').length
+    const noDigitalContact = invitations.value.filter((invitation) => invitation.deliveryMode === 'onsite_terminal' || invitation.deliveryMode === 'paper_form').length
+
+    return {
+      sent: invited,
+      approached: invited + refused,
+      submitted: invitations.value.filter((invitation) => invitation.status === 'submitted').length,
+      pending: invitations.value.filter((invitation) => invitation.deliveryMode !== 'refusal_record' && ['sent', 'opened', 'in_progress', 'draft'].includes(invitation.status)).length,
+      blocked: invitations.value.filter((invitation) => ['blocked', 'expired', 'cancelled'].includes(invitation.status)).length,
+      onsiteTerminal: invitations.value.filter((invitation) => invitation.deliveryMode === 'onsite_terminal').length,
+      paperForms: invitations.value.filter((invitation) => invitation.deliveryMode === 'paper_form').length,
+      noDigitalContact,
+      refused,
+    }
+  })
 
   async function fetchInvitations(): Promise<void> {
     status.value = 'loading'

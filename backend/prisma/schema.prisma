@@ -75,6 +75,8 @@ enum InvitationDeliveryMode {
   email
   email_simulation
   onsite_terminal
+  paper_form
+  refusal_record
   @@schema("public")
 }
 

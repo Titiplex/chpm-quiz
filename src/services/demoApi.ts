@@ -1381,22 +1381,27 @@ function createInvitation(payload: CreateInvitationRequest): CreateInvitationRes
   if (deliveryMode === 'onsite_terminal') {
     if (!terminalDevice) throw new Error('Terminal de démonstration introuvable.')
     if (terminalDevice.building.id !== building.id) throw new Error('Le terminal choisi est hors du bâtiment sélectionné.')
-  } else if (!payload.email) {
+  } else if (deliveryMode !== 'paper_form' && deliveryMode !== 'refusal_record' && !payload.email) {
     throw new Error('Adresse email requise pour une invitation email.')
   }
 
   const invitations = getInvitations()
-  const publicCode = deliveryMode === 'onsite_terminal'
-    ? `TERM-${String(invitations.length + 1).padStart(4, '0')}`
-    : `DEMO-${String(invitations.length + 1).padStart(4, '0')}`
+  const publicCodePrefix = deliveryMode === 'onsite_terminal'
+    ? 'TERM'
+    : deliveryMode === 'paper_form'
+      ? 'PAPR'
+      : deliveryMode === 'refusal_record'
+        ? 'REFU'
+        : 'DEMO'
+  const publicCode = `${publicCodePrefix}-${String(invitations.length + 1).padStart(4, '0')}`
   const token = `demo-${publicCode.toLowerCase()}-${crypto.randomUUID()}`
   const invitation: ApiInvitation = {
     id: createId('invitation'),
     publicCode,
-    status: 'sent',
+    status: deliveryMode === 'refusal_record' ? 'cancelled' : 'sent',
     deliveryMode,
     assistanceMode,
-    maskedEmail: deliveryMode === 'onsite_terminal' ? null : maskEmail(payload.email),
+    maskedEmail: deliveryMode === 'onsite_terminal' || deliveryMode === 'paper_form' || deliveryMode === 'refusal_record' ? null : maskEmail(payload.email),
     questionnaireVersionId: payload.questionnaireVersionId,
     questionnaireTitle: questionnaire.title,
     versionLabel: questionnaire.versionLabel,
@@ -1404,7 +1409,7 @@ function createInvitation(payload: CreateInvitationRequest): CreateInvitationRes
     terminalDevice,
     terminalDispatchedAt: deliveryMode === 'onsite_terminal' ? nowIso() : null,
     expiresAt: payload.expiresAt ?? addDaysIso(deliveryMode === 'onsite_terminal' ? 1 : 30),
-    sentAt: nowIso(),
+    sentAt: deliveryMode === 'refusal_record' ? null : nowIso(),
     openedAt: null,
     startedAt: null,
     submittedAt: null,
@@ -1414,7 +1419,7 @@ function createInvitation(payload: CreateInvitationRequest): CreateInvitationRes
   invitations.unshift(invitation)
   saveInvitations(invitations)
 
-  if (deliveryMode !== 'onsite_terminal') {
+  if (deliveryMode !== 'onsite_terminal' && deliveryMode !== 'paper_form' && deliveryMode !== 'refusal_record') {
     const sessions = getRespondentSessions()
     sessions[token] = createRespondentSession(token, questionnaire, building, publicCode, 'draft', invitation)
     saveRespondentSessions(sessions)
@@ -1422,8 +1427,8 @@ function createInvitation(payload: CreateInvitationRequest): CreateInvitationRes
 
   return {
     invitation,
-    accessToken: deliveryMode === 'onsite_terminal' ? null : token,
-    devAccessLink: deliveryMode === 'onsite_terminal' ? null : createRespondentLink(token),
+    accessToken: deliveryMode === 'onsite_terminal' || deliveryMode === 'paper_form' || deliveryMode === 'refusal_record' ? null : token,
+    devAccessLink: deliveryMode === 'onsite_terminal' || deliveryMode === 'paper_form' || deliveryMode === 'refusal_record' ? null : createRespondentLink(token),
     terminalDispatchLink: terminalDevice ? createTerminalLink(terminalTokenSeeds[terminalDevice.id] ?? '') : null,
   }
 }
@@ -1434,6 +1439,10 @@ function resendInvitation(invitationId: string): { invitation: ApiInvitation } {
 
   if (!invitation) {
     throw new Error('Invitation introuvable dans la démo.')
+  }
+
+  if (invitation.deliveryMode === 'paper_form' || invitation.deliveryMode === 'refusal_record') {
+    throw new Error('Les lignes papier et les refus ne peuvent pas être relancés.')
   }
 
   invitation.sentAt = nowIso()
@@ -2144,6 +2153,46 @@ function createInitialInvitations(): ApiInvitation[] {
       responseStatus: null,
     },
     {
+      id: 'demo-invitation-paper-chpm',
+      publicCode: 'PAPR-0001',
+      status: 'sent',
+      deliveryMode: 'paper_form',
+      assistanceMode: 'full_assisted_entry',
+      maskedEmail: null,
+      questionnaireVersionId: CHPM_VERSION_ID,
+      questionnaireTitle: 'Questionnaire CHPM',
+      versionLabel: '1.4',
+      building: mtl,
+      terminalDevice: null,
+      terminalDispatchedAt: null,
+      expiresAt: addDaysIso(30),
+      sentAt: addDaysIso(-2),
+      openedAt: null,
+      startedAt: null,
+      submittedAt: null,
+      responseStatus: null,
+    },
+    {
+      id: 'demo-invitation-refusal-chpm',
+      publicCode: 'REFU-0001',
+      status: 'cancelled',
+      deliveryMode: 'refusal_record',
+      assistanceMode: 'none',
+      maskedEmail: null,
+      questionnaireVersionId: CHPM_VERSION_ID,
+      questionnaireTitle: 'Questionnaire CHPM',
+      versionLabel: '1.4',
+      building: mtl,
+      terminalDevice: null,
+      terminalDispatchedAt: null,
+      expiresAt: addDaysIso(1),
+      sentAt: null,
+      openedAt: null,
+      startedAt: null,
+      submittedAt: null,
+      responseStatus: null,
+    },
+    {
       id: 'demo-invitation-pending',
       publicCode: 'PEND-0001',
       status: 'sent',
@@ -2779,16 +2828,16 @@ function createStats(questionnaireId: string): StatsResponse['stats'] {
     questionnaire: { id: questionnaire.id, code: questionnaire.code, title: questionnaire.title },
     threshold: 5,
     totals: {
-      invited: 8,
+      invited: 9,
       opened: 7,
       started: 7,
       submitted: 6,
       abandoned: 1,
       expired: 0,
-      openingRate: 88,
-      startRate: 88,
-      submissionRate: 75,
-      completionRate: 75,
+      openingRate: 78,
+      startRate: 78,
+      submissionRate: 67,
+      completionRate: 67,
       abandonmentRate: 14,
       telemetryEvents: isItq ? 96 : 30,
       popupOpens: isItq ? 42 : 9,
@@ -2797,20 +2846,32 @@ function createStats(questionnaireId: string): StatsResponse['stats'] {
       resumes: 3,
       medianTotalDurationMs: isItq ? 9 * 60 * 1000 : 4 * 60 * 1000,
     },
+    fieldTracking: {
+      approached: 11,
+      invited: 9,
+      refused: 2,
+      refusalRate: 18,
+      noDigitalContact: 3,
+      noDigitalContactRate: 33,
+      onsiteTerminal: 2,
+      paperForms: 1,
+      digitalContact: 6,
+      pendingWithoutDigitalContact: 2,
+    },
     versions: [
       {
         id: questionnaire.versionId,
         versionLabel: questionnaire.versionLabel,
         status: questionnaire.status,
-        invited: 8,
+        invited: 9,
         opened: 7,
         started: 7,
         submitted: 6,
         abandoned: 1,
-        openingRate: 88,
-        startRate: 88,
-        submissionRate: 75,
-        completionRate: 75,
+        openingRate: 78,
+        startRate: 78,
+        submissionRate: 67,
+        completionRate: 67,
         abandonmentRate: 14,
         effectifSufficient: true,
       },
@@ -2823,8 +2884,8 @@ function createStats(questionnaireId: string): StatsResponse['stats'] {
         opened: 6,
         started: 6,
         submitted: 5,
-        openingRate: 86,
-        startRate: 86,
+        openingRate: 100,
+        startRate: 100,
         submissionRate: 83,
       },
       {
@@ -2838,20 +2899,31 @@ function createStats(questionnaireId: string): StatsResponse['stats'] {
         startRate: 50,
         submissionRate: 50,
       },
+      {
+        mode: 'paper_form',
+        label: 'Version papier',
+        invited: 1,
+        opened: 0,
+        started: 0,
+        submitted: 0,
+        openingRate: 0,
+        startRate: 0,
+        submissionRate: 0,
+      },
     ],
     buildings: [
       {
         buildingId: 'demo-building-mtl-a',
         label: 'Montréal · Bâtiment A',
-        invited: 8,
+        invited: 9,
         opened: 7,
         started: 7,
         submitted: 6,
         effectifSufficient: true,
-        openingRate: 88,
-        startRate: 88,
-        submissionRate: 75,
-        completionRate: 75,
+        openingRate: 78,
+        startRate: 78,
+        submissionRate: 67,
+        completionRate: 67,
         displayValue: '6 soumis',
       },
       {

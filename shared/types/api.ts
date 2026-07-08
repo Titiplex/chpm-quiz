@@ -432,6 +432,7 @@ export interface CreateInvitationRequest {
   email?: string
   deliveryMode?: InvitationDeliveryMode
   terminalDeviceId?: string
+  refusalReason?: string
   assistanceMode?: AssistanceMode
   expiresAt?: string
   notifyModerator?: boolean
@@ -560,6 +561,18 @@ export interface StatsResponse {
       backtracks: number
       resumes: number
       medianTotalDurationMs: number | null
+    }
+    fieldTracking: {
+      approached: number
+      invited: number
+      refused: number
+      refusalRate: number
+      noDigitalContact: number
+      noDigitalContactRate: number
+      onsiteTerminal: number
+      paperForms: number
+      digitalContact: number
+      pendingWithoutDigitalContact: number
     }
     versions: Array<{
       id: string

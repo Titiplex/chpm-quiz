@@ -16,9 +16,11 @@ describe('useModerationStore', () => {
   it('refreshes invitations and terminal devices and computes operational totals', async () => {
     const submittedInvitation = { ...invitationFixture, id: 'invitation-submitted', status: 'submitted' as const }
     const blockedInvitation = { ...invitationFixture, id: 'invitation-expired', status: 'expired' as const, deliveryMode: 'onsite_terminal' as const }
+    const paperInvitation = { ...invitationFixture, id: 'invitation-paper', deliveryMode: 'paper_form' as const, maskedEmail: null }
+    const refusalRecord = { ...invitationFixture, id: 'invitation-refusal', status: 'cancelled' as const, deliveryMode: 'refusal_record' as const, maskedEmail: null }
     const fetchMock = vi.fn(async (url: string) => {
       if (String(url).endsWith('/moderation/invitations')) {
-        return jsonResponse({ invitations: [invitationFixture, submittedInvitation, blockedInvitation] })
+        return jsonResponse({ invitations: [invitationFixture, submittedInvitation, blockedInvitation, paperInvitation, refusalRecord] })
       }
       if (String(url).endsWith('/moderation/terminal-devices')) {
         return jsonResponse({ terminalDevices: [terminalDeviceFixture] })
@@ -32,7 +34,17 @@ describe('useModerationStore', () => {
 
     expect(store.status).toBe('ready')
     expect(store.terminalDevices).toEqual([terminalDeviceFixture])
-    expect(store.totals).toEqual({ sent: 3, submitted: 1, pending: 1, blocked: 1, onsiteTerminal: 1 })
+    expect(store.totals).toEqual({
+      sent: 4,
+      approached: 5,
+      submitted: 1,
+      pending: 2,
+      blocked: 2,
+      onsiteTerminal: 1,
+      paperForms: 1,
+      noDigitalContact: 2,
+      refused: 1,
+    })
   })
 
   it('creates invitations, tracks launch links and refreshes terminal inventory', async () => {
