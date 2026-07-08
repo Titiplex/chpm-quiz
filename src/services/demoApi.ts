@@ -101,8 +101,40 @@ type JsonRecord = Record<string, unknown>
 const DEMO_ORGANIZATION_ID = 'demo-org-chpm'
 const CHPM_VERSION_ID = 'demo-version-chpm-1-4'
 const ITQ_VERSION_ID = 'demo-version-itq-1-0-cn2r'
+const LEC5_VERSION_ID = 'demo-version-lec5-1-0-papier'
 const CHPM_TOKEN = 'demo-chpm-open'
 const ITQ_TOKEN = 'demo-itq-open'
+const LEC5_TOKEN = 'demo-lec5-open'
+
+
+const lec5ExposureOptions: Array<[string, string]> = [
+  ['happened_to_me', 'Ce m’est arrivé'],
+  ['witnessed_it', 'J’en ai été témoin'],
+  ['learned_about_it', 'Je l’ai appris'],
+  ['part_of_work', 'Dans le cadre du travail'],
+  ['not_applicable', 'Ne s’applique pas'],
+  ['not_sure', 'Je ne suis pas sûr'],
+]
+
+const lec5Events: Array<{ code: string; label: string }> = [
+  { code: 'LEC5-E01', label: '1. Catastrophe naturelle (inondation, ouragan, tornade, tremblement de terre, etc.)' },
+  { code: 'LEC5-E02', label: '2. Incendie ou explosion' },
+  { code: 'LEC5-E03', label: '3. Accident de la route (voiture, bateau, déraillement de train, écrasement d’avion, etc.)' },
+  { code: 'LEC5-E04', label: '4. Accident grave au travail, à domicile ou pendant des loisirs' },
+  { code: 'LEC5-E05', label: '5. Exposition à une substance toxique (produits chimiques dangereux, radiation, etc.)' },
+  { code: 'LEC5-E06', label: '6. Agression physique (attaqué, frappé, poignardé, battu, coups de pied, etc.)' },
+  { code: 'LEC5-E07', label: '7. Attaque à main armée (menacé ou blessé par une arme à feu, un couteau, une bombe, etc.)' },
+  { code: 'LEC5-E08', label: '8. Agression sexuelle (viol, tentative, acte sexuel par la force ou sous menaces)' },
+  { code: 'LEC5-E09', label: '9. Autre expérience sexuelle non désirée et désagréable (abus sexuel dans l’enfance)' },
+  { code: 'LEC5-E10', label: '10. Conflit armé ou présence en zone de guerre (dans l’armée ou comme civil)' },
+  { code: 'LEC5-E11', label: '11. Captivité (kidnappé, enlevé, pris en otage, incarcéré comme prisonnier de guerre, etc.)' },
+  { code: 'LEC5-E12', label: '12. Maladie ou blessure mettant la vie en danger' },
+  { code: 'LEC5-E13', label: '13. Souffrances humaines intenses' },
+  { code: 'LEC5-E14', label: '14. Mort violente (homicide, suicide, etc.)' },
+  { code: 'LEC5-E15', label: '15. Mort subite et accidentelle' },
+  { code: 'LEC5-E16', label: '16. Blessure grave, dommage ou mort causé par vous à quelqu’un' },
+  { code: 'LEC5-E17', label: '17. Toute autre expérience très stressante (négligence sévère dans l’enfance, etc.)' },
+]
 
 const buildingSeeds: ApiBuilding[] = [
   {
@@ -1543,7 +1575,7 @@ function findRespondentQuestion(session: RespondentSessionResponse, questionId: 
 }
 
 function createInitialQuestionnaires(): ApiQuestionnaire[] {
-  return [createItqQuestionnaire(), createChpmQuestionnaire(), createPilotQuestionnaire()]
+  return [createItqQuestionnaire(), createLec5Questionnaire(), createChpmQuestionnaire(), createPilotQuestionnaire()]
 }
 
 function createChpmQuestionnaire(): ApiQuestionnaire {
@@ -1626,6 +1658,78 @@ function createChpmQuestionnaire(): ApiQuestionnaire {
         questions: [
           question('demo-q-q027', 'Q-027', 1, 'Décrivez les difficultés rencontrées pendant le test / Describe any difficulties encountered during the test.', 'free_text_long', {
             helperText: 'Champ libre sauvegardé en brouillon avant soumission. Évitez les détails directement identifiants.',
+          }),
+        ],
+      },
+    ],
+  }
+
+  recomputeQuestionnaireCounters(questionnaire)
+  return questionnaire
+}
+
+
+function createLec5Questionnaire(): ApiQuestionnaire {
+  const questionnaire: ApiQuestionnaire = {
+    id: 'demo-questionnaire-lec5-ppp',
+    code: 'LEC5-PPP',
+    title: 'Inventaire des événements de vie — LEC-5',
+    description: 'PPP+ · Prévalence du Psychotrauma en Psychiatrie. Version papier de démonstration de l’inventaire LEC-5, intégré au parcours ITQ.',
+    defaultLanguage: 'fr',
+    versionId: LEC5_VERSION_ID,
+    version: '1.0-papier-demo',
+    versionLabel: '1.0-papier-demo',
+    language: 'fr',
+    finality: 'Repérer les situations difficiles ou stressantes vécues, observées, apprises ou rencontrées dans le cadre professionnel. Seed de démonstration, sans interprétation clinique automatisée.',
+    status: 'published',
+    isPublished: true,
+    openFrom: addDaysIso(-7),
+    openUntil: addDaysIso(180),
+    groupCount: 0,
+    questionCount: 0,
+    groups: [
+      {
+        id: 'demo-group-lec5-intro',
+        title: 'Présentation papier PPP+ / LEC-5',
+        description: 'Questionnaire ITQ — version papier · Prévalence du Psychotrauma en Psychiatrie · CH de Montfavet Cloitre et al. ©2018 · traduction FR validée Peraud et al. 2022 · mise en page inspirée du Cn2r.',
+        displayOrder: 1,
+        questionsPerPage: 1,
+        randomize: false,
+        questions: [
+          question('demo-q-lec5-intro', 'LEC5-INTRO', 1, 'VOS EXPÉRIENCES — situations vécues (inventaire LEC-5)', 'information', {
+            helperText: 'Voici une liste de situations difficiles ou stressantes qu’une personne peut avoir à traverser. Pour chaque situation, cochez la ou les case(s) correspondante(s). Encerclez celle qui fut la plus difficile pour vous, en considérant l’ensemble de votre vie, de l’enfance à l’âge adulte.',
+          }),
+        ],
+      },
+      {
+        id: 'demo-group-lec5-events',
+        title: 'Situations vécues',
+        description: 'Pour chaque situation, cochez une ou plusieurs modalités : ce m’est arrivé, j’en ai été témoin, je l’ai appris, dans le cadre du travail, ne s’applique pas, ou je ne suis pas sûr.',
+        displayOrder: 2,
+        questionsPerPage: 3,
+        randomize: false,
+        questions: lec5Events.map((event, index) => question(`demo-q-${event.code.toLowerCase()}`, event.code, index + 1, event.label, 'multiple_choice', {
+          helperText: 'Cochez la ou les case(s) correspondante(s). Plusieurs réponses sont possibles.',
+          options: lec5ExposureOptions,
+        })),
+      },
+      {
+        id: 'demo-group-lec5-worst',
+        title: 'Événement le plus difficile',
+        description: 'Indiquez la situation qui fut la plus difficile pour vous sur l’ensemble de votre vie, puis précisez “Autre” si nécessaire.',
+        displayOrder: 3,
+        questionsPerPage: 1,
+        randomize: false,
+        questions: [
+          question('demo-q-lec5-worst', 'LEC5-WORST', 1, 'Quelle situation fut la plus difficile pour vous ?', 'single_choice', {
+            helperText: 'Correspond à la consigne papier “Encerclez celle qui fut la plus difficile pour vous”.',
+            options: [
+              ...lec5Events.map((event) => [event.code, event.label] as [string, string]),
+              ['LEC5-E18', '18. Autre expérience précisée ci-dessous'],
+            ],
+          }),
+          question('demo-q-lec5-other', 'LEC5-OTHER', 2, '18. Autre (précisez)', 'free_text_short', {
+            helperText: 'Champ libre facultatif. Évitez les noms, dates exactes, lieux précis ou tout détail directement identifiant.',
           }),
         ],
       },
@@ -1851,6 +1955,26 @@ function createInitialInvitations(): ApiInvitation[] {
       responseStatus: null,
     },
     {
+      id: 'demo-invitation-lec5-open',
+      publicCode: 'LEC5-0001',
+      status: 'sent',
+      deliveryMode: 'email_simulation',
+      assistanceMode: 'none',
+      maskedEmail: 'l***@example.org',
+      questionnaireVersionId: LEC5_VERSION_ID,
+      questionnaireTitle: 'Inventaire des événements de vie — LEC-5',
+      versionLabel: '1.0-papier-demo',
+      building: mtl,
+      terminalDevice: null,
+      terminalDispatchedAt: null,
+      expiresAt: addDaysIso(30),
+      sentAt: nowIso(),
+      openedAt: null,
+      startedAt: null,
+      submittedAt: null,
+      responseStatus: null,
+    },
+    {
       id: 'demo-invitation-pending',
       publicCode: 'PEND-0001',
       status: 'sent',
@@ -1898,9 +2022,10 @@ function createInitialRespondentSessions(): RespondentSessionMap {
   const questionnaires = createInitialQuestionnaires()
   const chpm = questionnaires.find((questionnaire) => questionnaire.versionId === CHPM_VERSION_ID)
   const itq = questionnaires.find((questionnaire) => questionnaire.versionId === ITQ_VERSION_ID)
+  const lec5 = questionnaires.find((questionnaire) => questionnaire.versionId === LEC5_VERSION_ID)
   const building = buildingSeeds[0]
 
-  if (!chpm || !itq || !building) {
+  if (!chpm || !itq || !lec5 || !building) {
     return {}
   }
 
@@ -1912,6 +2037,7 @@ function createInitialRespondentSessions(): RespondentSessionMap {
   return {
     [CHPM_TOKEN]: createRespondentSession(CHPM_TOKEN, chpm, building, 'PEND-0001', 'draft'),
     [ITQ_TOKEN]: createRespondentSession(ITQ_TOKEN, itq, building, 'ITQ-0001', 'draft'),
+    [LEC5_TOKEN]: createRespondentSession(LEC5_TOKEN, lec5, building, 'LEC5-0001', 'draft'),
     'demo-expired-draft': expiredDraft,
   }
 }

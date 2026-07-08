@@ -154,8 +154,21 @@ Fonctions minimales : login nominatif DPO, justification obligatoire, référenc
 ## Comptes seedés
 
 - `admin@chpm.local` / `Admin123!`
+- `site.manager@chpm.local` / `SiteManager123!`
 - `moderateur@chpm.local` / `Moderator123!`
-- `repondant@chpm.local` / `Respondent123!`
+- `questionnaire.admin@chpm.local` / `Questionnaire123!`
+- `analyste@chpm.local` / `Analyst123!`
+- `dpo@chpm.local` / `Dpo12345!`
+- `judiciaire@chpm.local` / `Judiciaire123!`
+- `tech@chpm.local` / `Tech12345!`
+
+## Questionnaires seedés pour la démo
+
+- `CHPM-BASE` : questionnaire métier adaptatif de démonstration.
+- `ITQ-CN2R` : ITQ publié, 2 questions de contexte puis 18 items cotés P1–P9/C1–C9.
+- `LEC5-PPP` : inventaire LEC-5 en version papier de démonstration, avec 17 situations cochables, une question d’événement le plus difficile et un champ `Autre`.
+
+Le seed affiche dans la console les liens répondants de démonstration pour l’ITQ et la LEC-5.
 
 ## Sécurité
 
