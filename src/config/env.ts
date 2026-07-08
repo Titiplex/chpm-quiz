@@ -6,6 +6,8 @@ function readStringEnv(name: string): string {
 const staticPagesDemo = readStringEnv('VITE_STATIC_PAGES_DEMO') === 'true'
 const demoMode = import.meta.env.DEV && readStringEnv('VITE_DEMO_MODE') === 'true'
 const rawApiBaseUrl = readStringEnv('VITE_API_BASE_URL')
+const defaultAppDescription =
+  'Plateforme de questionnaires, invitations, passation sécurisée et statistiques pseudonymisées.'
 
 if (import.meta.env.PROD && !staticPagesDemo && !rawApiBaseUrl) {
   throw new Error('VITE_API_BASE_URL est obligatoire pour un build connecté de production.')
@@ -13,6 +15,7 @@ if (import.meta.env.PROD && !staticPagesDemo && !rawApiBaseUrl) {
 
 export const appConfig = {
   appName: readStringEnv('VITE_APP_NAME') || 'CHPM Survey',
+  appDescription: readStringEnv('VITE_APP_DESCRIPTION') || defaultAppDescription,
   apiBaseUrl: rawApiBaseUrl || 'http://localhost:3000/api',
   demoMode,
   staticPagesDemo,

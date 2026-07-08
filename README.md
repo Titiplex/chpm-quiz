@@ -83,6 +83,13 @@ npm run dev:frontend
 Le front appelle par défaut `http://localhost:3000/api` avec `credentials: include` pour transmettre le cookie
 HTTP-only.
 
+Le nom visible de l'application est piloté par `VITE_APP_NAME`. Cette valeur est utilisée dans la barre supérieure du front, dans le titre de l’onglet navigateur et dans les métadonnées HTML principales (`title`, `application-name`, `og:site_name`, `og:title`). La description exposée dans les métadonnées (`description`, `og:description`) est pilotée par `VITE_APP_DESCRIPTION`. Ces valeurs sont injectées dans `index.html` au build et réappliquées au runtime. Sans valeur explicite, les fallbacks restent génériques et réutilisables hors CH Montfavet.
+
+```env
+VITE_APP_NAME="Questionnaires institutionnels"
+VITE_APP_DESCRIPTION="Plateforme de questionnaires, invitations, passation sécurisée et statistiques pseudonymisées."
+```
+
 ## Textes et i18n éditables
 
 Les libellés mutualisés du front sont dans `public/content/i18n/*.json`. Le sélecteur global de langue est visible dans la barre supérieure pour tous les profils, y compris avant connexion et sur GitHub Pages.
