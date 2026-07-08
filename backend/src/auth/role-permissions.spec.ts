@@ -18,7 +18,13 @@ describe('role permission profiles', () => {
     expect(canDelegateRole('admin', 'site_manager')).toBe(true)
     expect(canDelegateRole('site_manager', 'moderator')).toBe(true)
     expect(canDelegateRole('moderator', 'site_manager')).toBe(false)
-    expect(roleProfiles.site_manager.permissions).toContain('user:manageScoped')
+    expect(roleProfiles.admin.permissions).toContain('user:manageSiteAdmins')
+    expect(roleProfiles.admin.permissions).not.toContain('identity:accessConfidential')
+    expect(roleProfiles.site_manager.permissions).toContain('user:manageModeratorsScoped')
+    expect(roleProfiles.site_manager.permissions).not.toContain('identity:accessConfidential')
+    expect(roleProfiles.dpo.permissions).toContain('identity:exportCodeEmail')
+    expect(canDelegateRole('admin', 'dpo')).toBe(false)
+    expect(canDelegateRole('admin', 'moderator')).toBe(false)
   })
 
   it('detects role inheritance and predefined role families', () => {
@@ -27,6 +33,7 @@ describe('role permission profiles', () => {
     expect(roleInheritsFrom('admin', 'moderator')).toBe(false)
     expect(adminLikeRoles).toEqual(['admin', 'questionnaire_admin'])
     expect(statisticsRoles).toContain('analyst')
+    expect(statisticsRoles).not.toContain('dpo')
     expect(auditRoles).toContain('technical_admin')
   })
 })

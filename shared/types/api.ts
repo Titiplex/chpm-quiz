@@ -8,6 +8,16 @@ export interface ApiBuilding extends BuildingScope {
   organizationId?: string
 }
 
+export interface ApiSite {
+  id: string
+  code: string
+  name: string
+  organizationId: string
+  organization: { id: string; code: string; name: string } | null
+  country?: string | null
+  timezone?: string | null
+}
+
 export interface AuthUserProfile {
   id: string
   email: string
@@ -47,9 +57,51 @@ export interface SiteTeamResponse {
   users: ApiSiteTeamUser[]
   policy: {
     manageableRoles: Array<Extract<UserRole, 'moderator'>>
-    scope: 'site' | 'organization'
+    scope: 'site' | 'project'
     passwordReturnedOnce: boolean
   }
+}
+
+export interface SitesResponse {
+  sites: ApiSite[]
+}
+
+export interface SiteAdminsResponse {
+  users: ApiSiteAdminUser[]
+  policy: {
+    manageableRoles: Array<Extract<UserRole, 'site_manager'>>
+    scope: 'project'
+    passwordReturnedOnce: boolean
+    forbiddenRoles: UserRole[]
+  }
+}
+
+export type ApiSiteAdminUser = ApiSiteTeamUser & {
+  role: Extract<UserRole, 'site_manager'>
+}
+
+export interface CreateSiteAdminRequest {
+  email: string
+  displayName: string
+  siteId: string
+  temporaryPassword?: string
+}
+
+export interface SiteAdminMutationResponse {
+  user: ApiSiteAdminUser
+  temporaryPassword?: string
+  temporaryPasswordGenerated?: boolean
+}
+
+export interface UpdateSiteAdminRequest {
+  displayName?: string
+  siteId?: string
+  isActive?: boolean
+}
+
+export interface RevokeSessionsResponse {
+  user: ApiSiteTeamUser
+  revokedSessionCount: number
 }
 
 export interface CreateSiteModeratorRequest {
