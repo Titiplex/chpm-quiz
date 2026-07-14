@@ -1,9 +1,16 @@
-import { fileURLToPath } from 'node:url'
-import { mergeConfig, defineConfig, configDefaults } from 'vitest/config'
-import viteConfig from './vite.config'
+import { fileURLToPath, URL } from 'node:url'
 
-const baseConfig = viteConfig as Record<string, unknown>
-const testConfig = defineConfig({
+import vue from '@vitejs/plugin-vue'
+import { configDefaults, defineConfig } from 'vitest/config'
+
+export default defineConfig({
+  plugins: [vue()],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '@shared': fileURLToPath(new URL('./shared', import.meta.url)),
+    },
+  },
   test: {
     environment: 'jsdom',
     environmentOptions: {
@@ -37,6 +44,4 @@ const testConfig = defineConfig({
       },
     },
   },
-}) as Record<string, unknown>
-
-export default mergeConfig(baseConfig, testConfig)
+})

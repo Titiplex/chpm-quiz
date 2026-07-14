@@ -81,7 +81,7 @@ describe('common display components', () => {
     await anonymous.vm.$nextTick()
 
     expect(anonymous.text()).toContain('Rôle actif')
-    expect(anonymous.text()).toContain('Modérateur bâtiment')
+    expect(anonymous.text()).toContain('Modérateur terrain')
     expect(anonymous.text()).toContain('Marc Dubois')
     expect(anonymous.text()).toContain('Périmètre : Bâtiment A.')
   })
@@ -93,6 +93,6 @@ describe('common display components', () => {
     session.user = adminUserFixture
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.text()).toContain('Périmètre : Tous les sites et tous les bâtiments.')
+    expect(wrapper.text()).toContain('Périmètre : Projet complet, hors données confidentielles DPO.')
   })
 })
