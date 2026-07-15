@@ -195,6 +195,7 @@ const defaultLocaleOptions: FrontLocaleInfo[] = [
   { code: 'en', label: 'English', nativeLabel: 'English', direction: 'ltr' },
 ]
 
+const fallbackCatalogs: Record<string, TranslationCatalog> = fallbackMessages
 const runtimeMessages: Record<FrontLocale, TranslationCatalog> = {}
 const missingKeys = new Set<string>()
 const availableLocalesState = ref<FrontLocaleInfo[]>(defaultLocaleOptions)
@@ -318,15 +319,15 @@ export function getMissingI18nKeys(): string[] {
 
 export function fallbackCatalog(locale: FrontLocale): TranslationCatalog {
   const normalized = normalizeLocale(locale)
-  return { ...(fallbackMessages[normalized] ?? fallbackMessages[fallbackLocale]) }
+  return { ...(fallbackCatalogs[normalized] ?? fallbackCatalogs[fallbackLocale] ?? {}) }
 }
 
 function resolveMessage(key: string, locale: FrontLocale): string | undefined {
   return (
     runtimeMessages[locale]?.[key] ??
-    fallbackMessages[locale]?.[key] ??
+    fallbackCatalogs[locale]?.[key] ??
     runtimeMessages[fallbackLocale]?.[key] ??
-    fallbackMessages[fallbackLocale]?.[key]
+    fallbackCatalogs[fallbackLocale]?.[key]
   )
 }
 

@@ -61,11 +61,13 @@ const questionnaires = computed(() =>
   catalog.publishedQuestionnaires.filter((questionnaire) => isQuestionnaireOpen(questionnaire.openFrom, questionnaire.openUntil)),
 )
 const total = computed(() => moderation.totals)
+const responseRate = computed(() => `${Math.round((total.value.submitted / Math.max(1, total.value.sent)) * 100)} %`)
 const canAdministerTerminals = computed(() => ['admin', 'site_manager', 'technical_admin'].includes(session.currentRole))
 const compatibleTerminalDevices = computed(() =>
   moderation.terminalDevices.filter((device) => device.building.id === form.buildingId && device.status === 'active'),
 )
 const requiresEmail = computed(() => form.deliveryMode === 'email' || form.deliveryMode === 'email_simulation')
+const requiresPhone = computed(() => form.deliveryMode === 'sms' || form.deliveryMode === 'sms_simulation')
 const requiresTerminal = computed(() => form.deliveryMode === 'onsite_terminal')
 const isPaperForm = computed(() => form.deliveryMode === 'paper_form')
 const isRefusalRecord = computed(() => form.deliveryMode === 'refusal_record')
@@ -77,7 +79,8 @@ const invitationActionDisabled = computed(() => (
   moderation.status === 'creating'
   || !questionnaires.value.length
   || (requiresTerminal.value && !form.terminalDeviceId)
-  || (requiresEmail.value && !form.email)
+  || (requiresEmail.value && !form.email.trim())
+  || (requiresPhone.value && !form.phone.trim())
 ))
 
 
@@ -215,7 +218,7 @@ async function submitInvitation() {
     questionnaireVersionId: form.questionnaireVersionId,
     buildingId: form.buildingId,
     email: requiresEmail.value ? form.email : undefined,
-    phone: form.deliveryMode === 'sms' || form.deliveryMode === 'sms_simulation' ? form.phone : undefined,
+    phone: requiresPhone.value ? form.phone : undefined,
     deliveryMode: form.deliveryMode,
     terminalDeviceId: requiresTerminal.value ? form.terminalDeviceId : undefined,
     refusalReason: isRefusalRecord.value ? form.refusalReason : undefined,
@@ -288,7 +291,7 @@ function invitationDestination(invitation: ApiInvitation): string {
   if (invitation.deliveryMode === 'onsite_terminal') return invitation.terminalDevice?.label ?? 'Terminal non renseigné'
   if (invitation.deliveryMode === 'paper_form') return 'Version papier remise'
   if (invitation.deliveryMode === 'refusal_record') return 'Aucun contact collecté'
-  return invitation.maskedEmail ?? '—'
+  return invitation.maskedPhone ?? invitation.maskedEmail ?? '—'
 }
 
 function statusTone(status: InvitationStatus): 'success' | 'warning' | 'danger' | 'neutral' {
@@ -428,7 +431,7 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
             </div>
           </template>
 
-          <template v-else>
+          <template v-else-if="requiresPhone">
             <label class="form-label fw-semibold" for="respondent-phone">Téléphone du répondant</label>
             <input id="respondent-phone" v-model="form.phone" class="form-control mb-2" type="tel" inputmode="tel" autocomplete="tel" placeholder="+33600000000" required />
             <p class="small mb-4" style="color: var(--chm-muted);">Format recommandé : E.164, par exemple +33600000000. Le numéro est conservé dans le coffre identité, pas dans les tableaux métier.</p>
