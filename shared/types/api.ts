@@ -434,6 +434,7 @@ export interface CreateInvitationRequest {
   phone?: string
   deliveryMode?: InvitationDeliveryMode
   terminalDeviceId?: string
+  refusalReason?: string
   assistanceMode?: AssistanceMode
   expiresAt?: string
   notifyModerator?: boolean
@@ -445,6 +446,23 @@ export interface CreateInvitationResponse {
   accessToken: string | null
   devAccessLink: string | null
   terminalDispatchLink?: string | null
+}
+
+
+export interface SubmitPaperResponsesRequest {
+  answers: Array<{ questionId: string; value: unknown }>
+  moderatorNote?: string
+}
+
+export interface SubmitPaperResponsesResponse {
+  invitation: ApiInvitation
+  submission: {
+    id: string
+    publicCode: string
+    submittedAt: string
+    answerCount: number
+  }
+  warnings: Array<{ questionId: string; reason: string | null }>
 }
 
 export interface RespondentAnswer {
@@ -562,6 +580,18 @@ export interface StatsResponse {
       backtracks: number
       resumes: number
       medianTotalDurationMs: number | null
+    }
+    fieldTracking: {
+      approached: number
+      invited: number
+      refused: number
+      refusalRate: number
+      noDigitalContact: number
+      noDigitalContactRate: number
+      onsiteTerminal: number
+      paperForms: number
+      digitalContact: number
+      pendingWithoutDigitalContact: number
     }
     versions: Array<{
       id: string

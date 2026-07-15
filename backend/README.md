@@ -180,6 +180,22 @@ Le seed affiche dans la console les liens répondants de démonstration pour l�
 - validation DTO avec `class-validator` ;
 - RBAC appliqué côté serveur.
 
+## Saisie papier par modérateur
+
+Le backend expose `POST /moderation/invitations/:id/paper-entry` pour transformer une invitation `paper_form` en soumission verrouillée. Le contrôleur exige une session modérateur ou responsable de site et applique le périmètre bâtiment/site avant toute écriture.
+
+La saisie manuelle :
+
+- ne demande aucun email ni téléphone ;
+- crée ou réutilise une `ResponseSession` liée à l'invitation papier ;
+- valide que les réponses ciblent des questions de la version publiée ;
+- verrouille les `Answer`, la `ResponseSession` et crée une `Submission` ;
+- marque l'invitation comme `submitted` ;
+- écrit un audit `response.paper_entry.submit` et un événement coffre `paper_form_entered_by_moderator`.
+
+Les refus `refusal_record` restent des lignes de suivi terrain et ne sont pas saisissables comme réponses.
+
+
 ## Invitations par SMS
 
 Le workflow de modération accepte maintenant trois familles de canaux :

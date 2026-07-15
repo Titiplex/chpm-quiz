@@ -77,6 +77,8 @@ enum InvitationDeliveryMode {
   sms
   sms_simulation
   onsite_terminal
+  paper_form
+  refusal_record
   @@schema("public")
 }
 

@@ -13,12 +13,15 @@ import type {
 } from '@shared/types/api'
 
 type TerminalAdminStatus = 'idle' | 'loading' | 'ready' | 'saving' | 'error'
+type TerminalLaunchLinkAction = 'created' | 'regenerated'
 
 export const useTerminalAdminStore = defineStore('terminalAdmin', () => {
   const terminalDevices = ref<ApiTerminalDevice[]>([])
   const status = ref<TerminalAdminStatus>('idle')
   const error = ref<string | null>(null)
   const lastLaunchLink = ref<string | null>(null)
+  const lastLaunchLinkDevice = ref<ApiTerminalDevice | null>(null)
+  const lastLaunchLinkAction = ref<TerminalLaunchLinkAction | null>(null)
   const lastMutatedDevice = ref<ApiTerminalDevice | null>(null)
 
   const totals = computed(() => ({
@@ -46,7 +49,7 @@ export const useTerminalAdminStore = defineStore('terminalAdmin', () => {
   async function createTerminalDevice(payload: RegisterTerminalDeviceRequest): Promise<RegisterTerminalDeviceResponse> {
     status.value = 'saving'
     error.value = null
-    lastLaunchLink.value = null
+    clearLastLaunchLink()
     lastMutatedDevice.value = null
 
     try {
@@ -55,7 +58,7 @@ export const useTerminalAdminStore = defineStore('terminalAdmin', () => {
         body: payload,
       })
       terminalDevices.value = [response.terminalDevice, ...terminalDevices.value]
-      lastLaunchLink.value = response.terminalLaunchLink
+      setLastLaunchLink(response.terminalLaunchLink, response.terminalDevice, 'created')
       lastMutatedDevice.value = response.terminalDevice
       status.value = 'ready'
       return response
@@ -106,14 +109,14 @@ export const useTerminalAdminStore = defineStore('terminalAdmin', () => {
   async function regenerateTerminalToken(id: string): Promise<RegenerateTerminalDeviceTokenResponse> {
     status.value = 'saving'
     error.value = null
-    lastLaunchLink.value = null
+    clearLastLaunchLink()
 
     try {
       const response = await apiRequest<RegenerateTerminalDeviceTokenResponse>(`/terminal-devices/${id}/regenerate-token`, {
         method: 'POST',
       })
       upsertDevice(response.terminalDevice)
-      lastLaunchLink.value = response.terminalLaunchLink
+      setLastLaunchLink(response.terminalLaunchLink, response.terminalDevice, 'regenerated')
       lastMutatedDevice.value = response.terminalDevice
       status.value = 'ready'
       return response
@@ -122,6 +125,18 @@ export const useTerminalAdminStore = defineStore('terminalAdmin', () => {
       error.value = caught instanceof Error ? caught.message : 'Régénération du lien terminal impossible.'
       throw caught
     }
+  }
+
+  function setLastLaunchLink(link: string, device: ApiTerminalDevice, action: TerminalLaunchLinkAction): void {
+    lastLaunchLink.value = link
+    lastLaunchLinkDevice.value = device
+    lastLaunchLinkAction.value = action
+  }
+
+  function clearLastLaunchLink(): void {
+    lastLaunchLink.value = null
+    lastLaunchLinkDevice.value = null
+    lastLaunchLinkAction.value = null
   }
 
   function upsertDevice(device: ApiTerminalDevice): void {
@@ -138,6 +153,8 @@ export const useTerminalAdminStore = defineStore('terminalAdmin', () => {
     status,
     error,
     lastLaunchLink,
+    lastLaunchLinkDevice,
+    lastLaunchLinkAction,
     lastMutatedDevice,
     totals,
     fetchTerminalDevices,
@@ -145,5 +162,6 @@ export const useTerminalAdminStore = defineStore('terminalAdmin', () => {
     updateTerminalDevice,
     revokeTerminalDevice,
     regenerateTerminalToken,
+    clearLastLaunchLink,
   }
 })

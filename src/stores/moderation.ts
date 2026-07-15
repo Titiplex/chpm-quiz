@@ -10,6 +10,8 @@ import type {
   InvitationsResponse,
   RegisterTerminalDeviceRequest,
   RegisterTerminalDeviceResponse,
+  SubmitPaperResponsesRequest,
+  SubmitPaperResponsesResponse,
   TerminalDevicesResponse,
 } from '@shared/types/api'
 
@@ -25,14 +27,24 @@ export const useModerationStore = defineStore('moderation', () => {
   const lastRegisteredTerminalLink = ref<string | null>(null)
   const lastCreatedInvitation = ref<ApiInvitation | null>(null)
 
-  const totals = computed(() => ({
-    sent: invitations.value.length,
-    submitted: invitations.value.filter((invitation) => invitation.status === 'submitted').length,
-    pending: invitations.value.filter((invitation) => ['sent', 'opened', 'in_progress', 'draft'].includes(invitation.status)).length,
-    blocked: invitations.value.filter((invitation) => ['blocked', 'expired', 'cancelled'].includes(invitation.status)).length,
-    onsiteTerminal: invitations.value.filter((invitation) => invitation.deliveryMode === 'onsite_terminal').length,
-    sms: invitations.value.filter((invitation) => invitation.deliveryMode === 'sms' || invitation.deliveryMode === 'sms_simulation').length,
-  }))
+  const totals = computed(() => {
+    const refused = invitations.value.filter((invitation) => invitation.deliveryMode === 'refusal_record').length
+    const invited = invitations.value.filter((invitation) => invitation.deliveryMode !== 'refusal_record').length
+    const noDigitalContact = invitations.value.filter((invitation) => invitation.deliveryMode === 'onsite_terminal' || invitation.deliveryMode === 'paper_form').length
+
+    return {
+      sent: invited,
+      approached: invited + refused,
+      submitted: invitations.value.filter((invitation) => invitation.status === 'submitted').length,
+      pending: invitations.value.filter((invitation) => invitation.deliveryMode !== 'refusal_record' && ['sent', 'opened', 'in_progress', 'draft'].includes(invitation.status)).length,
+      blocked: invitations.value.filter((invitation) => ['blocked', 'expired', 'cancelled'].includes(invitation.status)).length,
+      onsiteTerminal: invitations.value.filter((invitation) => invitation.deliveryMode === 'onsite_terminal').length,
+      sms: invitations.value.filter((invitation) => invitation.deliveryMode === 'sms' || invitation.deliveryMode === 'sms_simulation').length,
+      paperForms: invitations.value.filter((invitation) => invitation.deliveryMode === 'paper_form').length,
+      noDigitalContact,
+      refused,
+    }
+  })
 
   async function fetchInvitations(): Promise<void> {
     status.value = 'loading'
@@ -116,6 +128,27 @@ export const useModerationStore = defineStore('moderation', () => {
     await fetchTerminalDevices()
   }
 
+  async function submitPaperResponses(invitationId: string, payload: SubmitPaperResponsesRequest): Promise<SubmitPaperResponsesResponse> {
+    status.value = 'creating'
+    error.value = null
+
+    try {
+      const response = await apiRequest<SubmitPaperResponsesResponse>(`/moderation/invitations/${invitationId}/paper-entry`, {
+        method: 'POST',
+        body: payload,
+      })
+      invitations.value = invitations.value.map((invitation) =>
+        invitation.id === invitationId ? response.invitation : invitation,
+      )
+      status.value = 'ready'
+      return response
+    } catch (caught) {
+      status.value = 'error'
+      error.value = caught instanceof Error ? caught.message : 'Saisie papier impossible.'
+      throw caught
+    }
+  }
+
   return {
     invitations,
     terminalDevices,
@@ -132,5 +165,6 @@ export const useModerationStore = defineStore('moderation', () => {
     createInvitation,
     registerTerminalDevice,
     resendInvitation,
+    submitPaperResponses,
   }
 })

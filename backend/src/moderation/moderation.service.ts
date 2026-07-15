@@ -1,3 +1,5 @@
+import { createHash, randomBytes } from 'node:crypto'
+
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import type { Request } from 'express'
@@ -12,6 +14,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import { SmsQueueService } from '../sms/sms-queue.service'
 import { CreateInvitationDto } from './dto/create-invitation.dto'
 import { RegisterTerminalDeviceDto } from './dto/register-terminal-device.dto'
+import { SubmitPaperResponsesDto } from './dto/submit-paper-responses.dto'
 
 const activeInvitationStatuses = ['sent', 'opened', 'in_progress', 'draft'] as const
 const validTerminalStatuses = ['active'] as const
@@ -219,6 +222,65 @@ export class ModerationService {
       }
     }
 
+    if (deliveryMode === 'paper_form' || deliveryMode === 'refusal_record') {
+      const isRefusal = deliveryMode === 'refusal_record'
+      const invitation = await this.prisma.invitation.create({
+        data: {
+          questionnaireVersionId: dto.questionnaireVersionId,
+          buildingId: dto.buildingId,
+          siteId: building.siteId,
+          createdByUserId: user.id,
+          publicCode,
+          tokenHash,
+          status: isRefusal ? 'cancelled' : 'sent',
+          deliveryMode,
+          assistanceMode,
+          notifyModerator: dto.notifyModerator ?? false,
+          notifyAdmins: dto.notifyAdmins ?? false,
+          expiresAt,
+          sentAt: isRefusal ? null : new Date(),
+          cancelledAt: isRefusal ? new Date() : null,
+        },
+        include: this.invitationInclude(),
+      })
+
+      await this.identityVaultService.recordDeliveryEvent({
+        invitationId: invitation.id,
+        publicCode,
+        eventType: isRefusal ? 'participation_refusal_recorded' : 'paper_form_recorded',
+        metadata: {
+          note: isRefusal
+            ? 'Refus de répondre déclaré par le modérateur avant collecte de contact numérique'
+            : 'Passation papier déclarée par le modérateur pour une personne sans contact numérique',
+          questionnaireVersionId: dto.questionnaireVersionId,
+          buildingId: dto.buildingId,
+          refusalReason: isRefusal ? dto.refusalReason?.trim() || undefined : undefined,
+        },
+      })
+
+      await this.auditService.log({
+        actor: user,
+        action: isRefusal ? 'participation.refusal.record' : 'invitation.create.paper_form',
+        entityType: 'Invitation',
+        entityId: invitation.id,
+        publicCode,
+        request,
+        metadata: {
+          questionnaireVersionId: dto.questionnaireVersionId,
+          buildingId: dto.buildingId,
+          deliveryMode,
+          refusalReason: isRefusal ? dto.refusalReason?.trim() || undefined : undefined,
+        },
+      })
+
+      return {
+        invitation: this.toInvitationDto(invitation),
+        accessToken: null,
+        devAccessLink: null,
+        terminalDispatchLink: null,
+      }
+    }
+
     const isSms = deliveryMode === 'sms' || deliveryMode === 'sms_simulation'
     const isEmail = deliveryMode === 'email' || deliveryMode === 'email_simulation'
 
@@ -349,6 +411,189 @@ export class ModerationService {
     }
   }
 
+
+  async submitPaperResponses(user: AuthenticatedUser, invitationId: string, dto: SubmitPaperResponsesDto, request: Request) {
+    const invitation = await this.prisma.invitation.findFirst({
+      where: { id: invitationId, ...this.scopedWhere(user) },
+      include: this.paperEntryInvitationInclude(),
+    })
+
+    if (!invitation) {
+      throw new NotFoundException('Invitation papier introuvable')
+    }
+
+    if (invitation.deliveryMode !== 'paper_form') {
+      throw new BadRequestException('La saisie manuelle est réservée aux versions papier')
+    }
+
+    if (['submitted', 'cancelled', 'blocked', 'expired'].includes(invitation.status)) {
+      throw new BadRequestException('Cette invitation papier ne peut plus être saisie')
+    }
+
+    if (invitation.responseSession?.submission) {
+      throw new BadRequestException('Cette saisie papier est déjà verrouillée')
+    }
+
+    assertCanAccessBuilding(user, invitation.building)
+    assertCanAccessVersion(user, invitation.questionnaireVersion)
+
+    const questions = this.paperEntryQuestions(invitation.questionnaireVersion)
+    const questionById = new Map(questions.map((question: any): [string, any] => [question.id, question]))
+    const answerQuestionIds = new Set(dto.answers.map((answer) => answer.questionId))
+
+    for (const answer of dto.answers) {
+      const question = questionById.get(answer.questionId)
+      if (!question) {
+        throw new BadRequestException('Une réponse papier cible une question inconnue')
+      }
+      this.validatePaperAnswer(question, answer.value)
+    }
+
+    const missingRequired = questions.filter((question: any) =>
+      question.isRequired && question.responseType !== 'information' && !answerQuestionIds.has(question.id),
+    )
+
+    if (missingRequired.length) {
+      throw new BadRequestException(`Soumission papier impossible : ${missingRequired.length} question(s) obligatoire(s) sans réponse`)
+    }
+
+    const submittedAt = new Date()
+    const pathQuestionIds = questions.map((question: any) => question.id)
+    const pathFingerprint = this.paperPathFingerprint(invitation.publicCode, pathQuestionIds)
+    const warnings: Array<{ questionId: string; reason: string | null }> = []
+
+    const result = await this.prisma.$transaction(async (tx: any) => {
+      const responseSession = invitation.responseSession ?? await tx.responseSession.create({
+        data: {
+          invitationId: invitation.id,
+          publicCode: invitation.publicCode,
+          questionnaireVersionId: invitation.questionnaireVersionId,
+          buildingId: invitation.buildingId,
+          assistanceMode: 'full_assisted_entry',
+          assistedByUserId: user.id,
+          assistanceDeclaredAt: submittedAt,
+          randomizationSeed: randomBytes(16).toString('hex'),
+          status: 'draft',
+          currentPage: 1,
+          pathFingerprint,
+          startedAt: submittedAt,
+          lastSeenAt: submittedAt,
+        },
+      })
+
+      for (const answer of dto.answers) {
+        const warning = this.detectPaperIdentifyingData(answer.value)
+        const saved = await tx.answer.upsert({
+          where: {
+            responseSessionId_questionId: {
+              responseSessionId: responseSession.id,
+              questionId: answer.questionId,
+            },
+          },
+          update: {
+            value: answer.value as any,
+            isDraft: false,
+            identifiabilityWarning: Boolean(warning),
+            warningReason: warning,
+          },
+          create: {
+            responseSessionId: responseSession.id,
+            questionId: answer.questionId,
+            value: answer.value as any,
+            isDraft: false,
+            identifiabilityWarning: Boolean(warning),
+            warningReason: warning,
+          },
+        })
+
+        if (saved.identifiabilityWarning) {
+          warnings.push({ questionId: saved.questionId, reason: saved.warningReason ?? null })
+        }
+      }
+
+      await tx.responseSession.update({
+        where: { id: responseSession.id },
+        data: {
+          assistanceMode: 'full_assisted_entry',
+          assistedByUserId: user.id,
+          assistanceDeclaredAt: submittedAt,
+          status: 'locked',
+          currentPage: Math.max(1, invitation.questionnaireVersion.groups.length),
+          lastSeenAt: submittedAt,
+          submittedAt,
+          lockedAt: submittedAt,
+          pathFingerprint,
+        },
+      })
+
+      const answerCount = await tx.answer.count({ where: { responseSessionId: responseSession.id } })
+
+      const submission = await tx.submission.create({
+        data: {
+          responseSessionId: responseSession.id,
+          publicCode: invitation.publicCode,
+          questionnaireVersionId: invitation.questionnaireVersionId,
+          buildingId: invitation.buildingId,
+          submittedAt,
+          answerCount,
+          pathFingerprint,
+        },
+      })
+
+      const updatedInvitation = await tx.invitation.update({
+        where: { id: invitation.id },
+        data: {
+          status: 'submitted',
+          startedAt: invitation.startedAt ?? submittedAt,
+          submittedAt,
+          assistanceMode: 'full_assisted_entry',
+        },
+        include: this.invitationInclude(),
+      })
+
+      return { submission, updatedInvitation }
+    })
+
+    await this.identityVaultService.recordDeliveryEvent({
+      invitationId: invitation.id,
+      publicCode: invitation.publicCode,
+      eventType: 'paper_form_entered_by_moderator',
+      metadata: {
+        questionnaireVersionId: invitation.questionnaireVersionId,
+        buildingId: invitation.buildingId,
+        answerCount: result.submission.answerCount,
+        moderatorNote: dto.moderatorNote?.trim() || undefined,
+      },
+    })
+
+    await this.auditService.log({
+      actor: user,
+      action: 'response.paper_entry.submit',
+      entityType: 'Submission',
+      entityId: result.submission.id,
+      publicCode: invitation.publicCode,
+      request,
+      metadata: {
+        questionnaireVersionId: invitation.questionnaireVersionId,
+        buildingId: invitation.buildingId,
+        answerCount: result.submission.answerCount,
+        pathFingerprint,
+        moderatorNote: dto.moderatorNote?.trim() || undefined,
+      },
+    })
+
+    return {
+      invitation: this.toInvitationDto(result.updatedInvitation),
+      submission: {
+        id: result.submission.id,
+        publicCode: result.submission.publicCode,
+        submittedAt: result.submission.submittedAt,
+        answerCount: result.submission.answerCount,
+      },
+      warnings,
+    }
+  }
+
   async resend(user: AuthenticatedUser, invitationId: string, request: Request) {
     const invitation = await this.prisma.invitation.findFirst({
       where: {
@@ -364,6 +609,10 @@ export class ModerationService {
 
     if (invitation.status === 'submitted' || invitation.status === 'cancelled' || invitation.status === 'blocked') {
       throw new BadRequestException('Cette invitation ne peut pas être relancée')
+    }
+
+    if (invitation.deliveryMode === 'paper_form' || invitation.deliveryMode === 'refusal_record') {
+      throw new BadRequestException('Les lignes papier et les refus ne peuvent pas être relancés')
     }
 
     const isTerminal = invitation.deliveryMode === 'onsite_terminal'
@@ -428,6 +677,122 @@ export class ModerationService {
     })
 
     return { invitation: this.toInvitationDto(updated) }
+  }
+
+
+  private paperEntryInvitationInclude() {
+    return {
+      building: true,
+      terminalDevice: { include: { building: true } },
+      responseSession: {
+        include: {
+          submission: true,
+          answers: true,
+        },
+      },
+      questionnaireVersion: {
+        include: {
+          questionnaire: true,
+          groups: {
+            where: { isArchived: false },
+            orderBy: { displayOrder: 'asc' },
+            include: {
+              questions: {
+                where: { isArchived: false },
+                orderBy: { displayOrder: 'asc' },
+                include: {
+                  likertScale: true,
+                  answerOptions: { orderBy: { displayOrder: 'asc' } },
+                  popupDefinitions: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    }
+  }
+
+  private paperEntryQuestions(questionnaireVersion: any): any[] {
+    return questionnaireVersion.groups.flatMap((group: any) => group.questions)
+  }
+
+  private validatePaperAnswer(question: any, value: unknown): void {
+    const responseType = question.responseType
+
+    if (responseType === 'information') {
+      return
+    }
+
+    if (responseType === 'single_choice') {
+      const validValues = new Set((question.answerOptions ?? []).map((option: any) => option.value))
+      if (typeof value !== 'string' || !validValues.has(value)) {
+        throw new BadRequestException(`Réponse invalide pour ${question.code}`)
+      }
+      return
+    }
+
+    if (responseType === 'multiple_choice') {
+      const validValues = new Set((question.answerOptions ?? []).map((option: any) => option.value))
+      if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || !validValues.has(item))) {
+        throw new BadRequestException(`Réponse invalide pour ${question.code}`)
+      }
+      return
+    }
+
+    if (responseType === 'likert') {
+      const scale = question.likertScale
+      const minValue = scale?.minValue ?? 1
+      const maxValue = minValue + (scale?.points ?? 0) - 1
+      if (value === 'not_applicable' && scale?.allowNotApplicable) {
+        return
+      }
+      if (typeof value !== 'number' || value < minValue || value > maxValue) {
+        throw new BadRequestException(`Réponse invalide pour ${question.code}`)
+      }
+      return
+    }
+
+    if (responseType === 'number') {
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        throw new BadRequestException(`Réponse numérique invalide pour ${question.code}`)
+      }
+      return
+    }
+
+    if (responseType === 'date') {
+      if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        throw new BadRequestException(`Date invalide pour ${question.code}`)
+      }
+      return
+    }
+
+    if (typeof value !== 'string') {
+      throw new BadRequestException(`Réponse texte invalide pour ${question.code}`)
+    }
+  }
+
+  private detectPaperIdentifyingData(value: unknown): string | null {
+    if (typeof value !== 'string') {
+      return null
+    }
+
+    const emailPattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i
+    const phonePattern = /(?:\+?\d[\s.-]?){8,}/
+
+    if (emailPattern.test(value)) {
+      return 'La réponse libre semble contenir une adresse email.'
+    }
+
+    if (phonePattern.test(value)) {
+      return 'La réponse libre semble contenir un numéro de téléphone.'
+    }
+
+    return null
+  }
+
+  private paperPathFingerprint(publicCode: string, questionIds: string[]): string {
+    return createHash('sha256').update(`${publicCode}:${questionIds.join('|')}`).digest('hex')
   }
 
   private async assertBuildingScope(user: AuthenticatedUser, buildingId: string): Promise<void> {
@@ -562,14 +927,20 @@ export class ModerationService {
   }
 
 
-  private resolveDeliveryMode(deliveryMode?: string): 'email' | 'email_simulation' | 'sms' | 'sms_simulation' | 'onsite_terminal' {
+  private resolveDeliveryMode(deliveryMode?: string): 'email' | 'email_simulation' | 'onsite_terminal' | 'paper_form' | 'refusal_record' | 'sms' | 'sms_simulation' {
     const resolved = deliveryMode ?? (this.config.get<string>('NODE_ENV') === 'production' ? 'email' : 'email_simulation')
 
     if ((resolved === 'email_simulation' || resolved === 'sms_simulation') && this.config.get<string>('NODE_ENV') === 'production') {
       throw new BadRequestException('Les modes de simulation sont interdits en production')
     }
 
-    if (resolved === 'email' || resolved === 'email_simulation' || resolved === 'sms' || resolved === 'sms_simulation' || resolved === 'onsite_terminal') {
+    if (resolved === 'email'
+      || resolved === 'email_simulation'
+      || resolved === 'onsite_terminal'
+      || resolved === 'paper_form'
+      || resolved === 'refusal_record'
+      || resolved === 'sms'
+      || resolved === 'sms_simulation') {
       return resolved
     }
 

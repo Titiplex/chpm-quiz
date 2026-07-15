@@ -176,6 +176,31 @@ describe('ModerationService', () => {
     expect(result).toMatchObject({ accessToken: null, devAccessLink: null })
   })
 
+  it('records paper forms and refusals without email identity or respondent link', async () => {
+    const { service, identityVault, mailQueue, audit } = makeService()
+
+    const paper = await service.create(adminUser, {
+      questionnaireVersionId: version.id,
+      buildingId: building.id,
+      deliveryMode: 'paper_form',
+    } as any, request)
+    const refusal = await service.create(adminUser, {
+      questionnaireVersionId: version.id,
+      buildingId: building.id,
+      deliveryMode: 'refusal_record',
+      refusalReason: 'Refuse de donner un email ou téléphone',
+    } as any, request)
+
+    expect(identityVault.createEmailIdentity).not.toHaveBeenCalled()
+    expect(mailQueue.enqueue).not.toHaveBeenCalled()
+    expect(identityVault.recordDeliveryEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: 'paper_form_recorded' }))
+    expect(identityVault.recordDeliveryEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: 'participation_refusal_recorded' }))
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'invitation.create.paper_form' }))
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'participation.refusal.record' }))
+    expect(paper).toMatchObject({ accessToken: null, devAccessLink: null })
+    expect(refusal.invitation).toMatchObject({ deliveryMode: 'refusal_record', status: 'cancelled' })
+  })
+
   it('rejects invalid invitation creation cases', async () => {
     await expect(makeService().service.create(moderatorUser, { questionnaireVersionId: version.id, buildingId: 'other', email: 'p@test' } as any, request)).rejects.toBeInstanceOf(ForbiddenException)
     await expect(makeService({ questionnaireVersion: { findUnique: vi.fn(async () => ({ ...version, status: 'draft' })) } }).service.create(adminUser, { questionnaireVersionId: version.id, buildingId: building.id, email: 'p@test' } as any, request)).rejects.toBeInstanceOf(BadRequestException)

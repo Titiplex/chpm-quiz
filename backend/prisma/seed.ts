@@ -402,6 +402,7 @@ async function main() {
   })
 
   await createDemoInvitations(publishedVersion.id, moderator.id, demoBuildings)
+  await createDemoFieldTrackingRecords(publishedVersion.id, moderator.id, requireDemoBuilding(demoBuildings, 'MTL-A'))
   const terminalSeeds = await createDemoTerminalDevices(organization.id, moderator.id, demoBuildings)
   const terminalInvitation = await createOnsiteTerminalInvitation(itqVersion.id, moderator.id, terminalSeeds[0]!)
   const itqDemoToken = await createSeedInvitation(
@@ -1777,6 +1778,66 @@ async function createItqDemoInvitations(questionnaireVersionId: string, moderato
         })
       }
     }
+  }
+}
+
+async function createDemoFieldTrackingRecords(questionnaireVersionId: string, moderatorId: string, building: DemoBuildingTarget) {
+  const records = [
+    {
+      publicCode: 'PAPR-CHPM-001',
+      deliveryMode: 'paper_form',
+      status: 'sent',
+      eventType: 'paper_form_recorded',
+      assistanceMode: 'full_assisted_entry',
+      sentAt: daysAgo(2),
+      cancelledAt: undefined,
+      note: 'Passation papier seedée pour une personne sans email/SMS',
+    },
+    {
+      publicCode: 'REFU-CHPM-001',
+      deliveryMode: 'refusal_record',
+      status: 'cancelled',
+      eventType: 'participation_refusal_recorded',
+      assistanceMode: 'none',
+      sentAt: undefined,
+      cancelledAt: daysAgo(1),
+      note: 'Refus seedé avant collecte de contact numérique',
+    },
+  ]
+
+  for (const record of records) {
+    const token = createRespondentToken(record.publicCode)
+    await prisma.invitation.create({
+      data: {
+        questionnaireVersionId,
+        buildingId: building.buildingId,
+        siteId: building.siteId,
+        createdByUserId: moderatorId,
+        publicCode: record.publicCode,
+        tokenHash: sha256(token),
+        status: record.status as any,
+        deliveryMode: record.deliveryMode as any,
+        assistanceMode: record.assistanceMode as any,
+        notifyModerator: true,
+        notifyAdmins: false,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        sentAt: record.sentAt,
+        cancelledAt: record.cancelledAt,
+        deliveryEvents: {
+          create: {
+            publicCode: record.publicCode,
+            eventType: record.eventType,
+            metadata: {
+              seeded: true,
+              buildingCode: building.code,
+              deliveryMode: record.deliveryMode,
+              note: record.note,
+            },
+            occurredAt: record.cancelledAt ?? record.sentAt ?? new Date(),
+          },
+        },
+      },
+    })
   }
 }
 

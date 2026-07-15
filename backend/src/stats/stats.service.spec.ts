@@ -81,4 +81,28 @@ describe('StatsService disclosure controls', () => {
       displayValue: '2 réponse(s)',
     })
   })
+
+  it('aggregates refusals and no-digital-contact field tracking separately from submissions', () => {
+    const service = makeService('1')
+    const rows = service.fieldTrackingBreakdown([
+      { deliveryMode: 'email_simulation', status: 'sent' },
+      { deliveryMode: 'onsite_terminal', status: 'submitted' },
+      { deliveryMode: 'paper_form', status: 'sent' },
+      { deliveryMode: 'refusal_record', status: 'cancelled' },
+    ])
+
+    expect(rows).toMatchObject({
+      approached: 4,
+      invited: 3,
+      refused: 1,
+      refusalRate: 25,
+      noDigitalContact: 2,
+      noDigitalContactRate: 67,
+      onsiteTerminal: 1,
+      paperForms: 1,
+      digitalContact: 1,
+      pendingWithoutDigitalContact: 1,
+    })
+  })
+
 })

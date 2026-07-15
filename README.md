@@ -83,6 +83,13 @@ npm run dev:frontend
 Le front appelle par défaut `http://localhost:3000/api` avec `credentials: include` pour transmettre le cookie
 HTTP-only.
 
+Le nom visible de l'application est piloté par `VITE_APP_NAME`. Cette valeur est utilisée dans la barre supérieure du front, dans le titre de l’onglet navigateur et dans les métadonnées HTML principales (`title`, `application-name`, `og:site_name`, `og:title`). La description exposée dans les métadonnées (`description`, `og:description`) est pilotée par `VITE_APP_DESCRIPTION`. Ces valeurs sont injectées dans `index.html` au build et réappliquées au runtime. Sans valeur explicite, les fallbacks restent génériques et réutilisables hors CH Montfavet.
+
+```env
+VITE_APP_NAME="Questionnaires institutionnels"
+VITE_APP_DESCRIPTION="Plateforme de questionnaires, invitations, passation sécurisée et statistiques pseudonymisées."
+```
+
 ## Textes et i18n éditables
 
 Les libellés mutualisés du front sont dans `public/content/i18n/*.json`. Le sélecteur global de langue est visible dans la barre supérieure pour tous les profils, y compris avant connexion et sur GitHub Pages.
@@ -165,6 +172,42 @@ Fichiers clés :
 - `docs/production/` et `docs/recette/` : procédures et matrices go/no-go.
 
 Le go production réel reste conditionné à la validation DPO, au test de restauration, à la recette sécurité/accessibilité et à l'authentification interne définitive.
+
+## Suivi terrain dans les statistiques
+
+Le panel statistiques distingue désormais les réponses effectives du suivi d'inclusion terrain :
+
+- les refus de répondre sont enregistrés par le modérateur comme des lignes `refusal_record` ; ils ne créent pas de soumission et n'entrent pas dans le taux de soumission ;
+- les personnes sans contact numérique sont comptées via les modes `onsite_terminal` et `paper_form` ;
+- les versions papier sont enregistrées sans email, SMS, téléphone ni lien répondant.
+
+Ces données servent au pilotage opérationnel de la démo et restent agrégées dans le panel statistiques.
+
+## Questionnaires papier et saisie manuelle
+
+Le front permet maintenant au modérateur de produire un PDF imprimable depuis la version publiée sélectionnée dans `/moderation`. Le bouton **Télécharger le PDF vierge** génère un formulaire papier localement dans le navigateur, sans appel API et sans exposer de donnée d'identité.
+
+Pour une passation papier réelle, le modérateur choisit le canal **Version papier · sans email/SMS** lors de la création d'une invitation. La ligne reçoit un code public, puis le PDF peut être téléchargé avec ce code. Après récupération du formulaire complété, le modérateur clique sur **Saisir** dans l'historique des invitations, recopie les réponses et verrouille la saisie. La soumission créée est pseudonymisée par code public et alimente les statistiques comme une soumission normale.
+
+Endpoint backend ajouté pour le mode connecté :
+
+```text
+POST /moderation/invitations/:id/paper-entry
+```
+
+Le payload attendu est :
+
+```json
+{
+  "answers": [
+    { "questionId": "uuid-question", "value": 3 }
+  ],
+  "moderatorNote": "note interne optionnelle"
+}
+```
+
+Les réponses papier sont réservées au canal `paper_form`. Les lignes `refusal_record` ne créent jamais de soumission.
+
 
 ## Canal SMS pour les invitations
 

@@ -29,6 +29,7 @@ const visibleQuestionCount = ref(6)
 
 const statsSections: PageSectionNavItem[] = [
   { id: 'stats-overview', label: 'Synthèse', hint: 'KPI et seuil' },
+  { id: 'stats-field-tracking', label: 'Terrain', hint: 'Refus, papier, terminal' },
   { id: 'stats-segments', label: 'Segments', hint: 'Versions, sites, bâtiments' },
   { id: 'stats-submissions', label: 'Soumissions', hint: 'Codes pseudonymisés' },
   { id: 'stats-popups', label: 'Popups', hint: 'Termes ouverts' },
@@ -179,6 +180,46 @@ function closeSubmissionDetail(): void {
           </div>
           <div class="col-md-3">
             <KpiCard label="Reprises" :value="String(statsStore.stats.totals.resumes)" />
+          </div>
+        </div>
+
+        <div id="stats-field-tracking" class="page-section demo-card mb-4">
+          <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+            <div>
+              <h2 class="page-header-title mb-1" style="font-size:1rem;">Suivi terrain hors réponse</h2>
+              <p class="small mb-0" style="color: var(--chm-muted);">
+                Ces indicateurs sont saisis par les modérateurs. Ils mesurent l’inclusion terrain, pas le contenu des réponses.
+              </p>
+            </div>
+            <span class="badge-soft warning">Sans email/SMS = terminal + papier</span>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-3">
+              <KpiCard label="Personnes approchées" :value="String(statsStore.stats.fieldTracking.approached)" />
+            </div>
+            <div class="col-md-3">
+              <KpiCard label="Refus déclarés" :value="String(statsStore.stats.fieldTracking.refused)" tone="danger" />
+            </div>
+            <div class="col-md-3">
+              <KpiCard label="Taux de refus" :value="`${statsStore.stats.fieldTracking.refusalRate} %`" tone="warning" />
+            </div>
+            <div class="col-md-3">
+              <KpiCard label="Sans contact numérique" :value="String(statsStore.stats.fieldTracking.noDigitalContact)" tone="warning" />
+            </div>
+          </div>
+          <div class="row g-3 mt-1">
+            <div class="col-md-3">
+              <KpiCard label="Terminaux" :value="String(statsStore.stats.fieldTracking.onsiteTerminal)" />
+            </div>
+            <div class="col-md-3">
+              <KpiCard label="Versions papier" :value="String(statsStore.stats.fieldTracking.paperForms)" />
+            </div>
+            <div class="col-md-3">
+              <KpiCard label="Contacts numériques" :value="String(statsStore.stats.fieldTracking.digitalContact)" />
+            </div>
+            <div class="col-md-3">
+              <KpiCard label="Sans contact en attente" :value="String(statsStore.stats.fieldTracking.pendingWithoutDigitalContact)" tone="warning" />
+            </div>
           </div>
         </div>
 

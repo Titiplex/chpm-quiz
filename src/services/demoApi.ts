@@ -44,6 +44,8 @@ import type {
   TerminalDevicesResponse,
   TerminalDeviceMutationResponse,
   TerminalSessionResponse,
+  SubmitPaperResponsesRequest,
+  SubmitPaperResponsesResponse,
   SubmitResponse,
   UpdateQuestionGroupRequest,
   UpdateQuestionnaireRequest,
@@ -433,6 +435,12 @@ export async function demoApiRequest<T>(path: string, options: DemoRequestOption
 
   if (method === 'POST' && route === '/moderation/invitations') {
     return asResponse<T>(createInvitation(options.body as CreateInvitationRequest))
+  }
+
+
+  const paperEntryMatch = route.match(/^\/moderation\/invitations\/([^/]+)\/paper-entry$/)
+  if (paperEntryMatch?.[1] && method === 'POST') {
+    return asResponse<T>(submitPaperResponses(paperEntryMatch[1], options.body as SubmitPaperResponsesRequest) satisfies SubmitPaperResponsesResponse)
   }
 
   const resendMatch = route.match(/^\/moderation\/invitations\/([^/]+)\/resend$/)
@@ -1381,24 +1389,29 @@ function createInvitation(payload: CreateInvitationRequest): CreateInvitationRes
   if (deliveryMode === 'onsite_terminal') {
     if (!terminalDevice) throw new Error('Terminal de démonstration introuvable.')
     if (terminalDevice.building.id !== building.id) throw new Error('Le terminal choisi est hors du bâtiment sélectionné.')
-  } else if ((deliveryMode === 'email' || deliveryMode === 'email_simulation') && !payload.email) {
+  } else if (deliveryMode !== 'paper_form' && deliveryMode !== 'refusal_record' && (deliveryMode === 'email' || deliveryMode === 'email_simulation') && !payload.email) {
     throw new Error('Adresse email requise pour une invitation email.')
   } else if ((deliveryMode === 'sms' || deliveryMode === 'sms_simulation') && !payload.phone) {
     throw new Error('Numéro de téléphone requis pour une invitation SMS.')
   }
 
   const invitations = getInvitations()
-  const publicCode = deliveryMode === 'onsite_terminal'
-    ? `TERM-${String(invitations.length + 1).padStart(4, '0')}`
-    : `DEMO-${String(invitations.length + 1).padStart(4, '0')}`
+  const publicCodePrefix = deliveryMode === 'onsite_terminal'
+    ? 'TERM'
+    : deliveryMode === 'paper_form'
+      ? 'PAPR'
+      : deliveryMode === 'refusal_record'
+        ? 'REFU'
+        : 'DEMO'
+  const publicCode = `${publicCodePrefix}-${String(invitations.length + 1).padStart(4, '0')}`
   const token = `demo-${publicCode.toLowerCase()}-${crypto.randomUUID()}`
   const invitation: ApiInvitation = {
     id: createId('invitation'),
     publicCode,
-    status: 'sent',
+    status: deliveryMode === 'refusal_record' ? 'cancelled' : 'sent',
     deliveryMode,
     assistanceMode,
-    maskedEmail: deliveryMode === 'email' || deliveryMode === 'email_simulation' ? maskEmail(payload.email) : null,
+    maskedEmail: deliveryMode === 'onsite_terminal' || deliveryMode === 'paper_form' || deliveryMode === 'refusal_record' ? null : maskEmail(payload.email),
     maskedPhone: deliveryMode === 'sms' || deliveryMode === 'sms_simulation' ? maskPhone(payload.phone) : null,
     questionnaireVersionId: payload.questionnaireVersionId,
     questionnaireTitle: questionnaire.title,
@@ -1407,7 +1420,7 @@ function createInvitation(payload: CreateInvitationRequest): CreateInvitationRes
     terminalDevice,
     terminalDispatchedAt: deliveryMode === 'onsite_terminal' ? nowIso() : null,
     expiresAt: payload.expiresAt ?? addDaysIso(deliveryMode === 'onsite_terminal' ? 1 : 30),
-    sentAt: nowIso(),
+    sentAt: deliveryMode === 'refusal_record' ? null : nowIso(),
     openedAt: null,
     startedAt: null,
     submittedAt: null,
@@ -1417,7 +1430,7 @@ function createInvitation(payload: CreateInvitationRequest): CreateInvitationRes
   invitations.unshift(invitation)
   saveInvitations(invitations)
 
-  if (deliveryMode !== 'onsite_terminal') {
+  if (deliveryMode !== 'onsite_terminal' && deliveryMode !== 'paper_form' && deliveryMode !== 'refusal_record') {
     const sessions = getRespondentSessions()
     sessions[token] = createRespondentSession(token, questionnaire, building, publicCode, 'draft', invitation)
     saveRespondentSessions(sessions)
@@ -1425,8 +1438,8 @@ function createInvitation(payload: CreateInvitationRequest): CreateInvitationRes
 
   return {
     invitation,
-    accessToken: deliveryMode === 'onsite_terminal' ? null : token,
-    devAccessLink: deliveryMode === 'onsite_terminal' ? null : createRespondentLink(token),
+    accessToken: deliveryMode === 'onsite_terminal' || deliveryMode === 'paper_form' || deliveryMode === 'refusal_record' ? null : token,
+    devAccessLink: deliveryMode === 'onsite_terminal' || deliveryMode === 'paper_form' || deliveryMode === 'refusal_record' ? null : createRespondentLink(token),
     terminalDispatchLink: terminalDevice ? createTerminalLink(terminalTokenSeeds[terminalDevice.id] ?? '') : null,
   }
 }
@@ -1439,10 +1452,167 @@ function resendInvitation(invitationId: string): { invitation: ApiInvitation } {
     throw new Error('Invitation introuvable dans la démo.')
   }
 
+  if (invitation.deliveryMode === 'paper_form' || invitation.deliveryMode === 'refusal_record') {
+    throw new Error('Les lignes papier et les refus ne peuvent pas être relancés.')
+  }
+
   invitation.sentAt = nowIso()
   invitation.status = invitation.status === 'pending' ? 'sent' : invitation.status
   saveInvitations(invitations)
   return { invitation }
+}
+
+function submitPaperResponses(invitationId: string, payload: SubmitPaperResponsesRequest): SubmitPaperResponsesResponse {
+  const invitations = getInvitations()
+  const invitation = invitations.find((candidate) => candidate.id === invitationId)
+
+  if (!invitation) {
+    throw new Error('Invitation papier introuvable dans la démo.')
+  }
+
+  if (invitation.deliveryMode !== 'paper_form') {
+    throw new Error('La saisie manuelle est réservée aux versions papier.')
+  }
+
+  if (['submitted', 'cancelled', 'blocked', 'expired'].includes(invitation.status)) {
+    throw new Error('Cette invitation papier ne peut plus être saisie.')
+  }
+
+  assertBuildingInCurrentUserScope(invitation.building)
+
+  const questionnaire = getQuestionnaires().find((candidate) => candidate.versionId === invitation.questionnaireVersionId)
+  if (!questionnaire) {
+    throw new Error('Questionnaire papier introuvable dans la démo.')
+  }
+
+  const questions = questionnaire.groups.flatMap((group) => group.questions)
+  const questionById = new Map(questions.map((question) => [question.id, question]))
+  const answers = payload.answers ?? []
+  const answerQuestionIds = new Set(answers.map((answer) => answer.questionId))
+
+  for (const question of questions) {
+    if (question.isRequired && question.responseType !== 'information' && !answerQuestionIds.has(question.id)) {
+      throw new Error(`Question obligatoire sans réponse : ${question.code}`)
+    }
+  }
+
+  const token = `demo-paper-${invitation.publicCode.toLowerCase()}`
+  const sessions = getRespondentSessions()
+  const session = sessions[token] ?? createRespondentSession(token, questionnaire, invitation.building, invitation.publicCode, 'draft', {
+    ...invitation,
+    deliveryMode: 'paper_form',
+    assistanceMode: 'full_assisted_entry',
+    status: 'draft',
+    startedAt: invitation.startedAt ?? nowIso(),
+  })
+
+  const warnings: Array<{ questionId: string; reason: string | null }> = []
+
+  for (const answerInput of answers) {
+    const sourceQuestion = questionById.get(answerInput.questionId)
+    if (!sourceQuestion) {
+      throw new Error('Une réponse papier cible une question inconnue.')
+    }
+
+    validateDemoPaperAnswer(sourceQuestion, answerInput.value)
+    const targetQuestion = findRespondentQuestion(session, answerInput.questionId)
+    const warning = isPotentiallyIdentifying(answerInput.value)
+      ? 'Le champ semble contenir une information potentiellement identifiante.'
+      : null
+
+    targetQuestion.answer = {
+      id: createId('answer'),
+      questionId: answerInput.questionId,
+      value: answerInput.value,
+      identifiabilityWarning: Boolean(warning),
+      warningReason: warning,
+    }
+
+    if (warning) {
+      warnings.push({ questionId: answerInput.questionId, reason: warning })
+    }
+  }
+
+  const submittedAt = nowIso()
+  session.responseSession.status = 'locked'
+  session.responseSession.submittedAt = submittedAt
+  session.responseSession.lockedAt = submittedAt
+  session.responseSession.currentPage = Math.max(1, session.questionnaire.groups.length)
+  session.invitation.status = 'submitted'
+  session.invitation.deliveryMode = 'paper_form'
+  session.invitation.assistanceMode = 'full_assisted_entry'
+
+  const answerCount = session.questionnaire.groups.reduce(
+    (total, group) => total + group.questions.filter((question) => question.answer).length,
+    0,
+  )
+
+  sessions[token] = session
+  saveRespondentSessions(sessions)
+
+  const updatedInvitation: ApiInvitation = {
+    ...invitation,
+    status: 'submitted',
+    startedAt: invitation.startedAt ?? submittedAt,
+    submittedAt,
+    responseStatus: 'locked',
+    assistanceMode: 'full_assisted_entry',
+  }
+
+  saveInvitations(invitations.map((candidate) => candidate.id === invitation.id ? updatedInvitation : candidate))
+
+  appendAuditLog('response.paper_entry.submit', 'Invitation', invitation.id, invitation.publicCode, {
+    questionnaireVersionId: questionnaire.versionId,
+    questionnaireTitle: questionnaire.title,
+    answerCount,
+    moderatorNote: payload.moderatorNote || undefined,
+    directEmailVisible: false,
+    simulation: true,
+  })
+  notifyDemoSubmission(session, answerCount, submittedAt)
+
+  return {
+    invitation: updatedInvitation,
+    warnings,
+    submission: {
+      id: createId('submission'),
+      publicCode: invitation.publicCode,
+      submittedAt,
+      answerCount,
+    },
+  }
+}
+
+function validateDemoPaperAnswer(question: ApiQuestion, value: unknown): void {
+  const responseType = question.responseType ?? question.type
+
+  if (responseType === 'information') return
+
+  if (responseType === 'single_choice') {
+    const validValues = new Set((question.options ?? []).map((option) => option.value))
+    if (typeof value !== 'string' || !validValues.has(value)) {
+      throw new Error(`Réponse invalide pour ${question.code}.`)
+    }
+  } else if (responseType === 'multiple_choice') {
+    const validValues = new Set((question.options ?? []).map((option) => option.value))
+    if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || !validValues.has(item))) {
+      throw new Error(`Réponse invalide pour ${question.code}.`)
+    }
+  } else if (responseType === 'likert') {
+    const scale = question.likertScale
+    const minValue = scale?.minValue ?? 1
+    const maxValue = minValue + (scale?.points ?? 0) - 1
+    if (value === 'not_applicable' && scale?.allowNotApplicable) return
+    if (typeof value !== 'number' || value < minValue || value > maxValue) {
+      throw new Error(`Réponse invalide pour ${question.code}.`)
+    }
+  } else if (responseType === 'number') {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      throw new Error(`Réponse numérique invalide pour ${question.code}.`)
+    }
+  } else if (typeof value !== 'string') {
+    throw new Error(`Réponse invalide pour ${question.code}.`)
+  }
 }
 
 function registerTerminalDevice(payload: RegisterTerminalDeviceRequest): RegisterTerminalDeviceResponse {
@@ -2151,6 +2321,46 @@ function createInitialInvitations(): ApiInvitation[] {
       responseStatus: null,
     },
     {
+      id: 'demo-invitation-paper-chpm',
+      publicCode: 'PAPR-0001',
+      status: 'sent',
+      deliveryMode: 'paper_form',
+      assistanceMode: 'full_assisted_entry',
+      maskedEmail: null,
+      questionnaireVersionId: CHPM_VERSION_ID,
+      questionnaireTitle: 'Questionnaire CHPM',
+      versionLabel: '1.4',
+      building: mtl,
+      terminalDevice: null,
+      terminalDispatchedAt: null,
+      expiresAt: addDaysIso(30),
+      sentAt: addDaysIso(-2),
+      openedAt: null,
+      startedAt: null,
+      submittedAt: null,
+      responseStatus: null,
+    },
+    {
+      id: 'demo-invitation-refusal-chpm',
+      publicCode: 'REFU-0001',
+      status: 'cancelled',
+      deliveryMode: 'refusal_record',
+      assistanceMode: 'none',
+      maskedEmail: null,
+      questionnaireVersionId: CHPM_VERSION_ID,
+      questionnaireTitle: 'Questionnaire CHPM',
+      versionLabel: '1.4',
+      building: mtl,
+      terminalDevice: null,
+      terminalDispatchedAt: null,
+      expiresAt: addDaysIso(1),
+      sentAt: null,
+      openedAt: null,
+      startedAt: null,
+      submittedAt: null,
+      responseStatus: null,
+    },
+    {
       id: 'demo-invitation-sms-open',
       publicCode: 'SMS-0001',
       status: 'sent',
@@ -2809,16 +3019,16 @@ function createStats(questionnaireId: string): StatsResponse['stats'] {
     questionnaire: { id: questionnaire.id, code: questionnaire.code, title: questionnaire.title },
     threshold: 5,
     totals: {
-      invited: 8,
+      invited: 9,
       opened: 7,
       started: 7,
       submitted: 6,
       abandoned: 1,
       expired: 0,
-      openingRate: 88,
-      startRate: 88,
-      submissionRate: 75,
-      completionRate: 75,
+      openingRate: 78,
+      startRate: 78,
+      submissionRate: 67,
+      completionRate: 67,
       abandonmentRate: 14,
       telemetryEvents: isItq ? 96 : 30,
       popupOpens: isItq ? 42 : 9,
@@ -2827,20 +3037,32 @@ function createStats(questionnaireId: string): StatsResponse['stats'] {
       resumes: 3,
       medianTotalDurationMs: isItq ? 9 * 60 * 1000 : 4 * 60 * 1000,
     },
+    fieldTracking: {
+      approached: 11,
+      invited: 9,
+      refused: 2,
+      refusalRate: 18,
+      noDigitalContact: 3,
+      noDigitalContactRate: 33,
+      onsiteTerminal: 2,
+      paperForms: 1,
+      digitalContact: 6,
+      pendingWithoutDigitalContact: 2,
+    },
     versions: [
       {
         id: questionnaire.versionId,
         versionLabel: questionnaire.versionLabel,
         status: questionnaire.status,
-        invited: 8,
+        invited: 9,
         opened: 7,
         started: 7,
         submitted: 6,
         abandoned: 1,
-        openingRate: 88,
-        startRate: 88,
-        submissionRate: 75,
-        completionRate: 75,
+        openingRate: 78,
+        startRate: 78,
+        submissionRate: 67,
+        completionRate: 67,
         abandonmentRate: 14,
         effectifSufficient: true,
       },
@@ -2853,8 +3075,8 @@ function createStats(questionnaireId: string): StatsResponse['stats'] {
         opened: 6,
         started: 6,
         submitted: 5,
-        openingRate: 86,
-        startRate: 86,
+        openingRate: 100,
+        startRate: 100,
         submissionRate: 83,
       },
       {
@@ -2879,20 +3101,31 @@ function createStats(questionnaireId: string): StatsResponse['stats'] {
         startRate: 50,
         submissionRate: 50,
       },
+      {
+        mode: 'paper_form',
+        label: 'Version papier',
+        invited: 1,
+        opened: 0,
+        started: 0,
+        submitted: 0,
+        openingRate: 0,
+        startRate: 0,
+        submissionRate: 0,
+      },
     ],
     buildings: [
       {
         buildingId: 'demo-building-mtl-a',
         label: 'Montréal · Bâtiment A',
-        invited: 8,
+        invited: 9,
         opened: 7,
         started: 7,
         submitted: 6,
         effectifSufficient: true,
-        openingRate: 88,
-        startRate: 88,
-        submissionRate: 75,
-        completionRate: 75,
+        openingRate: 78,
+        startRate: 78,
+        submissionRate: 67,
+        completionRate: 67,
         displayValue: '6 soumis',
       },
       {
