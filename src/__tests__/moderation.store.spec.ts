@@ -44,6 +44,7 @@ describe('useModerationStore', () => {
       paperForms: 1,
       noDigitalContact: 2,
       refused: 1,
+      sms: 0
     })
   })
 

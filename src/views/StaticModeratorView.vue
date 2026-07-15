@@ -19,6 +19,7 @@ const form = reactive({
   questionnaire: staticQuestionnaire.versionLabel,
   buildingId: staticBuildings[0]?.id ?? '',
   email: 'patient.demo@example.org',
+  phone: '+33600000000',
   deliveryMode: 'email_simulation',
 })
 
@@ -122,21 +123,34 @@ function statusTone(status: StaticInvitationStatus): 'success' | 'warning' | 'ne
               required
             >
               <option value="email_simulation">Email simulé</option>
+              <option value="sms_simulation">SMS simulé</option>
               <option value="terminal_preview">Terminal hospitalier simulé</option>
             </select>
 
-            <label class="form-label fw-bold" for="static-respondent-email"
-              >Adresse email masquée dans le suivi</label
-            >
-            <input
-              id="static-respondent-email"
-              v-model="form.email"
-              class="form-control mb-3"
-              type="email"
-              required
-            />
+            <template v-if="form.deliveryMode === 'sms_simulation'">
+              <label class="form-label fw-bold" for="static-respondent-phone">Téléphone masqué dans le suivi</label>
+              <input
+                id="static-respondent-phone"
+                v-model="form.phone"
+                class="form-control mb-3"
+                type="tel"
+                required
+              />
+            </template>
+            <template v-else>
+              <label class="form-label fw-bold" for="static-respondent-email"
+                >Adresse email masquée dans le suivi</label
+              >
+              <input
+                id="static-respondent-email"
+                v-model="form.email"
+                class="form-control mb-3"
+                type="email"
+                required
+              />
+            </template>
             <p class="small muted mb-4">
-              L’adresse sert seulement à illustrer le point de vue modérateur. Elle n’est pas
+              La destination sert seulement à illustrer le point de vue modérateur. Elle n’est pas
               envoyée ni persistée.
             </p>
 

@@ -28,6 +28,8 @@ export function validateEnvironment(input: Record<string, unknown>) {
   env.AUDIT_RETENTION_DAYS = integerValue(input.AUDIT_RETENTION_DAYS, 730, 'AUDIT_RETENTION_DAYS', 30, 3650)
   env.EMAIL_JOB_MAX_ATTEMPTS = integerValue(input.EMAIL_JOB_MAX_ATTEMPTS, 3, 'EMAIL_JOB_MAX_ATTEMPTS', 1, 20)
   env.EMAIL_JOB_RETRY_DELAY_MS = integerValue(input.EMAIL_JOB_RETRY_DELAY_MS, 1000, 'EMAIL_JOB_RETRY_DELAY_MS', 100, 3_600_000)
+  env.SMS_JOB_MAX_ATTEMPTS = integerValue(input.SMS_JOB_MAX_ATTEMPTS, 3, 'SMS_JOB_MAX_ATTEMPTS', 1, 20)
+  env.SMS_JOB_RETRY_DELAY_MS = integerValue(input.SMS_JOB_RETRY_DELAY_MS, 1000, 'SMS_JOB_RETRY_DELAY_MS', 100, 3_600_000)
   env.NOTIFICATION_DIGEST_WORKER_INTERVAL_MS = integerValue(input.NOTIFICATION_DIGEST_WORKER_INTERVAL_MS, 3_600_000, 'NOTIFICATION_DIGEST_WORKER_INTERVAL_MS', 60_000, 86_400_000)
 
   for (const key of booleanKeys) {
@@ -71,6 +73,8 @@ export function validateEnvironment(input: Record<string, unknown>) {
     isProductionLike,
   )
   env.EMAIL_PROVIDER = oneOf(stringValue(input.EMAIL_PROVIDER, 'simulation'), ['simulation', 'brevo', 'sendgrid', 'mailjet'], 'EMAIL_PROVIDER')
+  env.SMS_PROVIDER = oneOf(stringValue(input.SMS_PROVIDER, isProductionLike ? 'disabled' : 'simulation'), ['disabled', 'simulation', 'twilio', 'brevo'], 'SMS_PROVIDER')
+  env.SMS_SENDER = stringValue(input.SMS_SENDER, 'CHPM')
   env.AUTH_PROVIDER = oneOf(stringValue(input.AUTH_PROVIDER, 'local'), ['local', 'oidc', 'saml'], 'AUTH_PROVIDER')
   env.EMAIL_FROM = stringValue(input.EMAIL_FROM, 'no-reply@chpm.local')
   env.EMAIL_FROM_NAME = stringValue(input.EMAIL_FROM_NAME, 'CHPM Questionnaires')
@@ -88,6 +92,10 @@ export function validateEnvironment(input: Record<string, unknown>) {
 
     if (env.EMAIL_PROVIDER === 'simulation') {
       throw new Error('EMAIL_PROVIDER=simulation est interdit en production/préproduction')
+    }
+
+    if (env.SMS_PROVIDER === 'simulation') {
+      throw new Error('SMS_PROVIDER=simulation est interdit en production/préproduction ; utiliser disabled, twilio ou brevo')
     }
   }
 

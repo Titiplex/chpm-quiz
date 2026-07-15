@@ -5,6 +5,7 @@ vi.mock('../prisma/prisma.service', () => ({ PrismaService: class PrismaService 
 vi.mock('../security/access-token.service', () => ({ AccessTokenService: class AccessTokenService {} }))
 vi.mock('../identity-vault/identity-vault.service', () => ({ IdentityVaultService: class IdentityVaultService {} }))
 vi.mock('../mail/mail-queue.service', () => ({ MailQueueService: class MailQueueService {} }))
+vi.mock('../sms/sms-queue.service', () => ({ SmsQueueService: class SmsQueueService {} }))
 vi.mock('../audit/audit.service', () => ({ AuditService: class AuditService {} }))
 
 import { ModerationService } from './moderation.service'
@@ -70,15 +71,19 @@ function makeService(overrides: Record<string, unknown> = {}, env: Record<string
   const accessToken = { create: vi.fn((publicCode: string) => ({ token: `${publicCode}.signed-token`, tokenHash: `${publicCode}-hash` })) }
   const identityVault = {
     hasExistingIdentityForEmail: vi.fn(async () => false),
+    hasExistingIdentityForPhone: vi.fn(async () => false),
     createEmailIdentity: vi.fn(async () => undefined),
+    createPhoneIdentity: vi.fn(async () => undefined),
     recordDeliveryEvent: vi.fn(async () => undefined),
     loadOutboundEmailForInvitation: vi.fn(async () => ({ email: 'patient@example.test' })),
+    loadOutboundPhoneForInvitation: vi.fn(async () => ({ phone: '+33600000000' })),
   }
   const mailQueue = { enqueue: vi.fn(() => 'mail-job-1') }
+  const smsQueue = { enqueue: vi.fn(() => 'sms-job-1') }
   const audit = { log: vi.fn(async () => undefined) }
   const config = { get: vi.fn(<T = string>(key: string, fallback?: T) => (key in env ? env[key] as T : fallback)) }
 
-  return { service: new ModerationService(prisma as any, accessToken as any, identityVault as any, mailQueue as any, audit as any, config as any), prisma, accessToken, identityVault, mailQueue, audit, config }
+  return { service: new ModerationService(prisma as any, accessToken as any, identityVault as any, mailQueue as any, smsQueue as any, audit as any, config as any), prisma, accessToken, identityVault, mailQueue, smsQueue, audit, config }
 }
 
 describe('ModerationService', () => {
@@ -119,6 +124,24 @@ describe('ModerationService', () => {
     expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'invitation.create' }))
     expect(result.accessToken).toContain('.signed-token')
     expect(result.devAccessLink).toContain('https://app.example.test/r/')
+  })
+
+  it('creates a SMS invitation, writes phone identity and queues SMS', async () => {
+    const { service, prisma, identityVault, smsQueue, audit } = makeService({}, { FRONTEND_ORIGIN: 'https://app.example.test', EXPOSE_RESPONDENT_DEV_LINKS: 'true' })
+
+    const result = await service.create(adminUser, {
+      questionnaireVersionId: version.id,
+      buildingId: building.id,
+      phone: '+33600000000',
+      deliveryMode: 'sms_simulation',
+      notifyModerator: true,
+    } as any, request)
+
+    expect(prisma.invitation.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ deliveryMode: 'sms_simulation', status: 'sent', notifyModerator: true }) }))
+    expect(identityVault.createPhoneIdentity).toHaveBeenCalledWith(expect.objectContaining({ phone: '+33600000000', invitationId: 'invitation-1' }))
+    expect(smsQueue.enqueue).toHaveBeenCalledWith(expect.objectContaining({ template: 'invitation', to: { phone: '+33600000000' } }))
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'invitation.create' }))
+    expect(result.accessToken).toContain('.signed-token')
   })
 
   it('never exposes respondent tokens in production', async () => {
@@ -182,6 +205,7 @@ describe('ModerationService', () => {
     await expect(makeService().service.create(moderatorUser, { questionnaireVersionId: version.id, buildingId: 'other', email: 'p@test' } as any, request)).rejects.toBeInstanceOf(ForbiddenException)
     await expect(makeService({ questionnaireVersion: { findUnique: vi.fn(async () => ({ ...version, status: 'draft' })) } }).service.create(adminUser, { questionnaireVersionId: version.id, buildingId: building.id, email: 'p@test' } as any, request)).rejects.toBeInstanceOf(BadRequestException)
     await expect(makeService().service.create(adminUser, { questionnaireVersionId: version.id, buildingId: building.id, deliveryMode: 'email' } as any, request)).rejects.toBeInstanceOf(BadRequestException)
+    await expect(makeService().service.create(adminUser, { questionnaireVersionId: version.id, buildingId: building.id, deliveryMode: 'sms' } as any, request)).rejects.toBeInstanceOf(BadRequestException)
     await expect(makeService({ terminalDevice: { findFirst: vi.fn(async () => null) } }).service.create(adminUser, { questionnaireVersionId: version.id, buildingId: building.id, deliveryMode: 'onsite_terminal', terminalDeviceId: 'missing' } as any, request)).rejects.toBeInstanceOf(BadRequestException)
   })
 
@@ -196,6 +220,16 @@ describe('ModerationService', () => {
     expect(identityVault.recordDeliveryEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: 'invitation_reminder_queued' }))
     expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'invitation.resend' }))
     expect(result.invitation.status).toBe('sent')
+  })
+
+  it('resends SMS invitations with renewed tokens and records delivery', async () => {
+    const { service, identityVault, smsQueue } = makeService({ invitation: { findFirst: vi.fn(async () => invitation({ deliveryMode: 'sms_simulation' })), update: vi.fn(async (args: any) => invitation({ deliveryMode: 'sms_simulation', ...args.data })) } })
+
+    await service.resend(adminUser, 'invitation-1', request)
+
+    expect(identityVault.loadOutboundPhoneForInvitation).toHaveBeenCalledWith('invitation-1')
+    expect(smsQueue.enqueue).toHaveBeenCalledWith(expect.objectContaining({ template: 'reminder', to: { phone: '+33600000000' } }))
+    expect(identityVault.recordDeliveryEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: 'invitation_sms_reminder_queued' }))
   })
 
   it('blocks impossible resends and redispatches terminal invitations', async () => {

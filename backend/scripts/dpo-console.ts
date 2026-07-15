@@ -17,7 +17,7 @@ const CODE_REGEX = /^[A-Z0-9][A-Z0-9-]{3,64}$/
 const MAX_CODES_PER_EXPORT = 50
 
 type AuthenticatedDpo = { id: string; email: string; displayName: string; role: string; isActive: boolean; passwordHash: string }
-type IdentityRow = { uniqueCode: string; encryptedEmail: string; questionnaireVersionId: string; buildingId: string }
+type IdentityRow = { uniqueCode: string; contactChannel: string; encryptedEmail: string | null; encryptedPhone: string | null; questionnaireVersionId: string; buildingId: string }
 
 loadEnvFile(join(process.cwd(), '.env'))
 
@@ -36,7 +36,7 @@ async function main() {
   const justification = await promptLongRequired('Justification opérationnelle DPO')
   const procedureReference = await promptLongRequired('Référence légale / procédure')
   const codes = await promptPublicCodes()
-  await requireTypedConfirmation('Tapez "EXPORT DPO" pour produire l’export minimal code-email chiffré', 'EXPORT DPO')
+  await requireTypedConfirmation('Tapez "EXPORT DPO" pour produire l’export minimal code-contact chiffré', 'EXPORT DPO')
 
   const rows = await loadExplicitIdentityRows(codes)
   const missingCodes = codes.filter((code) => !rows.some((row) => row.uniqueCode === code))
@@ -48,14 +48,19 @@ async function main() {
     requestedCodes: codes,
     missingCodes,
     rowCount: rows.length,
-    rows: rows.map((row) => ({ publicCode: row.uniqueCode, email: decryptEmail(row.encryptedEmail) })),
+    rows: rows.map((row) => ({
+      publicCode: row.uniqueCode,
+      contactChannel: row.contactChannel === 'sms' ? 'sms' : 'email',
+      email: row.encryptedEmail ? decryptEmail(row.encryptedEmail) : null,
+      phone: row.encryptedPhone ? decryptEmail(row.encryptedPhone) : null,
+    })),
   }
 
   const encrypted = await encryptExport(JSON.stringify(payload, null, 2))
   const fingerprint = createHash('sha256').update(encrypted.fileBytes).digest('hex')
   const outputDir = resolve(process.env.DPO_EXPORT_DIR ?? join(process.cwd(), 'dpo-exports'))
   mkdirSync(outputDir, { recursive: true })
-  const filename = `dpo-code-email-export-${new Date().toISOString().replace(/[:.]/g, '-')}.json.enc`
+  const filename = `dpo-code-contact-export-${new Date().toISOString().replace(/[:.]/g, '-')}.json.enc`
   const filepath = join(outputDir, filename)
   writeFileSync(filepath, encrypted.fileBytes, { mode: 0o600 })
 
@@ -63,7 +68,7 @@ async function main() {
     await tx.auditLog.create({
       data: {
         actorUserId: dpo.id,
-        action: 'identity_vault.dpo_console.export_code_email',
+        action: 'identity_vault.dpo_console.export_code_contact',
         entityType: 'IdentityVault',
         entityId: null,
         publicCode: codes.length === 1 ? codes[0] : null,
@@ -79,7 +84,7 @@ async function main() {
           exportFingerprint: fingerprint,
           exportAlgorithm: EXPORT_ALGORITHM,
           exportPath: filepath,
-          unrestrictedEmailSearch: false,
+          unrestrictedContactSearch: false,
           massExport: false,
         },
         ipAddress: 'local-cli',
@@ -90,7 +95,7 @@ async function main() {
     await tx.identityVaultAuditLog.create({
       data: {
         actorUserId: dpo.id,
-        action: 'dpo_console.export_code_email',
+        action: 'dpo_console.export_code_contact',
         publicCode: codes.length === 1 ? codes[0] : undefined,
         ipAddress: 'local-cli',
         metadata: {
@@ -114,7 +119,7 @@ async function main() {
   console.log(`- Codes demandés : ${codes.length}`)
   console.log(`- Lignes exportées : ${rows.length}`)
   if (missingCodes.length) console.log(`- Codes introuvables : ${missingCodes.join(', ')}`)
-  console.log('Aucun email n’a été affiché dans le terminal. Le fichier doit être transféré et conservé selon la procédure DPO validée.\n')
+  console.log('Aucun email ni téléphone n’a été affiché dans le terminal. Le fichier doit être transféré et conservé selon la procédure DPO validée.\n')
 }
 
 async function loginDpo(): Promise<AuthenticatedDpo> {
@@ -161,7 +166,7 @@ async function auditFailedLogin(email: string, actorUserId: string | null, role:
 }
 
 async function promptPublicCodes() {
-  console.log('\nSaisir uniquement des codes publics explicites. Recherche libre par email interdite.')
+  console.log('\nSaisir uniquement des codes publics explicites. Recherche libre par email ou téléphone interdite.')
   const raw = await promptLongRequired(`Codes publics, séparés par virgules ou espaces, maximum ${MAX_CODES_PER_EXPORT}`)
   const codes = Array.from(new Set(raw.split(/[\s,;]+/).map((value) => value.trim().toUpperCase()).filter(Boolean)))
   if (codes.length === 0) throw new Error('Au moins un code public explicite est obligatoire.')
@@ -179,7 +184,9 @@ async function loadExplicitIdentityRows(codes: string[]) {
     },
     select: {
       uniqueCode: true,
+      contactChannel: true,
       encryptedEmail: true,
+      encryptedPhone: true,
       questionnaireVersionId: true,
       buildingId: true,
     },
@@ -336,9 +343,9 @@ function isLocalDatabaseUrl(rawUrl: string) {
 
 function printBanner() {
   console.log('\nCHPM DPO Console')
-  console.log('Console locale dédiée aux exports exceptionnels code-email.')
+  console.log('Console locale dédiée aux exports exceptionnels code-contact.')
   console.log('Accès réservé à un compte DPO actif, avec justification, référence de procédure, codes explicites, chiffrement et audit.')
-  console.log('Recherche libre par email et export massif non borné interdits.')
+  console.log('Recherche libre par email/téléphone et export massif non borné interdits.')
   console.log(`Base ciblée : ${redactDatabaseUrl(databaseUrl)}\n`)
 }
 

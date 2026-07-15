@@ -379,6 +379,15 @@ export const staticInvitations: StaticInvitation[] = [
     sentAt: '2026-06-24 14:05',
   },
   {
+    publicCode: 'ITQ-SMS-003',
+    destination: '•••• 0000',
+    channel: 'SMS simulé',
+    questionnaireTitle: staticQuestionnaire.title,
+    buildingLabel: 'CHPM · Bâtiment B',
+    status: 'opened',
+    sentAt: '2026-06-24 14:05',
+  },
+  {
     publicCode: 'ITQ-MA-004',
     destination: 'n••••••@exemple.org',
     channel: 'Email simulé',

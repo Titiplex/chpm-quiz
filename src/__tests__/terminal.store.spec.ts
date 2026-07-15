@@ -21,6 +21,7 @@ const terminalSessionPayload = {
       deliveryMode: 'onsite_terminal',
       assistanceMode: 'none',
       maskedEmail: null,
+      maskedPhone: null,
       questionnaireVersionId: 'version-1',
       questionnaireTitle: 'Questionnaire terminal',
       versionLabel: '1.0',

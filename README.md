@@ -208,3 +208,15 @@ Le payload attendu est :
 
 Les réponses papier sont réservées au canal `paper_form`. Les lignes `refusal_record` ne créent jamais de soumission.
 
+
+## Canal SMS pour les invitations
+
+La modération permet de créer une invitation par email, par SMS ou par terminal hospitalier. En mode démo, `sms_simulation` crée le lien répondant et journalise un envoi simulé. En backend réel, le téléphone est stocké dans le coffre identité, chiffré et séparé des tables opérationnelles.
+
+Configuration locale :
+
+```env
+SMS_PROVIDER=simulation
+```
+
+Configuration production : utiliser `SMS_PROVIDER=disabled` si aucun prestataire SMS n'est activé, ou `twilio` / `brevo` avec les secrets correspondants.

@@ -195,3 +195,43 @@ La saisie manuelle :
 
 Les refus `refusal_record` restent des lignes de suivi terrain et ne sont pas saisissables comme réponses.
 
+
+## Invitations par SMS
+
+Le workflow de modération accepte maintenant trois familles de canaux :
+
+- `email` / `email_simulation` ;
+- `sms` / `sms_simulation` ;
+- `onsite_terminal`.
+
+Le téléphone du répondant est traité comme donnée directement identifiante. Il est chiffré et hashé dans le schéma `identity`, séparé des tables opérationnelles, au même titre que l'email. Les écrans de modération n'affichent jamais le numéro en clair.
+
+En local :
+
+```env
+SMS_PROVIDER=simulation
+SMS_SENDER=CHPM
+```
+
+En préproduction ou production, deux choix sont possibles :
+
+```env
+SMS_PROVIDER=disabled
+```
+
+ou bien un provider réel :
+
+```env
+SMS_PROVIDER=twilio
+TWILIO_ACCOUNT_SID=...
+TWILIO_AUTH_TOKEN=...
+TWILIO_FROM=+33600000000
+```
+
+```env
+SMS_PROVIDER=brevo
+BREVO_API_KEY=...
+SMS_SENDER=CHPM
+```
+
+`SMS_PROVIDER=simulation` est interdit en environnement production-like. Si le canal SMS n'est pas encore contractualisé, garder `SMS_PROVIDER=disabled` : le backend démarre, mais une tentative d'envoi SMS renverra une erreur explicite.

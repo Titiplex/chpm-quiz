@@ -17,6 +17,16 @@ export interface CreateEmailIdentityInput {
   request?: Request
 }
 
+export interface CreatePhoneIdentityInput {
+  invitationId: string
+  publicCode: string
+  phone: string
+  questionnaireVersionId: string
+  buildingId: string
+  createdByUserId: string
+  request?: Request
+}
+
 export interface CreateDeliveryEventInput {
   invitationId: string
   publicCode: string
@@ -27,7 +37,9 @@ export interface CreateDeliveryEventInput {
 
 export interface JudicialIdentityExportRow {
   publicCode: string
-  email: string
+  contactChannel: 'email' | 'sms'
+  email: string | null
+  phone: string | null
   questionnaireVersionId: string
   buildingId: string
 }
@@ -48,6 +60,7 @@ export class IdentityVaultService {
       request,
       metadata: {
         currentRoleCanExecuteEmailAccess: user.role === 'judicial_officer',
+        currentRoleCanExecuteIdentityAccess: user.role === 'judicial_officer',
         identityDisabledForOperationalApp: this.operationalIdentityAccessDisabled(),
       },
     })
@@ -58,8 +71,10 @@ export class IdentityVaultService {
       identityTable: 'identity.email_identities',
       model: 'IdentityVaultEntry',
       directEmailVisibleInAdmin: false,
+      directPhoneVisibleInAdmin: false,
       currentRole: user.role,
       currentRoleCanExecuteEmailAccess: user.role === 'judicial_officer',
+      currentRoleCanExecuteIdentityAccess: user.role === 'judicial_officer',
       identityDisabledForOperationalApp: this.operationalIdentityAccessDisabled(),
       accessMode: 'workflow judiciaire uniquement, via JudicialAccessRequest doublement validée',
       audit: ['AuditLog', 'IdentityVaultAuditLog'],
@@ -99,12 +114,12 @@ export class IdentityVaultService {
     })
 
     if (user.role !== 'judicial_officer') {
-      throw new ForbiddenException('Accès au coffre email refusé : le rôle courant ne peut pas lire la correspondance code-email.')
+      throw new ForbiddenException('Accès au coffre identité refusé : le rôle courant ne peut pas lire la correspondance code-contact.')
     }
 
     return {
       accepted: true,
-      message: 'Aucun email n’est renvoyé par cet endpoint. Utiliser le workflow JudicialAccessRequest validé et audité.',
+      message: 'Aucun email ni téléphone n’est renvoyé par cet endpoint. Utiliser le workflow JudicialAccessRequest validé et audité.',
       nextStep: '/api/judicial-access/requests',
     }
   }
@@ -124,6 +139,21 @@ export class IdentityVaultService {
     return Boolean(existing)
   }
 
+  async hasExistingIdentityForPhone(questionnaireVersionId: string, phone: string): Promise<boolean> {
+    const normalizedPhone = this.emailCryptoService.normalizePhone(phone)
+    const phoneHash = this.emailCryptoService.hashContact(normalizedPhone)
+    const existing = await this.identityPrisma.identityVaultEntry.findFirst({
+      where: {
+        questionnaireVersionId,
+        phoneHash,
+        deletedAt: null,
+      },
+      select: { id: true },
+    })
+
+    return Boolean(existing)
+  }
+
   async createEmailIdentity(input: CreateEmailIdentityInput): Promise<void> {
     const normalizedEmail = this.emailCryptoService.normalize(input.email)
     const emailHash = this.emailCryptoService.hashEmail(normalizedEmail)
@@ -133,6 +163,7 @@ export class IdentityVaultService {
         data: {
           invitationId: input.invitationId,
           uniqueCode: input.publicCode,
+          contactChannel: 'email',
           encryptedEmail: this.emailCryptoService.encryptEmail(normalizedEmail),
           emailHash,
           questionnaireVersionId: input.questionnaireVersionId,
@@ -148,6 +179,41 @@ export class IdentityVaultService {
           publicCode: input.publicCode,
           ipAddress: input.request?.ip,
           metadata: {
+            contactChannel: 'email',
+            questionnaireVersionId: input.questionnaireVersionId,
+            buildingId: input.buildingId,
+          },
+        },
+      })
+    })
+  }
+
+  async createPhoneIdentity(input: CreatePhoneIdentityInput): Promise<void> {
+    const normalizedPhone = this.emailCryptoService.normalizePhone(input.phone)
+    const phoneHash = this.emailCryptoService.hashContact(normalizedPhone)
+
+    await this.identityPrisma.$transaction(async (tx: any) => {
+      await tx.identityVaultEntry.create({
+        data: {
+          invitationId: input.invitationId,
+          uniqueCode: input.publicCode,
+          contactChannel: 'sms',
+          encryptedPhone: this.emailCryptoService.encryptContact(normalizedPhone),
+          phoneHash,
+          questionnaireVersionId: input.questionnaireVersionId,
+          buildingId: input.buildingId,
+          createdByUserId: input.createdByUserId,
+        },
+      })
+
+      await tx.identityVaultAuditLog.create({
+        data: {
+          actorUserId: input.createdByUserId,
+          action: 'phone_identity.create',
+          publicCode: input.publicCode,
+          ipAddress: input.request?.ip,
+          metadata: {
+            contactChannel: 'sms',
             questionnaireVersionId: input.questionnaireVersionId,
             buildingId: input.buildingId,
           },
@@ -162,7 +228,7 @@ export class IdentityVaultService {
       select: { encryptedEmail: true, uniqueCode: true, deletedAt: true },
     })
 
-    if (!identity || identity.deletedAt) {
+    if (!identity || identity.deletedAt || !identity.encryptedEmail) {
       return null
     }
 
@@ -174,10 +240,35 @@ export class IdentityVaultService {
     }
   }
 
+  async loadOutboundPhoneForInvitation(invitationId: string): Promise<{ phone: string; maskedPhone: string; publicCode: string } | null> {
+    const identity = await this.identityPrisma.identityVaultEntry.findUnique({
+      where: { invitationId },
+      select: { encryptedPhone: true, uniqueCode: true, deletedAt: true },
+    })
+
+    if (!identity || identity.deletedAt || !identity.encryptedPhone) {
+      return null
+    }
+
+    const phone = this.emailCryptoService.decryptContact(identity.encryptedPhone)
+    return {
+      phone,
+      maskedPhone: this.emailCryptoService.maskPhone(phone),
+      publicCode: identity.uniqueCode,
+    }
+  }
+
   async markOutboundEmailSent(invitationId: string, sentAt = new Date()): Promise<void> {
     await this.identityPrisma.identityVaultEntry.update({
       where: { invitationId },
       data: { lastEmailSentAt: sentAt },
+    }).catch(() => undefined)
+  }
+
+  async markOutboundSmsSent(invitationId: string, sentAt = new Date()): Promise<void> {
+    await this.identityPrisma.identityVaultEntry.update({
+      where: { invitationId },
+      data: { lastSmsSentAt: sentAt },
     }).catch(() => undefined)
   }
 
@@ -243,7 +334,9 @@ export class IdentityVaultService {
 
     return identityVaultEntries.map((identity: any) => ({
       publicCode: identity.uniqueCode,
-      email: this.emailCryptoService.decryptEmail(identity.encryptedEmail),
+      contactChannel: identity.contactChannel === 'sms' ? 'sms' : 'email',
+      email: identity.encryptedEmail ? this.emailCryptoService.decryptEmail(identity.encryptedEmail) : null,
+      phone: identity.encryptedPhone ? this.emailCryptoService.decryptContact(identity.encryptedPhone) : null,
       questionnaireVersionId: identity.questionnaireVersionId,
       buildingId: identity.buildingId,
     }))

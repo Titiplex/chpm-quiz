@@ -77,7 +77,9 @@ export function downloadQuestionnairePdf(options: QuestionnairePdfOptions): void
 export function createQuestionnairePdfBlob(options: QuestionnairePdfOptions): Blob {
   const pages = layoutQuestionnaire(options)
   const pdfBytes = buildPdfBytes(pages)
-  return new Blob([pdfBytes], { type: 'application/pdf' })
+  const blobBytes = new Uint8Array(pdfBytes.byteLength)
+  blobBytes.set(pdfBytes)
+  return new Blob([blobBytes.buffer], { type: 'application/pdf' })
 }
 
 function defaultPdfFileName(questionnaire: ApiQuestionnaire, publicCode?: string | null): string {
