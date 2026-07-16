@@ -104,7 +104,33 @@ describe('ModerationService', () => {
     expect(prisma.invitation.updateMany).toHaveBeenCalledWith({ where: { id: { in: ['expired-1'] } }, data: { status: 'expired' } })
     expect(identityVault.recordDeliveryEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: 'invitation_expired' }))
     expect(mailQueue.enqueue).toHaveBeenCalledWith(expect.objectContaining({ template: 'expiration', to: { email: 'patient@example.test' } }))
-    expect(result[0]).toMatchObject({ publicCode: 'ABCD-1234', deliveryMode: 'email_simulation', questionnaireTitle: 'ITQ' })
+    const listQuery = (prisma.invitation.findMany as any).mock.calls.at(-1)[0]
+    expect(listQuery.where).toEqual({ buildingId: 'building-1' })
+    expect(listQuery.include).not.toHaveProperty('identityVaultEntry')
+    expect(listQuery).not.toHaveProperty('take')
+    expect(result[0]).toMatchObject({
+      publicCode: 'ABCD-1234',
+      deliveryMode: 'email_simulation',
+      questionnaireTitle: 'ITQ',
+      maskedEmail: 'email masqué',
+      maskedPhone: null,
+    })
+  })
+
+  it('derives SMS masking without querying the protected identity schema', async () => {
+    const { service } = makeService({
+      invitation: {
+        findMany: vi.fn()
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([invitation({ deliveryMode: 'sms_simulation' })]),
+        updateMany: vi.fn(async () => ({ count: 0 })),
+        findUnique: vi.fn(async () => null),
+      },
+    })
+
+    const result = await service.listForUser(moderatorUser)
+
+    expect(result[0]).toMatchObject({ maskedEmail: null, maskedPhone: 'téléphone masqué' })
   })
 
   it('creates an email invitation, writes identity vault data and queues mail', async () => {

@@ -38,7 +38,6 @@ export class ModerationService {
       where: this.scopedWhere(user),
       orderBy: { createdAt: 'desc' },
       include: this.invitationInclude(),
-      take: 200,
     })
 
     return invitations.map((invitation: any) => this.toInvitationDto(invitation))
@@ -816,7 +815,6 @@ export class ModerationService {
         expiresAt: { lt: new Date() },
       },
       include: this.invitationInclude(),
-      take: 100,
     })
 
     if (!overdue.length) {
@@ -878,9 +876,6 @@ export class ModerationService {
     return {
       building: true,
       terminalDevice: { include: { building: true } },
-      identityVaultEntry: {
-        select: { encryptedEmail: true, encryptedPhone: true },
-      },
       responseSession: {
         include: {
           submission: true,
@@ -891,14 +886,18 @@ export class ModerationService {
   }
 
   private toInvitationDto(invitation: any) {
+    const deliveryMode = invitation.deliveryMode ?? 'email_simulation'
+    const isEmailDelivery = deliveryMode === 'email' || deliveryMode === 'email_simulation'
+    const isSmsDelivery = deliveryMode === 'sms' || deliveryMode === 'sms_simulation'
+
     return {
       id: invitation.id,
       publicCode: invitation.publicCode,
       status: invitation.status,
-      deliveryMode: invitation.deliveryMode ?? 'email_simulation',
+      deliveryMode,
       assistanceMode: invitation.assistanceMode ?? 'none',
-      maskedEmail: invitation.identityVaultEntry?.encryptedEmail ? 'email masqué' : null,
-      maskedPhone: invitation.identityVaultEntry?.encryptedPhone ? 'téléphone masqué' : null,
+      maskedEmail: isEmailDelivery ? 'email masqué' : null,
+      maskedPhone: isSmsDelivery ? 'téléphone masqué' : null,
       questionnaireVersionId: invitation.questionnaireVersionId,
       questionnaireTitle: invitation.questionnaireVersion?.questionnaire?.title ?? null,
       versionLabel: invitation.questionnaireVersion?.versionLabel ?? null,
