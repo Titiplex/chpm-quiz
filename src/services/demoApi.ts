@@ -508,7 +508,7 @@ export async function demoApiRequest<T>(path: string, options: DemoRequestOption
   }
 
   if (method === 'GET' && route === '/audit-logs') {
-    return asResponse<T>({ logs: getAuditLogs(Number(requestUrl.searchParams.get('limit') ?? 30)) } satisfies AuditLogsResponse)
+    return asResponse<T>({ logs: getAuditLogs(parseOptionalPositiveInteger(requestUrl.searchParams.get('limit'))) } satisfies AuditLogsResponse)
   }
 
   const statsMatch = route.match(/^\/stats\/questionnaires\/([^/]+)$/)
@@ -2941,8 +2941,15 @@ function isFreeTextQuestion(questionItem: ApiQuestion): boolean {
   return responseType === 'free_text' || responseType === 'free_text_short' || responseType === 'free_text_long'
 }
 
-function getAuditLogs(limit = 30): AuditLogsResponse['logs'] {
-  return readStorage(AUDIT_LOGS_STORAGE_KEY, createInitialAuditLogs).slice(0, Math.max(1, limit))
+function getAuditLogs(limit?: number): AuditLogsResponse['logs'] {
+  const logs = readStorage(AUDIT_LOGS_STORAGE_KEY, createInitialAuditLogs)
+  return limit ? logs.slice(0, limit) : logs
+}
+
+function parseOptionalPositiveInteger(value: string | null): number | undefined {
+  if (value === null || value.trim() === '') return undefined
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined
 }
 
 function saveAuditLogs(logs: AuditLogsResponse['logs']): void {
@@ -2969,7 +2976,7 @@ function appendAuditLog(
   const actorUserId = currentUser ? `demo-user-${currentUser.role}` : null
   const log = createAuditLogRecord(action, entityType, entityId, publicCode, metadata, nowIso(), actorUserId)
   logs.unshift(log)
-  saveAuditLogs(logs.slice(0, 100))
+  saveAuditLogs(logs)
   return log
 }
 

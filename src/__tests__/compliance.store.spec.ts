@@ -25,7 +25,7 @@ describe('useComplianceStore', () => {
       if (String(url).endsWith('/compliance/retention-policy')) {
         return jsonResponse({ policy: retentionPolicyFixture })
       }
-      if (String(url).endsWith('/audit-logs?limit=30')) {
+      if (String(url).endsWith('/audit-logs')) {
         return jsonResponse({ message: 'Audit inaccessible' }, 403)
       }
       return jsonResponse({ message: 'unexpected route' }, 500)
@@ -43,7 +43,7 @@ describe('useComplianceStore', () => {
 
   it('runs maintenance actions and exposes explicit business messages', async () => {
     const fetchMock = vi.fn(async (url: string) => {
-      if (String(url).endsWith('/audit-logs?limit=30')) {
+      if (String(url).endsWith('/audit-logs')) {
         return jsonResponse({ logs: [] })
       }
 
@@ -91,7 +91,7 @@ describe('useComplianceStore', () => {
       if (String(url).includes('/compliance/exports/pseudonymized?questionnaireId=questionnaire%201')) {
         return jsonResponse({ export: pseudonymizedExportFixture })
       }
-      if (String(url).endsWith('/audit-logs?limit=30')) {
+      if (String(url).endsWith('/audit-logs')) {
         return jsonResponse({ logs: [] })
       }
       return jsonResponse({ message: 'unexpected route' }, 500)

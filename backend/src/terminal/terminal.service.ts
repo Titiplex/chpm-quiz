@@ -30,7 +30,6 @@ export class TerminalService {
       },
       orderBy: { createdAt: 'asc' },
       include: this.invitationInclude(),
-      take: 20,
     })
 
     return {

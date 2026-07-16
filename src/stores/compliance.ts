@@ -98,7 +98,7 @@ export const useComplianceStore = defineStore('compliance', () => {
   }
 
   async function fetchAuditLogs(): Promise<void> {
-    const auditResponse = await apiRequest<AuditLogsResponse>('/audit-logs?limit=30')
+    const auditResponse = await apiRequest<AuditLogsResponse>('/audit-logs')
     auditLogs.value = auditResponse.logs
   }
 

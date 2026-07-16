@@ -33,10 +33,14 @@ export class AuditService {
     })
   }
 
-  async list(limit = 100) {
+  async list(limit?: number) {
+    const take = typeof limit === 'number' && Number.isFinite(limit) && limit > 0
+      ? Math.floor(limit)
+      : undefined
+
     return this.prisma.auditLog.findMany({
       orderBy: { occurredAt: 'desc' },
-      take: Math.min(Math.max(limit, 1), 250),
+      ...(take ? { take } : {}),
       include: {
         actor: {
           select: {

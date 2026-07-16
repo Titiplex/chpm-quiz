@@ -43,13 +43,18 @@ describe('AuditService', () => {
     })
   })
 
-  it('clamps list limits to the supported range', async () => {
+  it('returns the complete list by default and honors an explicit positive limit', async () => {
     const { service, prisma } = makeService()
 
+    await service.list()
+    const completeQuery = (prisma.auditLog.findMany as any).mock.calls[0][0]
+    expect(completeQuery).not.toHaveProperty('take')
+
     await service.list(999)
-    expect(prisma.auditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 250 }))
+    expect(prisma.auditLog.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ take: 999 }))
 
     await service.list(-5)
-    expect(prisma.auditLog.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ take: 1 }))
+    const invalidLimitQuery = (prisma.auditLog.findMany as any).mock.calls.at(-1)[0]
+    expect(invalidLimitQuery).not.toHaveProperty('take')
   })
 })

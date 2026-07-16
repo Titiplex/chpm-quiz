@@ -23,7 +23,6 @@ export class JudicialService {
   async list() {
     return this.prisma.judicialAccessRequest.findMany({
       orderBy: { receivedAt: 'desc' },
-      take: 100,
     })
   }
 

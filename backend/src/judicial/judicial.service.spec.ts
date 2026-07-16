@@ -48,7 +48,7 @@ describe('JudicialService', () => {
     const { service, prisma } = makeService()
 
     await expect(service.list()).resolves.toEqual([receivedRequest])
-    expect(prisma.judicialAccessRequest.findMany).toHaveBeenCalledWith({ orderBy: { receivedAt: 'desc' }, take: 100 })
+    expect(prisma.judicialAccessRequest.findMany).toHaveBeenCalledWith({ orderBy: { receivedAt: 'desc' } })
   })
 
   it('creates a request, normalizes public codes and records both audit trails', async () => {

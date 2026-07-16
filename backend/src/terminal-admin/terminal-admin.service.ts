@@ -26,7 +26,6 @@ export class TerminalAdminService {
       where: this.scopedWhere(user),
       orderBy: [{ status: 'asc' }, { label: 'asc' }],
       include: this.deviceInclude(),
-      take: 500,
     })
 
     return terminalDevices.map((device: any) => this.toTerminalDeviceDto(device))

@@ -82,6 +82,21 @@ describe('StatsService disclosure controls', () => {
     })
   })
 
+  it('keeps every authorized free-text response instead of truncating the table payload', () => {
+    const service = makeService('1')
+    const answers = Array.from({ length: 40 }, (_, index) => ({
+      value: `Réponse ${index + 1}`,
+      identifiabilityWarning: false,
+      warningReason: null,
+      responseSession: { publicCode: `CODE-${index + 1}` },
+    }))
+
+    const rows = service.freeTextResponses(answers)
+
+    expect(rows).toHaveLength(40)
+    expect(rows.at(-1)).toMatchObject({ publicCode: 'CODE-40', value: 'Réponse 40' })
+  })
+
   it('aggregates refusals and no-digital-contact field tracking separately from submissions', () => {
     const service = makeService('1')
     const rows = service.fieldTrackingBreakdown([

@@ -1419,6 +1419,30 @@ details:not([open]) > .builder-disclosure-summary::after {
   border-top: 1px solid var(--chm-line);
 }
 
+
+/* Les cartes de tableau combinent volontairement bordure et zone de défilement.
+   Cette règle doit rester après .table-card et .stats-table-card : sinon
+   overflow:hidden masque toutes les lignes situées sous la hauteur maximale. */
+.table-card.table-card-scroll,
+.table-card.table-card-scroll.stats-table-card {
+  overflow: auto;
+  scrollbar-gutter: stable both-edges;
+}
+
+.table-card.table-card-scroll tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.free-text-response-list > summary {
+  color: var(--chm-navy);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.free-text-response-list[open] > summary {
+  margin-bottom: 0.5rem;
+}
+
 @media (max-width: 767.98px) {
   .stats-list-actions {
     align-items: stretch;

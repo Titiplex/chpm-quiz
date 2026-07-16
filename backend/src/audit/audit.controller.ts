@@ -13,7 +13,7 @@ export class AuditController {
   @Get()
   @Roles('admin', 'dpo', 'judicial_officer', 'technical_admin')
   async list(@Query('limit') limit?: string) {
-    const logs = await this.auditService.list(limit ? Number(limit) : 100)
+    const logs = await this.auditService.list(limit ? Number(limit) : undefined)
     return { logs }
   }
 }

@@ -193,7 +193,7 @@ function statusTone(status: StaticInvitationStatus): 'success' | 'warning' | 'ne
               </RouterLink>
             </div>
 
-            <div class="table-card mb-4">
+            <div class="table-card table-card-scroll table-card-scroll-lg mb-4">
               <table class="table align-middle">
                 <thead class="table-light">
                   <tr>

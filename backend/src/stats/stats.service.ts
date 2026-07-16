@@ -610,7 +610,7 @@ export class StatsService {
   }
 
   private freeTextResponses(answers: any[]) {
-    return answers.slice(0, 25).map((answer: any) => ({
+    return answers.map((answer: any) => ({
       publicCode: answer.responseSession?.publicCode ?? null,
       value: this.stringifyAnswer(answer.value),
       warning: answer.identifiabilityWarning ? answer.warningReason : null,
