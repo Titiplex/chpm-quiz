@@ -22,12 +22,12 @@ const secureDocument = ref<JudicialAccessRequestResponse['secureDocument'] | nul
 const isLoading = ref(false)
 
 const form = reactive({
-  requestReference: `REQ-JUD-${new Date().getFullYear()}-DEMO`,
-  legalBasisDescription: 'Réquisition fictive de démonstration, double validation DPO + juridique obligatoire.',
-  courtOrderReference: 'ORD-DEMO-001',
-  requestedPublicCodes: '8F4K-29QX',
-  requestedBy: 'Service juridique · démo',
-  comments: 'Simulation : aucune donnée réelle.',
+  requestReference: '',
+  legalBasisDescription: '',
+  courtOrderReference: '',
+  requestedPublicCodes: '',
+  requestedBy: '',
+  comments: '',
 })
 
 const canValidateDpo = computed(() => session.currentRole === 'dpo')
@@ -49,7 +49,8 @@ async function refresh(): Promise<void> {
     status.value = vaultStatus.status
     requests.value = requestList.requests
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Chargement du coffre email impossible.'
+    error.value =
+      caught instanceof Error ? caught.message : 'Chargement du coffre email impossible.'
   } finally {
     isLoading.value = false
   }
@@ -61,7 +62,10 @@ async function createRequest(): Promise<void> {
       requestReference: form.requestReference,
       legalBasisDescription: form.legalBasisDescription,
       courtOrderReference: form.courtOrderReference,
-      requestedPublicCodes: form.requestedPublicCodes.split(/[\s,;]+/).map((code) => code.trim()).filter(Boolean),
+      requestedPublicCodes: form.requestedPublicCodes
+        .split(/[\s,;]+/)
+        .map((code) => code.trim())
+        .filter(Boolean),
       requestedBy: form.requestedBy,
       comments: form.comments,
     }
@@ -75,29 +79,38 @@ async function createRequest(): Promise<void> {
 
 async function validateDpo(id: string): Promise<void> {
   await runWorkflow(async () => {
-    const response = await apiRequest<JudicialAccessRequestResponse>(`/judicial-access/requests/${id}/validate-dpo`, {
-      method: 'POST',
-      body: { comments: 'Validation DPO de démonstration.' },
-    })
+    const response = await apiRequest<JudicialAccessRequestResponse>(
+      `/judicial-access/requests/${id}/validate-dpo`,
+      {
+        method: 'POST',
+        body: { comments: 'Validation DPO.' },
+      },
+    )
     message.value = `Validation DPO enregistrée pour ${response.judicialRequest.requestReference}.`
   })
 }
 
 async function validateLegal(id: string): Promise<void> {
   await runWorkflow(async () => {
-    const response = await apiRequest<JudicialAccessRequestResponse>(`/judicial-access/requests/${id}/validate-legal`, {
-      method: 'POST',
-      body: { comments: 'Validation juridique de démonstration.' },
-    })
+    const response = await apiRequest<JudicialAccessRequestResponse>(
+      `/judicial-access/requests/${id}/validate-legal`,
+      {
+        method: 'POST',
+        body: { comments: 'Validation juridique.' },
+      },
+    )
     message.value = `Validation juridique enregistrée pour ${response.judicialRequest.requestReference}.`
   })
 }
 
 async function executeRequest(id: string): Promise<void> {
   await runWorkflow(async () => {
-    const response = await apiRequest<JudicialAccessRequestResponse>(`/judicial-access/requests/${id}/execute`, {
-      method: 'POST',
-    })
+    const response = await apiRequest<JudicialAccessRequestResponse>(
+      `/judicial-access/requests/${id}/execute`,
+      {
+        method: 'POST',
+      },
+    )
     secureDocument.value = response.secureDocument ?? null
     message.value = `Export chiffré placé dans le coffre documentaire pour ${response.judicialRequest.requestReference}. Aucun email ni ciphertext n’est affiché.`
   })
@@ -105,10 +118,16 @@ async function executeRequest(id: string): Promise<void> {
 
 async function closeRequest(id: string): Promise<void> {
   await runWorkflow(async () => {
-    const response = await apiRequest<JudicialAccessRequestResponse>(`/judicial-access/requests/${id}/close`, {
-      method: 'POST',
-      body: { closureReport: 'Clôture après transmission sécurisée et vérification de l’empreinte en coffre documentaire.' },
-    })
+    const response = await apiRequest<JudicialAccessRequestResponse>(
+      `/judicial-access/requests/${id}/close`,
+      {
+        method: 'POST',
+        body: {
+          closureReport:
+            'Clôture après transmission sécurisée et vérification de l’empreinte en coffre documentaire.',
+        },
+      },
+    )
     message.value = `Demande ${response.judicialRequest.requestReference} clôturée.`
   })
 }
@@ -142,17 +161,21 @@ async function runWorkflow(action: () => Promise<void>, refreshAfter = true): Pr
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return '—'
-  return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
+  return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(
+    new Date(value),
+  )
 }
 
 function statusLabel(value: string): string {
-  return {
-    received: 'reçue',
-    validated: 'validée',
-    rejected: 'rejetée',
-    executed: 'exécutée',
-    closed: 'clôturée',
-  }[value] ?? value
+  return (
+    {
+      received: 'reçue',
+      validated: 'validée',
+      rejected: 'rejetée',
+      executed: 'exécutée',
+      closed: 'clôturée',
+    }[value] ?? value
+  )
 }
 </script>
 
@@ -188,15 +211,25 @@ function statusLabel(value: string): string {
                 <strong>Mode d’accès</strong>
                 <div class="muted">{{ status.accessMode }}</div>
               </div>
-              <span class="badge-soft" :class="status.currentRoleCanExecuteEmailAccess ? 'warning' : 'danger'">
-                Rôle courant : {{ status.currentRole }} · accès direct {{ status.currentRoleCanExecuteEmailAccess ? 'habilité via procédure' : 'refusé' }}
+              <span
+                class="badge-soft"
+                :class="status.currentRoleCanExecuteEmailAccess ? 'warning' : 'danger'"
+              >
+                Rôle courant : {{ status.currentRole }} · accès direct
+                {{ status.currentRoleCanExecuteEmailAccess ? 'habilité via procédure' : 'refusé' }}
               </span>
             </div>
-            <button class="btn btn-outline-danger rounded-pill mt-4" type="button" :disabled="isLoading" @click="simulateDeniedAccess">
+            <button
+              class="btn btn-outline-danger rounded-pill mt-4"
+              type="button"
+              :disabled="isLoading"
+              @click="simulateDeniedAccess"
+            >
               Simuler une tentative sensible
             </button>
             <p class="small muted mt-3 mb-0">
-              Cette action ne renvoie jamais l’email. Elle produit une trace d’audit, y compris en cas de refus.
+              Cette action ne renvoie jamais l’email. Elle produit une trace d’audit, y compris en
+              cas de refus.
             </p>
           </div>
         </div>
@@ -208,26 +241,50 @@ function statusLabel(value: string): string {
             <div class="row g-3">
               <div class="col-md-6">
                 <label class="form-label" for="requestReference">Référence</label>
-                <input id="requestReference" v-model="form.requestReference" class="form-control rounded-4" />
+                <input
+                  id="requestReference"
+                  v-model="form.requestReference"
+                  class="form-control rounded-4"
+                />
               </div>
               <div class="col-md-6">
                 <label class="form-label" for="courtOrderReference">Référence ordonnance</label>
-                <input id="courtOrderReference" v-model="form.courtOrderReference" class="form-control rounded-4" />
+                <input
+                  id="courtOrderReference"
+                  v-model="form.courtOrderReference"
+                  class="form-control rounded-4"
+                />
               </div>
               <div class="col-12">
-                <label class="form-label" for="legalBasisDescription">Base légale / justification</label>
-                <textarea id="legalBasisDescription" v-model="form.legalBasisDescription" class="form-control rounded-4" rows="2"></textarea>
+                <label class="form-label" for="legalBasisDescription"
+                  >Base légale / justification</label
+                >
+                <textarea
+                  id="legalBasisDescription"
+                  v-model="form.legalBasisDescription"
+                  class="form-control rounded-4"
+                  rows="2"
+                ></textarea>
               </div>
               <div class="col-md-6">
                 <label class="form-label" for="requestedPublicCodes">Codes concernés</label>
-                <input id="requestedPublicCodes" v-model="form.requestedPublicCodes" class="form-control rounded-4" />
+                <input
+                  id="requestedPublicCodes"
+                  v-model="form.requestedPublicCodes"
+                  class="form-control rounded-4"
+                />
               </div>
               <div class="col-md-6">
                 <label class="form-label" for="requestedBy">Demandeur</label>
                 <input id="requestedBy" v-model="form.requestedBy" class="form-control rounded-4" />
               </div>
             </div>
-            <button class="btn btn-primary rounded-pill mt-4" type="button" :disabled="isLoading" @click="createRequest">
+            <button
+              class="btn btn-primary rounded-pill mt-4"
+              type="button"
+              :disabled="isLoading"
+              @click="createRequest"
+            >
               Créer et journaliser
             </button>
           </div>
@@ -256,27 +313,55 @@ function statusLabel(value: string): string {
                       <div class="small muted">{{ request.requestedBy }}</div>
                     </td>
                     <td>{{ request.requestedPublicCodes.join(', ') }}</td>
-                    <td><span class="badge-soft warning">{{ statusLabel(request.status) }}</span></td>
                     <td>
-                      <div class="small">DPO : {{ request.dpoValidationUserId ? 'oui' : 'non' }}</div>
-                      <div class="small">Juridique : {{ request.legalValidationUserId ? 'oui' : 'non' }}</div>
+                      <span class="badge-soft warning">{{ statusLabel(request.status) }}</span>
+                    </td>
+                    <td>
+                      <div class="small">
+                        DPO : {{ request.dpoValidationUserId ? 'oui' : 'non' }}
+                      </div>
+                      <div class="small">
+                        Juridique : {{ request.legalValidationUserId ? 'oui' : 'non' }}
+                      </div>
                     </td>
                     <td class="small muted">
                       <div>{{ request.exportFingerprint ?? '—' }}</div>
-                      <div v-if="request.secureDocumentId">coffre : {{ request.secureDocumentId }}</div>
+                      <div v-if="request.secureDocumentId">
+                        coffre : {{ request.secureDocumentId }}
+                      </div>
                     </td>
                     <td>
                       <div class="d-flex flex-wrap gap-2">
-                        <button class="btn btn-sm btn-outline-primary rounded-pill" type="button" :disabled="!canValidateDpo || isLoading" @click="validateDpo(request.id)">
+                        <button
+                          class="btn btn-sm btn-outline-primary rounded-pill"
+                          type="button"
+                          :disabled="!canValidateDpo || isLoading"
+                          @click="validateDpo(request.id)"
+                        >
                           Valider DPO
                         </button>
-                        <button class="btn btn-sm btn-outline-primary rounded-pill" type="button" :disabled="!canValidateLegal || isLoading" @click="validateLegal(request.id)">
+                        <button
+                          class="btn btn-sm btn-outline-primary rounded-pill"
+                          type="button"
+                          :disabled="!canValidateLegal || isLoading"
+                          @click="validateLegal(request.id)"
+                        >
                           Valider juridique
                         </button>
-                        <button class="btn btn-sm btn-outline-warning rounded-pill" type="button" :disabled="!canExecute || request.status !== 'validated' || isLoading" @click="executeRequest(request.id)">
+                        <button
+                          class="btn btn-sm btn-outline-warning rounded-pill"
+                          type="button"
+                          :disabled="!canExecute || request.status !== 'validated' || isLoading"
+                          @click="executeRequest(request.id)"
+                        >
                           Exécuter export
                         </button>
-                        <button class="btn btn-sm btn-outline-secondary rounded-pill" type="button" :disabled="request.status !== 'executed' || isLoading" @click="closeRequest(request.id)">
+                        <button
+                          class="btn btn-sm btn-outline-secondary rounded-pill"
+                          type="button"
+                          :disabled="request.status !== 'executed' || isLoading"
+                          @click="closeRequest(request.id)"
+                        >
                           Clôturer
                         </button>
                       </div>
@@ -293,7 +378,11 @@ function statusLabel(value: string): string {
             <p class="section-eyebrow mb-2">Coffre documentaire sécurisé</p>
             <h2 class="h5 fw-bold">Empreinte {{ secureDocument.fingerprint }}</h2>
             <p class="muted mb-2">{{ secureDocument.warning }}</p>
-            <code class="small d-block text-break">{{ secureDocument.algorithm }} · {{ secureDocument.keyRef }} · {{ secureDocument.storageRef }} · expiration {{ formatDate(secureDocument.expiresAt) }}</code>
+            <code class="small d-block text-break"
+              >{{ secureDocument.algorithm }} · {{ secureDocument.keyRef }} ·
+              {{ secureDocument.storageRef }} · expiration
+              {{ formatDate(secureDocument.expiresAt) }}</code
+            >
           </div>
         </div>
       </div>

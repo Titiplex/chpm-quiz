@@ -10,7 +10,18 @@ import { useCatalogStore } from '@/stores/catalog'
 import type { ApiQuestion, ApiQuestionGroup, ConditionExpression } from '@shared/types/api'
 import type { LanguageCode, QuestionType } from '@shared/types/domain'
 
-type BuilderQuestionType = Extract<QuestionType, 'free_text' | 'free_text_short' | 'free_text_long' | 'likert' | 'single_choice' | 'multiple_choice' | 'number' | 'date' | 'information'>
+type BuilderQuestionType = Extract<
+  QuestionType,
+  | 'free_text'
+  | 'free_text_short'
+  | 'free_text_long'
+  | 'likert'
+  | 'single_choice'
+  | 'multiple_choice'
+  | 'number'
+  | 'date'
+  | 'information'
+>
 
 type PageSectionNavItem = {
   id: string
@@ -47,11 +58,11 @@ const publicationReport = ref<{ canPublish: boolean; errors: string[] } | null>(
 const previewAnswers = reactive<Record<string, string>>({ 'Q-001': 'fr' })
 
 const createQuestionnaireForm = reactive({
-  code: 'CHPM-S3',
-  title: 'Questionnaire démonstration semaine 3',
-  description: 'Brouillon créé depuis le constructeur administrateur.',
+  code: '',
+  title: '',
+  description: '',
   defaultLanguage: 'fr' as LanguageCode,
-  finality: 'Créer et prévisualiser un questionnaire complet sans intervention technique.',
+  finality: '',
 })
 
 const metadataForm = reactive({
@@ -111,13 +122,17 @@ onMounted(async () => {
 })
 
 const preferredQuestionnaire = computed(
-  () => catalog.questionnaires.find((questionnaire) => !questionnaire.isPublished) ?? catalog.questionnaires[0] ?? null,
+  () =>
+    catalog.questionnaires.find((questionnaire) => !questionnaire.isPublished) ??
+    catalog.questionnaires[0] ??
+    null,
 )
 
 const selectedQuestionnaire = computed(
   () =>
-    catalog.questionnaires.find((questionnaire) => questionnaire.id === selectedQuestionnaireId.value) ??
-    preferredQuestionnaire.value,
+    catalog.questionnaires.find(
+      (questionnaire) => questionnaire.id === selectedQuestionnaireId.value,
+    ) ?? preferredQuestionnaire.value,
 )
 
 const selectedGroup = computed<ApiQuestionGroup | null>(() => {
@@ -127,19 +142,27 @@ const selectedGroup = computed<ApiQuestionGroup | null>(() => {
     return null
   }
 
-  return questionnaire.groups.find((group) => group.id === selectedGroupId.value) ?? questionnaire.groups[0] ?? null
+  return (
+    questionnaire.groups.find((group) => group.id === selectedGroupId.value) ??
+    questionnaire.groups[0] ??
+    null
+  )
 })
 
-const allQuestions = computed(() =>
-  selectedQuestionnaire.value?.groups.flatMap((group) => group.questions) ?? [],
+const allQuestions = computed(
+  () => selectedQuestionnaire.value?.groups.flatMap((group) => group.questions) ?? [],
 )
 
-const canCreateQuestion = computed(() => Boolean(selectedQuestionnaire.value && selectedGroup.value))
+const canCreateQuestion = computed(() =>
+  Boolean(selectedQuestionnaire.value && selectedGroup.value),
+)
 const isSaving = computed(() => catalog.status === 'saving')
 const previewResult = computed(() => renderPreviewPath(selectedQuestionnaire.value?.groups ?? []))
 const previewGroups = computed(() => previewResult.value.visibleGroups)
 const hiddenPreviewGroups = computed(() => previewResult.value.hiddenGroups)
-const currentLanguageLabel = computed(() => languageLabel(selectedQuestionnaire.value?.language ?? metadataForm.defaultLanguage))
+const currentLanguageLabel = computed(() =>
+  languageLabel(selectedQuestionnaire.value?.language ?? metadataForm.defaultLanguage),
+)
 
 watch(
   selectedQuestionnaire,
@@ -235,9 +258,14 @@ async function createGroup(): Promise<void> {
       description: groupForm.description,
       questionsPerPage: groupForm.questionsPerPage,
       randomize: groupForm.randomize,
-      conditionExpression: conditionFromFields(groupForm.conditionQuestionCode, groupForm.conditionValue),
+      conditionExpression: conditionFromFields(
+        groupForm.conditionQuestionCode,
+        groupForm.conditionValue,
+      ),
     })
-    const createdGroup = [...questionnaire.groups].sort((left, right) => right.displayOrder - left.displayOrder)[0]
+    const createdGroup = [...questionnaire.groups].sort(
+      (left, right) => right.displayOrder - left.displayOrder,
+    )[0]
     selectedGroupId.value = createdGroup?.id ?? ''
     groupForm.title = 'Nouveau groupe'
     groupForm.description = ''
@@ -249,6 +277,11 @@ async function createGroup(): Promise<void> {
   })
 }
 
+function selectGroup(groupId: string): void {
+  selectedGroupId.value = groupId
+  showStructureModal.value = false
+}
+
 async function saveSelectedGroup(): Promise<void> {
   if (!selectedQuestionnaire.value || !selectedGroup.value) return
 
@@ -258,7 +291,10 @@ async function saveSelectedGroup(): Promise<void> {
       description: groupEditForm.description,
       questionsPerPage: groupEditForm.questionsPerPage,
       randomize: groupEditForm.randomize,
-      conditionExpression: conditionFromFields(groupEditForm.conditionQuestionCode, groupEditForm.conditionValue),
+      conditionExpression: conditionFromFields(
+        groupEditForm.conditionQuestionCode,
+        groupEditForm.conditionValue,
+      ),
     })
     return 'Paramètres du groupe sauvegardés.'
   })
@@ -272,7 +308,10 @@ async function archiveSelectedGroup(): Promise<void> {
   }
 
   await performAction(async () => {
-    const questionnaire = await catalog.archiveGroup(selectedQuestionnaire.value!.id, selectedGroup.value!.id)
+    const questionnaire = await catalog.archiveGroup(
+      selectedQuestionnaire.value!.id,
+      selectedGroup.value!.id,
+    )
     selectedGroupId.value = questionnaire.groups[0]?.id ?? ''
     return 'Groupe archivé dans le brouillon.'
   })
@@ -285,7 +324,11 @@ async function submitQuestion(): Promise<void> {
     const payload = buildQuestionPayload()
 
     if (editingQuestionId.value) {
-      await catalog.updateQuestion(selectedQuestionnaire.value!.id, editingQuestionId.value, payload)
+      await catalog.updateQuestion(
+        selectedQuestionnaire.value!.id,
+        editingQuestionId.value,
+        payload,
+      )
       const editedCode = payload.code
       resetQuestionForm()
       return `Question ${editedCode} mise à jour.`
@@ -302,7 +345,9 @@ async function validatePublication(): Promise<void> {
   if (!selectedQuestionnaire.value) return
 
   await performAction(async () => {
-    publicationReport.value = await catalog.validatePublication(selectedQuestionnaire.value!.versionId)
+    publicationReport.value = await catalog.validatePublication(
+      selectedQuestionnaire.value!.versionId,
+    )
     return publicationReport.value.canPublish
       ? 'Validation de publication réussie : la version brouillon peut être publiée.'
       : `Publication bloquée : ${publicationReport.value.errors.length} anomalie(s) détectée(s).`
@@ -353,8 +398,11 @@ function editQuestion(question: ApiQuestion): void {
   questionForm.likertNeutralLabel = question.likertScale?.neutralLabel ?? 'Neutre'
   questionForm.popupTitle = question.popupDefinitions?.[0]?.title ?? ''
   questionForm.popupBody = question.popupDefinitions?.[0]?.body ?? ''
-  questionForm.popupTerms = question.popupDefinitions?.map((popup) => popup.termLabel ?? popup.termKey).join('\n') ?? ''
-  questionForm.answerOptionsText = question.options?.map((option) => `${option.value}|${option.label}`).join('\n') ?? 'oui|Oui\nnon|Non'
+  questionForm.popupTerms =
+    question.popupDefinitions?.map((popup) => popup.termLabel ?? popup.termKey).join('\n') ?? ''
+  questionForm.answerOptionsText =
+    question.options?.map((option) => `${option.value}|${option.label}`).join('\n') ??
+    'oui|Oui\nnon|Non'
   const condition = conditionToFields(question.conditionExpression)
   questionForm.conditionQuestionCode = condition.questionCode
   questionForm.conditionValue = condition.value
@@ -388,8 +436,12 @@ function buildQuestionPayload() {
     helperText: questionForm.helperText,
     responseType: questionForm.responseType,
     isRequired: questionForm.isRequired,
-    conditionExpression: conditionFromFields(questionForm.conditionQuestionCode, questionForm.conditionValue),
-    ...(questionForm.responseType === 'single_choice' || questionForm.responseType === 'multiple_choice'
+    conditionExpression: conditionFromFields(
+      questionForm.conditionQuestionCode,
+      questionForm.conditionValue,
+    ),
+    ...(questionForm.responseType === 'single_choice' ||
+    questionForm.responseType === 'multiple_choice'
       ? { answerOptions: answerOptionsFromText(questionForm.answerOptionsText) }
       : {}),
     ...(questionForm.responseType === 'likert'
@@ -415,7 +467,9 @@ function buildQuestionPayload() {
 
 function buildPopupPayload() {
   const hasPopup = Boolean(
-    questionForm.popupTitle.trim() || questionForm.popupBody.trim() || questionForm.popupTerms.trim(),
+    questionForm.popupTitle.trim() ||
+    questionForm.popupBody.trim() ||
+    questionForm.popupTerms.trim(),
   )
 
   if (!hasPopup) {
@@ -450,7 +504,9 @@ function answerOptionsFromText(value: string) {
     })
 
   if (options.length < 2) {
-    throw new Error('Une question à choix doit contenir au moins deux options, une par ligne au format valeur|libellé.')
+    throw new Error(
+      'Une question à choix doit contenir au moins deux options, une par ligne au format valeur|libellé.',
+    )
   }
 
   return options
@@ -483,8 +539,16 @@ function conditionFromFields(questionCode: string, value: string): ConditionExpr
   }
 }
 
-function conditionToFields(expression?: ConditionExpression | null): { questionCode: string; value: string } {
-  if (!expression || Array.isArray(expression.all) || Array.isArray(expression.any) || expression.not) {
+function conditionToFields(expression?: ConditionExpression | null): {
+  questionCode: string
+  value: string
+} {
+  if (
+    !expression ||
+    Array.isArray(expression.all) ||
+    Array.isArray(expression.any) ||
+    expression.not
+  ) {
     return { questionCode: '', value: '' }
   }
 
@@ -506,7 +570,9 @@ function conditionLabel(expression?: ConditionExpression | null): string {
   if (expression.not) return `NON (${conditionLabel(expression.not)})`
 
   const expected = expression.value ?? expression.equals ?? 'renseigné'
-  const operator = expression.operator ?? (Object.prototype.hasOwnProperty.call(expression, 'equals') ? 'equals' : 'answered')
+  const operator =
+    expression.operator ??
+    (Object.prototype.hasOwnProperty.call(expression, 'equals') ? 'equals' : 'answered')
   const questionCode = expression.questionCode ?? expression.questionId ?? 'question'
 
   if (operator === 'answered') return `${questionCode} renseignée`
@@ -514,7 +580,10 @@ function conditionLabel(expression?: ConditionExpression | null): string {
   return `${questionCode} ${operator} ${String(expected)}`
 }
 
-function renderPreviewPath(sourceGroups: ApiQuestionGroup[]): { visibleGroups: ApiQuestionGroup[]; hiddenGroups: ApiQuestionGroup[] } {
+function renderPreviewPath(sourceGroups: ApiQuestionGroup[]): {
+  visibleGroups: ApiQuestionGroup[]
+  hiddenGroups: ApiQuestionGroup[]
+} {
   const visibleGroups: ApiQuestionGroup[] = []
   const hiddenGroups: ApiQuestionGroup[] = []
 
@@ -525,8 +594,12 @@ function renderPreviewPath(sourceGroups: ApiQuestionGroup[]): { visibleGroups: A
       continue
     }
 
-    const visibleQuestions = group.questions.filter((question) => evaluateCondition(question.conditionExpression))
-    const questions = group.randomize ? stableShuffle(visibleQuestions, `admin-preview:${group.id}`) : visibleQuestions
+    const visibleQuestions = group.questions.filter((question) =>
+      evaluateCondition(question.conditionExpression),
+    )
+    const questions = group.randomize
+      ? stableShuffle(visibleQuestions, `admin-preview:${group.id}`)
+      : visibleQuestions
 
     if (questions.length) {
       visibleGroups.push({ ...group, questions })
@@ -542,8 +615,12 @@ function evaluateCondition(expression?: ConditionExpression | null): boolean {
   if (Array.isArray(expression.any)) return expression.any.some(evaluateCondition)
   if (expression.not) return !evaluateCondition(expression.not)
 
-  const value = expression.questionCode ? previewAnswers[normalizeQuestionCode(expression.questionCode)] : undefined
-  const operator = expression.operator ?? (Object.prototype.hasOwnProperty.call(expression, 'equals') ? 'equals' : 'answered')
+  const value = expression.questionCode
+    ? previewAnswers[normalizeQuestionCode(expression.questionCode)]
+    : undefined
+  const operator =
+    expression.operator ??
+    (Object.prototype.hasOwnProperty.call(expression, 'equals') ? 'equals' : 'answered')
   const expected = expression.value ?? expression.equals
 
   switch (operator) {
@@ -617,7 +694,10 @@ function likertLabel(scale: LikertScaleForDisplay, value: number): string {
 }
 
 function languageLabel(language: LanguageCode): string {
-  return supportedLanguages.find((candidate) => candidate.code === language)?.label ?? language.toUpperCase()
+  return (
+    supportedLanguages.find((candidate) => candidate.code === language)?.label ??
+    language.toUpperCase()
+  )
 }
 
 function questionTypeLabel(type?: QuestionType): string {
@@ -702,8 +782,15 @@ async function performAction(action: () => Promise<string>): Promise<void> {
       <div v-if="localMessage" class="alert alert-success rounded-4" role="status">
         {{ localMessage }}
       </div>
-      <div v-if="publicationReport" class="alert rounded-4" :class="publicationReport.canPublish ? 'alert-success' : 'alert-warning'" role="status">
-        <strong>{{ publicationReport.canPublish ? 'Publication autorisée' : 'Publication bloquée' }}</strong>
+      <div
+        v-if="publicationReport"
+        class="alert rounded-4"
+        :class="publicationReport.canPublish ? 'alert-success' : 'alert-warning'"
+        role="status"
+      >
+        <strong>{{
+          publicationReport.canPublish ? 'Publication autorisée' : 'Publication bloquée'
+        }}</strong>
         <ul v-if="publicationReport.errors.length" class="mb-0 mt-2">
           <li v-for="error in publicationReport.errors" :key="error">{{ error }}</li>
         </ul>
@@ -717,102 +804,158 @@ async function performAction(action: () => Promise<string>): Promise<void> {
         size="lg"
       >
         <aside class="builder-sidebar admin-structure-panel p-3 border-0 shadow-none">
-      <div class="d-flex align-items-center justify-content-between mb-3">
-        <h2 class="h5 fw-bold mb-0">Structure</h2>
-        <span class="badge-soft">{{ selectedQuestionnaire?.questionCount ?? 0 }} questions</span>
-      </div>
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <h2 class="h5 fw-bold mb-0">Structure</h2>
+            <span class="badge-soft"
+              >{{ selectedQuestionnaire?.questionCount ?? 0 }} questions</span
+            >
+          </div>
 
-      <label class="form-label fw-bold" for="questionnaire-select">Questionnaire</label>
-      <select
-        id="questionnaire-select"
-        v-model="selectedQuestionnaireId"
-        class="form-select mb-3"
-        aria-label="Questionnaire en base"
-      >
-        <option v-for="questionnaire in catalog.questionnaires" :key="questionnaire.id" :value="questionnaire.id">
-          {{ questionnaire.title }} · v{{ questionnaire.version }} ·
-          {{ questionnaire.isPublished ? 'publié' : 'brouillon' }}
-        </option>
-      </select>
+          <label class="form-label fw-bold" for="questionnaire-select">Questionnaire</label>
+          <select
+            id="questionnaire-select"
+            v-model="selectedQuestionnaireId"
+            class="form-select mb-3"
+            aria-label="Questionnaire en base"
+          >
+            <option
+              v-for="questionnaire in catalog.questionnaires"
+              :key="questionnaire.id"
+              :value="questionnaire.id"
+            >
+              {{ questionnaire.title }} · v{{ questionnaire.version }} ·
+              {{ questionnaire.isPublished ? 'publié' : 'brouillon' }}
+            </option>
+          </select>
 
-      <details class="question-row mb-4" open>
-        <summary class="builder-disclosure-summary">Créer un questionnaire</summary>
-        <label class="form-label small fw-bold" for="new-code">Code</label>
-        <input id="new-code" v-model="createQuestionnaireForm.code" class="form-control mb-2" />
-        <label class="form-label small fw-bold" for="new-title">Titre</label>
-        <input id="new-title" v-model="createQuestionnaireForm.title" class="form-control mb-2" />
-        <label class="form-label small fw-bold" for="new-language">Langue par défaut</label>
-        <select id="new-language" v-model="createQuestionnaireForm.defaultLanguage" class="form-select mb-3">
-          <option v-for="language in supportedLanguages" :key="language.code" :value="language.code">{{ language.label }}</option>
-        </select>
-        <button class="btn btn-outline-primary w-100" type="button" :disabled="isSaving" @click="createQuestionnaire">
-          + Créer le brouillon
-        </button>
-      </details>
+          <details class="question-row mb-4" open>
+            <summary class="builder-disclosure-summary">Créer un questionnaire</summary>
+            <label class="form-label small fw-bold" for="new-code">Code</label>
+            <input id="new-code" v-model="createQuestionnaireForm.code" class="form-control mb-2" />
+            <label class="form-label small fw-bold" for="new-title">Titre</label>
+            <input
+              id="new-title"
+              v-model="createQuestionnaireForm.title"
+              class="form-control mb-2"
+            />
+            <label class="form-label small fw-bold" for="new-language">Langue par défaut</label>
+            <select
+              id="new-language"
+              v-model="createQuestionnaireForm.defaultLanguage"
+              class="form-select mb-3"
+            >
+              <option
+                v-for="language in supportedLanguages"
+                :key="language.code"
+                :value="language.code"
+              >
+                {{ language.label }}
+              </option>
+            </select>
+            <button
+              class="btn btn-outline-primary w-100"
+              type="button"
+              :disabled="isSaving"
+              @click="createQuestionnaire"
+            >
+              + Créer le brouillon
+            </button>
+          </details>
 
-      <div class="d-flex align-items-center justify-content-between mb-2">
-        <h3 class="h6 fw-bold mb-0">Groupes</h3>
-        <span class="badge-soft">{{ selectedQuestionnaire?.groupCount ?? 0 }}</span>
-      </div>
-      <div class="d-grid gap-2 mb-4">
-        <button
-          v-for="group in selectedQuestionnaire?.groups ?? []"
-          :key="group.id"
-          class="builder-menu-item border-0 text-start"
-          :class="{ active: group.id === selectedGroup?.id }"
-          type="button"
-          @click="selectedGroupId = group.id; showStructureModal = false"
-        >
-          <span>{{ group.title }}</span>
-          <small>{{ group.questions.length }}</small>
-        </button>
-      </div>
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <h3 class="h6 fw-bold mb-0">Groupes</h3>
+            <span class="badge-soft">{{ selectedQuestionnaire?.groupCount ?? 0 }}</span>
+          </div>
+          <div class="d-grid gap-2 mb-4">
+            <button
+              v-for="group in selectedQuestionnaire?.groups ?? []"
+              :key="group.id"
+              class="builder-menu-item border-0 text-start"
+              :class="{ active: group.id === selectedGroup?.id }"
+              type="button"
+              @click="selectGroup(group.id)"
+            >
+              <span>{{ group.title }}</span>
+              <small>{{ group.questions.length }}</small>
+            </button>
+          </div>
 
-      <details class="question-row" open>
-        <summary class="builder-disclosure-summary">Ajouter un groupe</summary>
-        <label class="form-label small fw-bold" for="group-title">Nom du groupe</label>
-        <input id="group-title" v-model="groupForm.title" class="form-control mb-2" />
-        <label class="form-label small fw-bold" for="group-description">Description</label>
-        <textarea id="group-description" v-model="groupForm.description" class="form-control mb-2" rows="2"></textarea>
-        <label class="form-label small fw-bold" for="group-questions-per-page">Questions par page</label>
-        <input
-          id="group-questions-per-page"
-          v-model.number="groupForm.questionsPerPage"
-          class="form-control mb-2"
-          min="1"
-          max="20"
-          type="number"
-        />
-        <div class="form-check form-switch mb-3">
-          <input id="group-randomize" v-model="groupForm.randomize" class="form-check-input" type="checkbox" />
-          <label class="form-check-label fw-semibold" for="group-randomize">Randomiser ce groupe</label>
-        </div>
-        <div class="condition-line mb-3">
-          <p class="page-header-eyebrow mb-2">Condition simple</p>
-          <label class="form-label small fw-bold" for="group-condition-code">Code question déclencheuse</label>
-          <input id="group-condition-code" v-model="groupForm.conditionQuestionCode" class="form-control mb-2" placeholder="Q-001" />
-          <label class="form-label small fw-bold" for="group-condition-value">Valeur attendue</label>
-          <input id="group-condition-value" v-model="groupForm.conditionValue" class="form-control" placeholder="fr ou en" />
-          <p class="form-text mb-0">Laisser vide pour toujours afficher le groupe.</p>
-        </div>
-        <button
-          class="btn btn-outline-primary w-100"
-          type="button"
-          :disabled="!selectedQuestionnaire || isSaving"
-          @click="createGroup"
-        >
-          + Ajouter le groupe
-        </button>
-      </details>
+          <details class="question-row" open>
+            <summary class="builder-disclosure-summary">Ajouter un groupe</summary>
+            <label class="form-label small fw-bold" for="group-title">Nom du groupe</label>
+            <input id="group-title" v-model="groupForm.title" class="form-control mb-2" />
+            <label class="form-label small fw-bold" for="group-description">Description</label>
+            <textarea
+              id="group-description"
+              v-model="groupForm.description"
+              class="form-control mb-2"
+              rows="2"
+            ></textarea>
+            <label class="form-label small fw-bold" for="group-questions-per-page"
+              >Questions par page</label
+            >
+            <input
+              id="group-questions-per-page"
+              v-model.number="groupForm.questionsPerPage"
+              class="form-control mb-2"
+              min="1"
+              max="20"
+              type="number"
+            />
+            <div class="form-check form-switch mb-3">
+              <input
+                id="group-randomize"
+                v-model="groupForm.randomize"
+                class="form-check-input"
+                type="checkbox"
+              />
+              <label class="form-check-label fw-semibold" for="group-randomize"
+                >Randomiser ce groupe</label
+              >
+            </div>
+            <div class="condition-line mb-3">
+              <p class="page-header-eyebrow mb-2">Condition simple</p>
+              <label class="form-label small fw-bold" for="group-condition-code"
+                >Code question déclencheuse</label
+              >
+              <input
+                id="group-condition-code"
+                v-model="groupForm.conditionQuestionCode"
+                class="form-control mb-2"
+                placeholder="Q-001"
+              />
+              <label class="form-label small fw-bold" for="group-condition-value"
+                >Valeur attendue</label
+              >
+              <input
+                id="group-condition-value"
+                v-model="groupForm.conditionValue"
+                class="form-control"
+                placeholder="fr ou en"
+              />
+              <p class="form-text mb-0">Laisser vide pour toujours afficher le groupe.</p>
+            </div>
+            <button
+              class="btn btn-outline-primary w-100"
+              type="button"
+              :disabled="!selectedQuestionnaire || isSaving"
+              @click="createGroup"
+            >
+              + Ajouter le groupe
+            </button>
+          </details>
         </aside>
       </ModalPanel>
 
       <div class="action-strip admin-structure-strip mb-4">
         <div>
           <p class="section-eyebrow mb-1">Structure active</p>
-          <h2 class="action-strip-title">{{ selectedQuestionnaire?.title ?? 'Aucun questionnaire sélectionné' }}</h2>
+          <h2 class="action-strip-title">
+            {{ selectedQuestionnaire?.title ?? 'Aucun questionnaire sélectionné' }}
+          </h2>
           <p class="action-strip-description">
-            {{ selectedQuestionnaire?.groupCount ?? 0 }} groupe(s) · {{ selectedQuestionnaire?.questionCount ?? 0 }} question(s)
+            {{ selectedQuestionnaire?.groupCount ?? 0 }} groupe(s) ·
+            {{ selectedQuestionnaire?.questionCount ?? 0 }} question(s)
             <template v-if="selectedGroup"> · groupe courant : {{ selectedGroup.title }}</template>
           </p>
         </div>
@@ -825,7 +968,6 @@ async function performAction(action: () => Promise<string>): Promise<void> {
         <PageSectionNav title="Navigation admin" :sections="adminSections" />
         <div class="page-workspace-main admin-builder-flow">
           <div class="admin-builder-shell admin-builder-shell-single">
-
             <CollapsibleSection
               id="admin-editor"
               class="page-section"
@@ -835,285 +977,528 @@ async function performAction(action: () => Promise<string>): Promise<void> {
               body-class="compact"
             >
               <div class="screen-preview">
-              <div class="screen-topbar">
-                <span class="window-dot"></span>
-                <span class="window-dot"></span>
-                <span class="window-dot"></span>
-                <strong class="ms-2 small muted">Éditeur connecté au brouillon</strong>
-              </div>
-
-              <div class="p-3 p-lg-4">
-                <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
-                  <div>
-                    <p class="section-eyebrow mb-1">
-                      {{ selectedQuestionnaire ? `${selectedQuestionnaire.code} · v${selectedQuestionnaire.version}` : 'Aucun brouillon' }}
-                    </p>
-                    <h2 class="h4 fw-bold mb-0">Paramètres du questionnaire</h2>
-                  </div>
-                  <span class="badge-soft warning">Version brouillon</span>
+                <div class="screen-topbar">
+                  <span class="window-dot"></span>
+                  <span class="window-dot"></span>
+                  <span class="window-dot"></span>
+                  <strong class="ms-2 small muted">Éditeur connecté au brouillon</strong>
                 </div>
 
-                <div class="row g-3 mb-4">
-                  <div class="col-md-8">
-                    <label class="form-label fw-bold" for="metadata-title">Titre affiché</label>
-                    <input id="metadata-title" v-model="metadataForm.title" class="form-control" />
-                  </div>
-                  <div class="col-md-4">
-                    <label class="form-label fw-bold" for="metadata-language">Langue</label>
-                    <select id="metadata-language" v-model="metadataForm.defaultLanguage" class="form-select">
-                      <option v-for="language in supportedLanguages" :key="language.code" :value="language.code">{{ language.label }}</option>
-                    </select>
-                  </div>
-                  <div class="col-12">
-                    <label class="form-label fw-bold" for="metadata-description">Description</label>
-                    <textarea id="metadata-description" v-model="metadataForm.description" class="form-control" rows="2"></textarea>
-                  </div>
-                  <div class="col-12">
-                    <label class="form-label fw-bold" for="metadata-finality">Finalité métier</label>
-                    <textarea id="metadata-finality" v-model="metadataForm.finality" class="form-control" rows="2"></textarea>
-                  </div>
-                </div>
-
-                <div class="question-row mb-4">
+                <div class="p-3 p-lg-4">
                   <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
                     <div>
-                      <p class="section-eyebrow mb-1">Langues et traductions</p>
-                      <h3 class="h5 fw-bold mb-0">Ajouter une langue au questionnaire</h3>
+                      <p class="section-eyebrow mb-1">
+                        {{
+                          selectedQuestionnaire
+                            ? `${selectedQuestionnaire.code} · v${selectedQuestionnaire.version}`
+                            : 'Aucun brouillon'
+                        }}
+                      </p>
+                      <h2 class="h4 fw-bold mb-0">Paramètres du questionnaire</h2>
                     </div>
-                    <span class="badge-soft">Version courante : {{ currentLanguageLabel }}</span>
+                    <span class="badge-soft warning">Version brouillon</span>
                   </div>
-                  <p class="small muted mb-3">
-                    Changer la langue ci-dessus ne traduit pas le contenu. Utilisez cette action pour créer un brouillon de traduction séparé,
-                    avec la même structure, les mêmes codes questions et les textes à adapter.
-                  </p>
-                  <div class="row g-3 align-items-end">
-                    <div class="col-md-3">
-                      <label class="form-label small fw-bold" for="translation-language">Nouvelle langue</label>
-                      <select id="translation-language" v-model="translationForm.language" class="form-select">
-                        <option v-for="language in supportedLanguages" :key="language.code" :value="language.code">{{ language.label }}</option>
-                      </select>
-                    </div>
-                    <div class="col-md-5">
-                      <label class="form-label small fw-bold" for="translation-title">Titre de la traduction</label>
-                      <input id="translation-title" v-model="translationForm.title" class="form-control" />
-                    </div>
-                    <div class="col-md-4">
-                      <button
-                        class="btn btn-outline-primary w-100"
-                        type="button"
-                        :disabled="!selectedQuestionnaire || isSaving || selectedQuestionnaire.language === translationForm.language"
-                        @click="addLanguageVersion"
-                      >
-                        + Créer le brouillon de langue
-                      </button>
-                    </div>
-                    <div class="col-md-6">
-                      <label class="form-label small fw-bold" for="translation-description">Description traduite</label>
-                      <input id="translation-description" v-model="translationForm.description" class="form-control" />
-                    </div>
-                    <div class="col-md-6">
-                      <label class="form-label small fw-bold" for="translation-finality">Finalité traduite</label>
-                      <input id="translation-finality" v-model="translationForm.finality" class="form-control" />
-                    </div>
-                  </div>
-                </div>
 
-                <div v-if="selectedGroup" class="question-row mb-4">
-                  <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
-                    <div>
-                      <p class="section-eyebrow mb-1">Groupe sélectionné</p>
-                      <h3 class="h5 fw-bold mb-0">{{ selectedGroup.title }}</h3>
-                    </div>
-                    <span class="badge-soft">{{ selectedGroup.questions.length }} question(s)</span>
-                  </div>
-                  <div class="row g-3">
-                    <div class="col-md-7">
-                      <label class="form-label small fw-bold" for="edit-group-title">Titre du groupe</label>
-                      <input id="edit-group-title" v-model="groupEditForm.title" class="form-control" />
-                    </div>
-                    <div class="col-md-5">
-                      <label class="form-label small fw-bold" for="edit-group-qpp">Questions par page</label>
+                  <div class="row g-3 mb-4">
+                    <div class="col-md-8">
+                      <label class="form-label fw-bold" for="metadata-title">Titre affiché</label>
                       <input
-                        id="edit-group-qpp"
-                        v-model.number="groupEditForm.questionsPerPage"
+                        id="metadata-title"
+                        v-model="metadataForm.title"
                         class="form-control"
-                        min="1"
-                        max="20"
-                        type="number"
                       />
                     </div>
-                    <div class="col-12">
-                      <label class="form-label small fw-bold" for="edit-group-description">Description</label>
-                      <textarea id="edit-group-description" v-model="groupEditForm.description" class="form-control" rows="2"></textarea>
-                    </div>
-                    <div class="col-12 d-flex flex-wrap gap-2 align-items-center">
-                      <div class="form-check form-switch me-auto">
-                        <input id="edit-group-randomize" v-model="groupEditForm.randomize" class="form-check-input" type="checkbox" />
-                        <label class="form-check-label fw-semibold" for="edit-group-randomize">Randomisation par groupe</label>
-                      </div>
-                    </div>
-                    <div class="col-md-6">
-                      <label class="form-label small fw-bold" for="edit-group-condition-code">Condition · question</label>
-                      <input id="edit-group-condition-code" v-model="groupEditForm.conditionQuestionCode" class="form-control" placeholder="Q-001" />
-                    </div>
-                    <div class="col-md-6">
-                      <label class="form-label small fw-bold" for="edit-group-condition-value">Condition · valeur</label>
-                      <input id="edit-group-condition-value" v-model="groupEditForm.conditionValue" class="form-control" placeholder="fr" />
-                    </div>
-                    <div class="col-12 d-flex flex-wrap gap-2 align-items-center justify-content-end">
-                      <span class="badge-soft">{{ conditionLabel(selectedGroup.conditionExpression) }}</span>
-                      <button class="btn btn-outline-danger" type="button" :disabled="isSaving" @click="archiveSelectedGroup">
-                        Archiver
-                      </button>
-                      <button class="btn btn-outline-primary" type="button" :disabled="isSaving" @click="saveSelectedGroup">
-                        Sauvegarder le groupe
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="question-row mb-4">
-                  <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
-                    <div>
-                      <p class="section-eyebrow mb-1">Questions</p>
-                      <h3 class="h5 fw-bold mb-0">{{ editingQuestionId ? 'Modifier la question' : 'Créer une question' }}</h3>
-                    </div>
-                    <button class="btn btn-sm btn-outline-secondary" type="button" @click="resetQuestionForm">
-                      Réinitialiser
-                    </button>
-                  </div>
-
-                  <div class="row g-3">
                     <div class="col-md-4">
-                      <label class="form-label small fw-bold" for="question-code">Code</label>
-                      <input id="question-code" v-model="questionForm.code" class="form-control" />
-                    </div>
-                    <div class="col-md-8">
-                      <label class="form-label small fw-bold" for="question-type">Type de réponse</label>
-                      <select id="question-type" v-model="questionForm.responseType" class="form-select">
-                        <option value="free_text_short">Réponse libre courte</option>
-                        <option value="free_text">Réponse libre</option>
-                        <option value="free_text_long">Réponse libre longue</option>
-                        <option value="single_choice">Choix unique</option>
-                        <option value="multiple_choice">Choix multiple</option>
-                        <option value="likert">Échelle Likert</option>
-                        <option value="number">Nombre</option>
-                        <option value="date">Date</option>
-                        <option value="information">Bloc informatif</option>
+                      <label class="form-label fw-bold" for="metadata-language">Langue</label>
+                      <select
+                        id="metadata-language"
+                        v-model="metadataForm.defaultLanguage"
+                        class="form-select"
+                      >
+                        <option
+                          v-for="language in supportedLanguages"
+                          :key="language.code"
+                          :value="language.code"
+                        >
+                          {{ language.label }}
+                        </option>
                       </select>
                     </div>
                     <div class="col-12">
-                      <label class="form-label small fw-bold" for="question-label">Libellé affiché</label>
-                      <textarea id="question-label" v-model="questionForm.label" class="form-control" rows="2"></textarea>
+                      <label class="form-label fw-bold" for="metadata-description"
+                        >Description</label
+                      >
+                      <textarea
+                        id="metadata-description"
+                        v-model="metadataForm.description"
+                        class="form-control"
+                        rows="2"
+                      ></textarea>
                     </div>
                     <div class="col-12">
-                      <label class="form-label small fw-bold" for="question-helper">Aide courte</label>
-                      <input id="question-helper" v-model="questionForm.helperText" class="form-control" />
+                      <label class="form-label fw-bold" for="metadata-finality"
+                        >Finalité métier</label
+                      >
+                      <textarea
+                        id="metadata-finality"
+                        v-model="metadataForm.finality"
+                        class="form-control"
+                        rows="2"
+                      ></textarea>
                     </div>
+                  </div>
 
-                    <template v-if="questionForm.responseType === 'likert'">
-                      <div class="col-md-3">
-                        <label class="form-label small fw-bold" for="likert-points">Points</label>
-                        <input id="likert-points" v-model.number="questionForm.likertPoints" class="form-control" min="3" max="10" type="number" />
+                  <div class="question-row mb-4">
+                    <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
+                      <div>
+                        <p class="section-eyebrow mb-1">Langues et traductions</p>
+                        <h3 class="h5 fw-bold mb-0">Ajouter une langue au questionnaire</h3>
                       </div>
+                      <span class="badge-soft">Version courante : {{ currentLanguageLabel }}</span>
+                    </div>
+                    <p class="small muted mb-3">
+                      Changer la langue ci-dessus ne traduit pas le contenu. Utilisez cette action
+                      pour créer un brouillon de traduction séparé, avec la même structure, les
+                      mêmes codes questions et les textes à adapter.
+                    </p>
+                    <div class="row g-3 align-items-end">
                       <div class="col-md-3">
-                        <label class="form-label small fw-bold" for="likert-min-value">Première valeur</label>
-                        <input id="likert-min-value" v-model.number="questionForm.likertMinValue" class="form-control" min="0" max="10" type="number" />
+                        <label class="form-label small fw-bold" for="translation-language"
+                          >Nouvelle langue</label
+                        >
+                        <select
+                          id="translation-language"
+                          v-model="translationForm.language"
+                          class="form-select"
+                        >
+                          <option
+                            v-for="language in supportedLanguages"
+                            :key="language.code"
+                            :value="language.code"
+                          >
+                            {{ language.label }}
+                          </option>
+                        </select>
                       </div>
-                      <div class="col-md-3">
-                        <label class="form-label small fw-bold" for="likert-left">Libellé gauche</label>
-                        <input id="likert-left" v-model="questionForm.likertLeftAnchor" class="form-control" />
-                      </div>
-                      <div class="col-md-3">
-                        <label class="form-label small fw-bold" for="likert-right">Libellé droit</label>
-                        <input id="likert-right" v-model="questionForm.likertRightAnchor" class="form-control" />
-                      </div>
-                    </template>
-
-                    <template v-if="questionForm.responseType === 'single_choice' || questionForm.responseType === 'multiple_choice'">
-                      <div class="col-12">
-                        <label class="form-label small fw-bold" for="question-options">Options de réponse</label>
-                        <textarea
-                          id="question-options"
-                          v-model="questionForm.answerOptionsText"
+                      <div class="col-md-5">
+                        <label class="form-label small fw-bold" for="translation-title"
+                          >Titre de la traduction</label
+                        >
+                        <input
+                          id="translation-title"
+                          v-model="translationForm.title"
                           class="form-control"
-                          rows="4"
-                          placeholder="fr|Français\nen|Anglais"
+                        />
+                      </div>
+                      <div class="col-md-4">
+                        <button
+                          class="btn btn-outline-primary w-100"
+                          type="button"
+                          :disabled="
+                            !selectedQuestionnaire ||
+                            isSaving ||
+                            selectedQuestionnaire.language === translationForm.language
+                          "
+                          @click="addLanguageVersion"
+                        >
+                          + Créer le brouillon de langue
+                        </button>
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label small fw-bold" for="translation-description"
+                          >Description traduite</label
+                        >
+                        <input
+                          id="translation-description"
+                          v-model="translationForm.description"
+                          class="form-control"
+                        />
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label small fw-bold" for="translation-finality"
+                          >Finalité traduite</label
+                        >
+                        <input
+                          id="translation-finality"
+                          v-model="translationForm.finality"
+                          class="form-control"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div v-if="selectedGroup" class="question-row mb-4">
+                    <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
+                      <div>
+                        <p class="section-eyebrow mb-1">Groupe sélectionné</p>
+                        <h3 class="h5 fw-bold mb-0">{{ selectedGroup.title }}</h3>
+                      </div>
+                      <span class="badge-soft"
+                        >{{ selectedGroup.questions.length }} question(s)</span
+                      >
+                    </div>
+                    <div class="row g-3">
+                      <div class="col-md-7">
+                        <label class="form-label small fw-bold" for="edit-group-title"
+                          >Titre du groupe</label
+                        >
+                        <input
+                          id="edit-group-title"
+                          v-model="groupEditForm.title"
+                          class="form-control"
+                        />
+                      </div>
+                      <div class="col-md-5">
+                        <label class="form-label small fw-bold" for="edit-group-qpp"
+                          >Questions par page</label
+                        >
+                        <input
+                          id="edit-group-qpp"
+                          v-model.number="groupEditForm.questionsPerPage"
+                          class="form-control"
+                          min="1"
+                          max="20"
+                          type="number"
+                        />
+                      </div>
+                      <div class="col-12">
+                        <label class="form-label small fw-bold" for="edit-group-description"
+                          >Description</label
+                        >
+                        <textarea
+                          id="edit-group-description"
+                          v-model="groupEditForm.description"
+                          class="form-control"
+                          rows="2"
                         ></textarea>
-                        <p class="form-text mb-0">Une option par ligne : <code>valeur|libellé affiché</code>.</p>
                       </div>
-                    </template>
-
-                    <div class="col-md-6">
-                      <label class="form-label small fw-bold" for="question-condition-code">Condition question</label>
-                      <input id="question-condition-code" v-model="questionForm.conditionQuestionCode" class="form-control" placeholder="Q-001" />
-                    </div>
-                    <div class="col-md-6">
-                      <label class="form-label small fw-bold" for="question-condition-value">Valeur attendue</label>
-                      <input id="question-condition-value" v-model="questionForm.conditionValue" class="form-control" placeholder="fr" />
-                    </div>
-
-                    <div class="col-12">
-                      <div class="form-check form-switch">
-                        <input id="question-required" v-model="questionForm.isRequired" class="form-check-input" type="checkbox" />
-                        <label class="form-check-label fw-semibold" for="question-required">Question obligatoire</label>
+                      <div class="col-12 d-flex flex-wrap gap-2 align-items-center">
+                        <div class="form-check form-switch me-auto">
+                          <input
+                            id="edit-group-randomize"
+                            v-model="groupEditForm.randomize"
+                            class="form-check-input"
+                            type="checkbox"
+                          />
+                          <label class="form-check-label fw-semibold" for="edit-group-randomize"
+                            >Randomisation par groupe</label
+                          >
+                        </div>
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label small fw-bold" for="edit-group-condition-code"
+                          >Condition · question</label
+                        >
+                        <input
+                          id="edit-group-condition-code"
+                          v-model="groupEditForm.conditionQuestionCode"
+                          class="form-control"
+                          placeholder="Q-001"
+                        />
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label small fw-bold" for="edit-group-condition-value"
+                          >Condition · valeur</label
+                        >
+                        <input
+                          id="edit-group-condition-value"
+                          v-model="groupEditForm.conditionValue"
+                          class="form-control"
+                          placeholder="fr"
+                        />
+                      </div>
+                      <div
+                        class="col-12 d-flex flex-wrap gap-2 align-items-center justify-content-end"
+                      >
+                        <span class="badge-soft">{{
+                          conditionLabel(selectedGroup.conditionExpression)
+                        }}</span>
+                        <button
+                          class="btn btn-outline-danger"
+                          type="button"
+                          :disabled="isSaving"
+                          @click="archiveSelectedGroup"
+                        >
+                          Archiver
+                        </button>
+                        <button
+                          class="btn btn-outline-primary"
+                          type="button"
+                          :disabled="isSaving"
+                          @click="saveSelectedGroup"
+                        >
+                          Sauvegarder le groupe
+                        </button>
                       </div>
                     </div>
                   </div>
 
-                  <hr class="my-4" />
-
-                  <p class="section-eyebrow mb-2">Popup explicative optionnelle</p>
-                  <div class="row g-3">
-                    <div class="col-md-5">
-                      <label class="form-label small fw-bold" for="popup-title">Titre</label>
-                      <input id="popup-title" v-model="questionForm.popupTitle" class="form-control" placeholder="Ex. Coordination inter-site" />
+                  <div class="question-row mb-4">
+                    <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
+                      <div>
+                        <p class="section-eyebrow mb-1">Questions</p>
+                        <h3 class="h5 fw-bold mb-0">
+                          {{ editingQuestionId ? 'Modifier la question' : 'Créer une question' }}
+                        </h3>
+                      </div>
+                      <button
+                        class="btn btn-sm btn-outline-secondary"
+                        type="button"
+                        @click="resetQuestionForm"
+                      >
+                        Réinitialiser
+                      </button>
                     </div>
-                    <div class="col-md-7">
-                      <label class="form-label small fw-bold" for="popup-terms">Termes expliqués</label>
-                      <input id="popup-terms" v-model="questionForm.popupTerms" class="form-control" placeholder="Un terme, plusieurs séparés par virgule" />
-                    </div>
-                    <div class="col-12">
-                      <label class="form-label small fw-bold" for="popup-body">Texte explicatif</label>
-                      <textarea id="popup-body" v-model="questionForm.popupBody" class="form-control" rows="3"></textarea>
-                    </div>
-                  </div>
 
-                  <button
-                    class="btn btn-primary w-100 mt-3"
-                    type="button"
-                    :disabled="!canCreateQuestion || isSaving"
-                    @click="submitQuestion"
-                  >
-                    {{ editingQuestionId ? 'Mettre à jour la question' : '+ Ajouter la question au brouillon' }}
-                  </button>
-                </div>
+                    <div class="row g-3">
+                      <div class="col-md-4">
+                        <label class="form-label small fw-bold" for="question-code">Code</label>
+                        <input
+                          id="question-code"
+                          v-model="questionForm.code"
+                          class="form-control"
+                        />
+                      </div>
+                      <div class="col-md-8">
+                        <label class="form-label small fw-bold" for="question-type"
+                          >Type de réponse</label
+                        >
+                        <select
+                          id="question-type"
+                          v-model="questionForm.responseType"
+                          class="form-select"
+                        >
+                          <option value="free_text_short">Réponse libre courte</option>
+                          <option value="free_text">Réponse libre</option>
+                          <option value="free_text_long">Réponse libre longue</option>
+                          <option value="single_choice">Choix unique</option>
+                          <option value="multiple_choice">Choix multiple</option>
+                          <option value="likert">Échelle Likert</option>
+                          <option value="number">Nombre</option>
+                          <option value="date">Date</option>
+                          <option value="information">Bloc informatif</option>
+                        </select>
+                      </div>
+                      <div class="col-12">
+                        <label class="form-label small fw-bold" for="question-label"
+                          >Libellé affiché</label
+                        >
+                        <textarea
+                          id="question-label"
+                          v-model="questionForm.label"
+                          class="form-control"
+                          rows="2"
+                        ></textarea>
+                      </div>
+                      <div class="col-12">
+                        <label class="form-label small fw-bold" for="question-helper"
+                          >Aide courte</label
+                        >
+                        <input
+                          id="question-helper"
+                          v-model="questionForm.helperText"
+                          class="form-control"
+                        />
+                      </div>
 
-                <div v-if="!allQuestions.length" class="alert alert-warning rounded-3 mb-0">
-                  Aucune question pour l'instant. Commencez par créer un groupe, puis ajoutez vos questions.
-                </div>
-                <div v-else class="compact-list content-scroll content-scroll-sm">
-                <div v-for="question in allQuestions" :key="question.id" class="question-row">
-                  <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
-                    <span class="badge-soft">{{ question.code }}</span>
-                    <span class="badge-soft success">{{ questionTypeLabel(question.responseType ?? question.type) }} · {{ question.answerScaleLabel }}</span>
-                  </div>
-                  <h3 class="h6 fw-bold">{{ question.label ?? question.title }}</h3>
-                  <p v-if="question.helperText" class="small muted mb-3">{{ question.helperText }}</p>
-                  <div class="d-flex flex-wrap gap-2">
-                    <button class="btn btn-sm btn-outline-primary" type="button" @click="editQuestion(question)">
-                      Modifier
+                      <template v-if="questionForm.responseType === 'likert'">
+                        <div class="col-md-3">
+                          <label class="form-label small fw-bold" for="likert-points">Points</label>
+                          <input
+                            id="likert-points"
+                            v-model.number="questionForm.likertPoints"
+                            class="form-control"
+                            min="3"
+                            max="10"
+                            type="number"
+                          />
+                        </div>
+                        <div class="col-md-3">
+                          <label class="form-label small fw-bold" for="likert-min-value"
+                            >Première valeur</label
+                          >
+                          <input
+                            id="likert-min-value"
+                            v-model.number="questionForm.likertMinValue"
+                            class="form-control"
+                            min="0"
+                            max="10"
+                            type="number"
+                          />
+                        </div>
+                        <div class="col-md-3">
+                          <label class="form-label small fw-bold" for="likert-left"
+                            >Libellé gauche</label
+                          >
+                          <input
+                            id="likert-left"
+                            v-model="questionForm.likertLeftAnchor"
+                            class="form-control"
+                          />
+                        </div>
+                        <div class="col-md-3">
+                          <label class="form-label small fw-bold" for="likert-right"
+                            >Libellé droit</label
+                          >
+                          <input
+                            id="likert-right"
+                            v-model="questionForm.likertRightAnchor"
+                            class="form-control"
+                          />
+                        </div>
+                      </template>
+
+                      <template
+                        v-if="
+                          questionForm.responseType === 'single_choice' ||
+                          questionForm.responseType === 'multiple_choice'
+                        "
+                      >
+                        <div class="col-12">
+                          <label class="form-label small fw-bold" for="question-options"
+                            >Options de réponse</label
+                          >
+                          <textarea
+                            id="question-options"
+                            v-model="questionForm.answerOptionsText"
+                            class="form-control"
+                            rows="4"
+                            placeholder="fr|Français\nen|Anglais"
+                          ></textarea>
+                          <p class="form-text mb-0">
+                            Une option par ligne : <code>valeur|libellé affiché</code>.
+                          </p>
+                        </div>
+                      </template>
+
+                      <div class="col-md-6">
+                        <label class="form-label small fw-bold" for="question-condition-code"
+                          >Condition question</label
+                        >
+                        <input
+                          id="question-condition-code"
+                          v-model="questionForm.conditionQuestionCode"
+                          class="form-control"
+                          placeholder="Q-001"
+                        />
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label small fw-bold" for="question-condition-value"
+                          >Valeur attendue</label
+                        >
+                        <input
+                          id="question-condition-value"
+                          v-model="questionForm.conditionValue"
+                          class="form-control"
+                          placeholder="fr"
+                        />
+                      </div>
+
+                      <div class="col-12">
+                        <div class="form-check form-switch">
+                          <input
+                            id="question-required"
+                            v-model="questionForm.isRequired"
+                            class="form-check-input"
+                            type="checkbox"
+                          />
+                          <label class="form-check-label fw-semibold" for="question-required"
+                            >Question obligatoire</label
+                          >
+                        </div>
+                      </div>
+                    </div>
+
+                    <hr class="my-4" />
+
+                    <p class="section-eyebrow mb-2">Popup explicative optionnelle</p>
+                    <div class="row g-3">
+                      <div class="col-md-5">
+                        <label class="form-label small fw-bold" for="popup-title">Titre</label>
+                        <input
+                          id="popup-title"
+                          v-model="questionForm.popupTitle"
+                          class="form-control"
+                          placeholder="Ex. Coordination inter-site"
+                        />
+                      </div>
+                      <div class="col-md-7">
+                        <label class="form-label small fw-bold" for="popup-terms"
+                          >Termes expliqués</label
+                        >
+                        <input
+                          id="popup-terms"
+                          v-model="questionForm.popupTerms"
+                          class="form-control"
+                          placeholder="Un terme, plusieurs séparés par virgule"
+                        />
+                      </div>
+                      <div class="col-12">
+                        <label class="form-label small fw-bold" for="popup-body"
+                          >Texte explicatif</label
+                        >
+                        <textarea
+                          id="popup-body"
+                          v-model="questionForm.popupBody"
+                          class="form-control"
+                          rows="3"
+                        ></textarea>
+                      </div>
+                    </div>
+
+                    <button
+                      class="btn btn-primary w-100 mt-3"
+                      type="button"
+                      :disabled="!canCreateQuestion || isSaving"
+                      @click="submitQuestion"
+                    >
+                      {{
+                        editingQuestionId
+                          ? 'Mettre à jour la question'
+                          : '+ Ajouter la question au brouillon'
+                      }}
                     </button>
-                    <button class="btn btn-sm btn-outline-danger" type="button" @click="archiveQuestion(question)">
-                      Archiver
-                    </button>
-                    <span v-if="question.popupDefinitions?.length" class="badge-soft warning">
-                      {{ question.popupDefinitions.length }} popup(s)
-                    </span>
+                  </div>
+
+                  <div v-if="!allQuestions.length" class="alert alert-warning rounded-3 mb-0">
+                    Aucune question pour l'instant. Commencez par créer un groupe, puis ajoutez vos
+                    questions.
+                  </div>
+                  <div v-else class="compact-list content-scroll content-scroll-sm">
+                    <div v-for="question in allQuestions" :key="question.id" class="question-row">
+                      <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+                        <span class="badge-soft">{{ question.code }}</span>
+                        <span class="badge-soft success"
+                          >{{ questionTypeLabel(question.responseType ?? question.type) }} ·
+                          {{ question.answerScaleLabel }}</span
+                        >
+                      </div>
+                      <h3 class="h6 fw-bold">{{ question.label ?? question.title }}</h3>
+                      <p v-if="question.helperText" class="small muted mb-3">
+                        {{ question.helperText }}
+                      </p>
+                      <div class="d-flex flex-wrap gap-2">
+                        <button
+                          class="btn btn-sm btn-outline-primary"
+                          type="button"
+                          @click="editQuestion(question)"
+                        >
+                          Modifier
+                        </button>
+                        <button
+                          class="btn btn-sm btn-outline-danger"
+                          type="button"
+                          @click="archiveQuestion(question)"
+                        >
+                          Archiver
+                        </button>
+                        <span v-if="question.popupDefinitions?.length" class="badge-soft warning">
+                          {{ question.popupDefinitions.length }} popup(s)
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                </div>
-              </div>
               </div>
             </CollapsibleSection>
 
@@ -1121,124 +1506,214 @@ async function performAction(action: () => Promise<string>): Promise<void> {
               v-if="showPreview"
               id="admin-preview"
               class="page-section admin-preview-section"
-              title="Prévisualisation et contrôles"
-              badge="Parcours simulé"
+              title="Aperçu et contrôles"
+              badge="Brouillon"
               badge-tone="success"
               body-class="compact"
             >
               <div class="d-grid gap-4">
                 <div class="demo-card flat">
-              <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
-                <div>
-                  <p class="section-eyebrow mb-2">Prévisualisation répondant</p>
-                  <h2 class="h5 fw-bold mb-0">{{ selectedQuestionnaire?.title ?? 'Questionnaire' }}</h2>
-                </div>
-                <span class="badge-soft success">Brouillon non publié</span>
-              </div>
-              <p class="muted">{{ selectedQuestionnaire?.description }}</p>
-
-              <div class="question-help mb-3">
-                <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
-                  <div>
-                    <p class="page-header-eyebrow mb-1">Simulation de parcours</p>
-                    <strong>Valeurs de test pour les conditions</strong>
+                  <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
+                    <div>
+                      <p class="section-eyebrow mb-2">Aperçu du questionnaire</p>
+                      <h2 class="h5 fw-bold mb-0">
+                        {{ selectedQuestionnaire?.title ?? 'Questionnaire' }}
+                      </h2>
+                    </div>
+                    <span class="badge-soft success">Brouillon non publié</span>
                   </div>
-                  <span class="badge-soft warning">randomisation stable</span>
-                </div>
-                <div class="row g-2 align-items-end">
-                  <div class="col-md-6">
-                    <label class="form-label small fw-bold" for="preview-lang">Q-001 · langue</label>
-                    <select id="preview-lang" v-model="previewAnswers['Q-001']" class="form-select form-select-sm">
-                      <option value="">Non répondu</option>
-                      <option value="fr">Français</option>
-                      <option value="en">English</option>
-                    </select>
-                  </div>
-                  <div class="col-md-6">
-                    <label class="form-label small fw-bold" for="preview-q002">Q-002 · confirmation</label>
-                    <select id="preview-q002" v-model="previewAnswers['Q-002']" class="form-select form-select-sm">
-                      <option value="">Non répondu</option>
-                      <option value="yes">Oui / Yes</option>
-                      <option value="no">Non / No</option>
-                    </select>
-                  </div>
-                </div>
-                <div v-if="hiddenPreviewGroups.length" class="mt-3 d-flex flex-wrap gap-2">
-                  <span v-for="group in hiddenPreviewGroups" :key="group.id" class="badge-soft danger">
-                    Masqué : {{ group.title }} · {{ conditionLabel(group.conditionExpression) }}
-                  </span>
-                </div>
-              </div>
+                  <p class="muted">{{ selectedQuestionnaire?.description }}</p>
 
-              <div class="content-scroll content-scroll-lg">
-              <div v-for="group in previewGroups" :key="group.id" class="question-row mb-3">
-                <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
-                  <span class="badge-soft">{{ group.title }} · {{ group.questionsPerPage }} question(s)/page</span>
-                  <span v-if="group.randomize" class="badge-soft warning">ordre randomisé</span>
-                  <span v-if="group.conditionExpression" class="badge-soft">{{ conditionLabel(group.conditionExpression) }}</span>
-                </div>
-                <p v-if="group.description" class="small muted">{{ group.description }}</p>
-
-                <div v-for="question in group.questions" :key="question.id" class="question-row mb-2">
-                  <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
-                    <span class="badge-soft">{{ question.code }}</span>
-                    <span class="badge-soft">{{ questionTypeLabel(question.responseType ?? question.type) }}</span>
-                    <span v-if="question.conditionExpression" class="badge-soft warning">{{ conditionLabel(question.conditionExpression) }}</span>
+                  <div class="question-help mb-3">
+                    <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+                      <div>
+                        <p class="page-header-eyebrow mb-1">Simulation de parcours</p>
+                        <strong>Valeurs de test pour les conditions</strong>
+                      </div>
+                      <span class="badge-soft warning">randomisation stable</span>
+                    </div>
+                    <div class="row g-2 align-items-end">
+                      <div class="col-md-6">
+                        <label class="form-label small fw-bold" for="preview-lang"
+                          >Q-001 · langue</label
+                        >
+                        <select
+                          id="preview-lang"
+                          v-model="previewAnswers['Q-001']"
+                          class="form-select form-select-sm"
+                        >
+                          <option value="">Non répondu</option>
+                          <option value="fr">Français</option>
+                          <option value="en">English</option>
+                        </select>
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label small fw-bold" for="preview-q002"
+                          >Q-002 · confirmation</label
+                        >
+                        <select
+                          id="preview-q002"
+                          v-model="previewAnswers['Q-002']"
+                          class="form-select form-select-sm"
+                        >
+                          <option value="">Non répondu</option>
+                          <option value="yes">Oui / Yes</option>
+                          <option value="no">Non / No</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div v-if="hiddenPreviewGroups.length" class="mt-3 d-flex flex-wrap gap-2">
+                      <span
+                        v-for="group in hiddenPreviewGroups"
+                        :key="group.id"
+                        class="badge-soft danger"
+                      >
+                        Masqué : {{ group.title }} · {{ conditionLabel(group.conditionExpression) }}
+                      </span>
+                    </div>
                   </div>
-                  <h3 class="h6 fw-bold">{{ question.label ?? question.title }}</h3>
-                  <p v-if="question.helperText" class="small muted">{{ question.helperText }}</p>
 
-                  <div v-if="question.responseType === 'likert' && question.likertScale" class="mb-3">
-                    <p class="small muted mb-2">
-                      {{ question.likertScale.leftAnchor }} · {{ question.likertScale.rightAnchor }}
-                    </p>
-                    <div class="likert-scale" role="group" :aria-label="`Échelle Likert ${question.likertScale.points} points`">
-                      <div v-for="value in likertValues(question.likertScale)" :key="value" class="likert-choice">
-                        <span class="likert-choice-label">{{ likertLabel(question.likertScale, value) }}</span>
-                        <button class="likert-dot border-0" type="button" :aria-label="`${likertLabel(question.likertScale, value)} — valeur ${value}`">
-                          {{ value }}
-                        </button>
+                  <div class="content-scroll content-scroll-lg">
+                    <div v-for="group in previewGroups" :key="group.id" class="question-row mb-3">
+                      <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+                        <span class="badge-soft"
+                          >{{ group.title }} · {{ group.questionsPerPage }} question(s)/page</span
+                        >
+                        <span v-if="group.randomize" class="badge-soft warning"
+                          >ordre randomisé</span
+                        >
+                        <span v-if="group.conditionExpression" class="badge-soft">{{
+                          conditionLabel(group.conditionExpression)
+                        }}</span>
+                      </div>
+                      <p v-if="group.description" class="small muted">{{ group.description }}</p>
+
+                      <div
+                        v-for="question in group.questions"
+                        :key="question.id"
+                        class="question-row mb-2"
+                      >
+                        <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+                          <span class="badge-soft">{{ question.code }}</span>
+                          <span class="badge-soft">{{
+                            questionTypeLabel(question.responseType ?? question.type)
+                          }}</span>
+                          <span v-if="question.conditionExpression" class="badge-soft warning">{{
+                            conditionLabel(question.conditionExpression)
+                          }}</span>
+                        </div>
+                        <h3 class="h6 fw-bold">{{ question.label ?? question.title }}</h3>
+                        <p v-if="question.helperText" class="small muted">
+                          {{ question.helperText }}
+                        </p>
+
+                        <div
+                          v-if="question.responseType === 'likert' && question.likertScale"
+                          class="mb-3"
+                        >
+                          <p class="small muted mb-2">
+                            {{ question.likertScale.leftAnchor }} ·
+                            {{ question.likertScale.rightAnchor }}
+                          </p>
+                          <div
+                            class="likert-scale"
+                            role="group"
+                            :aria-label="`Échelle Likert ${question.likertScale.points} points`"
+                          >
+                            <div
+                              v-for="value in likertValues(question.likertScale)"
+                              :key="value"
+                              class="likert-choice"
+                            >
+                              <span class="likert-choice-label">{{
+                                likertLabel(question.likertScale, value)
+                              }}</span>
+                              <button
+                                class="likert-dot border-0"
+                                type="button"
+                                :aria-label="`${likertLabel(question.likertScale, value)} — valeur ${value}`"
+                              >
+                                {{ value }}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                        <div
+                          v-else-if="
+                            question.responseType === 'single_choice' ||
+                            question.responseType === 'multiple_choice'
+                          "
+                          class="d-grid gap-2 mb-3"
+                        >
+                          <button
+                            v-for="option in question.options"
+                            :key="option.id"
+                            class="btn btn-outline-primary text-start"
+                            type="button"
+                          >
+                            {{ option.label }}
+                          </button>
+                        </div>
+                        <input
+                          v-else-if="question.responseType === 'number'"
+                          class="form-control mb-3"
+                          type="number"
+                          placeholder="Nombre"
+                        />
+                        <input
+                          v-else-if="question.responseType === 'date'"
+                          class="form-control mb-3"
+                          type="date"
+                        />
+                        <div
+                          v-else-if="question.responseType === 'information'"
+                          class="alert alert-info rounded-4 mb-3"
+                        >
+                          Bloc d’information sans réponse attendue.
+                        </div>
+                        <textarea
+                          v-else
+                          class="form-control mb-3"
+                          rows="3"
+                          placeholder="Réponse du répondant"
+                        ></textarea>
+
+                        <div v-if="question.popupDefinitions?.length" class="info-bubble-list mb-3">
+                          <span
+                            v-for="popup in question.popupDefinitions ?? []"
+                            :key="popup.id"
+                            class="info-bubble"
+                          >
+                            <span class="info-bubble-icon" aria-hidden="true">i</span>
+                            {{ popup.title }}
+                          </span>
+                        </div>
+
+                        <div
+                          v-for="popup in question.popupDefinitions ?? []"
+                          :key="popup.id"
+                          class="question-help mb-2"
+                        >
+                          <div class="d-flex justify-content-between gap-3">
+                            <strong>{{ popup.title }}</strong>
+                            <span class="badge-soft warning">popup</span>
+                          </div>
+                          <p class="small muted mb-0 mt-2">{{ popup.body }}</p>
+                        </div>
                       </div>
                     </div>
                   </div>
-                  <div v-else-if="question.responseType === 'single_choice' || question.responseType === 'multiple_choice'" class="d-grid gap-2 mb-3">
-                    <button v-for="option in question.options" :key="option.id" class="btn btn-outline-primary text-start" type="button">
-                      {{ option.label }}
-                    </button>
-                  </div>
-                  <input v-else-if="question.responseType === 'number'" class="form-control mb-3" type="number" placeholder="Nombre" />
-                  <input v-else-if="question.responseType === 'date'" class="form-control mb-3" type="date" />
-                  <div v-else-if="question.responseType === 'information'" class="alert alert-info rounded-4 mb-3">Bloc d’information sans réponse attendue.</div>
-                  <textarea v-else class="form-control mb-3" rows="3" placeholder="Réponse du répondant"></textarea>
-
-                  <div v-if="question.popupDefinitions?.length" class="info-bubble-list mb-3">
-                    <span v-for="popup in question.popupDefinitions ?? []" :key="popup.id" class="info-bubble">
-                      <span class="info-bubble-icon" aria-hidden="true">i</span>
-                      {{ popup.title }}
-                    </span>
-                  </div>
-
-                  <div v-for="popup in question.popupDefinitions ?? []" :key="popup.id" class="question-help mb-2">
-                    <div class="d-flex justify-content-between gap-3">
-                      <strong>{{ popup.title }}</strong>
-                      <span class="badge-soft warning">popup</span>
-                    </div>
-                    <p class="small muted mb-0 mt-2">{{ popup.body }}</p>
-                  </div>
                 </div>
-              </div>
-              </div>
-            </div>
 
-            <div class="demo-card flat">
-              <p class="page-header-eyebrow mb-2">Fonctionnalités disponibles</p>
-              <div class="d-grid gap-2">
-                <span class="badge-soft success">Création sans code</span>
-                <span class="badge-soft success">Conditions simples question / groupe</span>
-                <span class="badge-soft success">Parcours multilingue (FR / EN)</span>
-                <span class="badge-soft success">Randomisation avec ordre stable</span>
-                <span class="badge-soft success">Popups explicatives versionnées</span>
-              </div>
+                <div class="demo-card flat">
+                  <p class="page-header-eyebrow mb-2">Fonctionnalités disponibles</p>
+                  <div class="d-grid gap-2">
+                    <span class="badge-soft success">Création sans code</span>
+                    <span class="badge-soft success">Conditions simples question / groupe</span>
+                    <span class="badge-soft success">Parcours multilingue (FR / EN)</span>
+                    <span class="badge-soft success">Randomisation avec ordre stable</span>
+                    <span class="badge-soft success">Popups explicatives versionnées</span>
+                  </div>
                 </div>
               </div>
             </CollapsibleSection>

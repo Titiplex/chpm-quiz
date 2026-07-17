@@ -145,11 +145,10 @@ function resetDemo(): void {
     <div class="container-fluid px-4 px-xl-5">
       <div class="hero-card p-4 p-lg-5 mb-4">
         <div class="position-relative z-1">
-          <p class="hero-eyebrow mb-3">Questionnaire patient statique</p>
+          <p class="hero-eyebrow mb-3">Questionnaire patient</p>
           <h1 class="hero-title fw-black mb-4">{{ staticQuestionnaire.title }}</h1>
           <p class="hero-text mb-4">
-            {{ staticQuestionnaire.finality }} Cette page est autonome : elle ne déclenche ni
-            requête API, ni authentification, ni écriture serveur.
+            {{ staticQuestionnaire.finality }}
           </p>
           <div class="d-flex flex-wrap gap-2 align-items-center">
             <span class="badge-soft success">Code : {{ staticQuestionnaire.publicCode }}</span>
@@ -168,12 +167,8 @@ function resetDemo(): void {
           <div class="demo-card h-100">
             <div class="d-flex flex-wrap justify-content-between gap-3 mb-4">
               <div>
-                <p class="section-eyebrow mb-2">Passation locale</p>
+                <p class="section-eyebrow mb-2">Questionnaire</p>
                 <h2 class="h3 fw-bold mb-1">Parcours répondant sans compte</h2>
-                <p class="muted mb-0">
-                  Les réponses restent dans l’état de la page et peuvent être réinitialisées à tout
-                  moment.
-                </p>
               </div>
               <button
                 class="btn btn-outline-primary align-self-start"
@@ -187,11 +182,10 @@ function resetDemo(): void {
             <div class="question-help mb-4" role="note">
               <strong>Notice d’information avant démarrage</strong>
               <ul class="small muted mb-3 mt-2 ps-3">
-                <li>Finalité : démontrer l’ergonomie du questionnaire patient sur GitHub Pages.</li>
-                <li>Données : aucune donnée personnelle réelle ne doit être saisie.</li>
+                <li>Finalité : {{ staticQuestionnaire.finality }}</li>
                 <li>
-                  Confidentialité : aucune réponse n’est envoyée à un serveur dans cette version
-                  statique.
+                  Confidentialité : évitez toute information directement identifiante dans les
+                  champs libres.
                 </li>
               </ul>
               <label class="form-check d-flex gap-2 align-items-start mb-0" for="static-consent">
@@ -202,15 +196,12 @@ function resetDemo(): void {
                   type="checkbox"
                   :disabled="submitted"
                 />
-                <span class="small"
-                  >J’ai lu la notice d’information et je comprends que cette passation est une
-                  démonstration statique.</span
-                >
+                <span class="small">J’ai lu la notice d’information.</span>
               </label>
             </div>
 
             <div v-if="submitted" class="alert alert-success rounded-4" role="status">
-              Soumission de démonstration verrouillée localement. Aucune donnée n’a été transmise.
+              Soumission confirmée. Les réponses sont verrouillées.
             </div>
 
             <div
@@ -362,7 +353,7 @@ function resetDemo(): void {
               </div>
 
               <div v-if="!consentAccepted && !submitted" class="alert alert-warning rounded-4">
-                La notice d’information doit être confirmée avant la soumission de démonstration.
+                La notice d’information doit être confirmée avant la soumission.
               </div>
 
               <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
@@ -399,8 +390,7 @@ function resetDemo(): void {
                   Confirmer la soumission locale
                 </h2>
                 <p class="muted">
-                  La page sera verrouillée localement pour illustrer le comportement final. Aucun
-                  envoi serveur ne sera réalisé.
+                  Après confirmation, les réponses ne pourront plus être modifiées.
                 </p>
                 <div class="d-flex flex-wrap gap-2">
                   <button class="btn btn-primary" type="button" @click="confirmSubmit">
@@ -435,15 +425,6 @@ function resetDemo(): void {
               <p class="small muted mb-0 mt-3">
                 Bâtiment : {{ staticQuestionnaire.buildingLabel }}. Version :
                 {{ staticQuestionnaire.versionLabel }}.
-              </p>
-            </div>
-
-            <div class="demo-card">
-              <p class="section-eyebrow mb-2">GitHub Pages</p>
-              <h2 class="h5 fw-bold">Mode strictement statique</h2>
-              <p class="muted mb-0">
-                Cette vue remplace le parcours par jeton signé pour la démo publique. Le vrai
-                parcours backend reste inchangé hors build Pages.
               </p>
             </div>
           </div>
