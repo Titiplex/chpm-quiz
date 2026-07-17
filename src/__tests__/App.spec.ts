@@ -8,7 +8,6 @@ import LoginView from '../views/LoginView.vue'
 import HomeView from '../views/HomeView.vue'
 import AdminBuilderView from '../views/AdminBuilderView.vue'
 import ModeratorView from '../views/ModeratorView.vue'
-import RespondentView from '../views/RespondentView.vue'
 import StatsView from '../views/StatsView.vue'
 import AccessDeniedView from '../views/AccessDeniedView.vue'
 import { allRoles } from '@shared/types/rbac'
@@ -50,11 +49,6 @@ describe('App', () => {
           },
         },
         {
-          path: '/questionnaire',
-          component: RespondentView,
-          meta: { label: 'Questionnaire', allowedRoles: allRoles, requiresAuthenticatedUser: true },
-        },
-        {
           path: '/stats',
           component: StatsView,
           meta: { label: 'Statistiques', allowedRoles: ['admin'], requiresAuthenticatedUser: true },
@@ -77,8 +71,8 @@ describe('App', () => {
     })
 
     expect(wrapper.text()).toContain('CHPM Survey')
-    expect(wrapper.text()).toContain('Produit connecté')
-    expect(wrapper.text()).toContain('Connexion réelle à l’API centrale')
+    expect(wrapper.text()).toContain('Authentification interne')
+    expect(wrapper.text()).toContain('Connexion')
     expect(wrapper.text()).not.toContain('admin@chpm.local')
   })
 })

@@ -37,7 +37,6 @@ describe('layout components', () => {
     })
 
     expect(wrapper.text()).toContain('CHPM Survey')
-    expect(wrapper.text()).toContain('Produit connecté')
     expect(wrapper.text()).toContain('Connexion')
     expect(wrapper.text()).not.toContain('Admin')
 

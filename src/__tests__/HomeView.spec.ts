@@ -6,7 +6,6 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 import HomeView from '@/views/HomeView.vue'
 import ProjectAdministrationView from '@/views/ProjectAdministrationView.vue'
 import AdminBuilderView from '@/views/AdminBuilderView.vue'
-import RespondentView from '@/views/RespondentView.vue'
 import ModeratorView from '@/views/ModeratorView.vue'
 import StatsView from '@/views/StatsView.vue'
 import AccessDeniedView from '@/views/AccessDeniedView.vue'
@@ -31,17 +30,16 @@ function makeRouter() {
       {
         path: '/administration-projet',
         component: ProjectAdministrationView,
-        meta: { label: 'Administration projet', allowedRoles: ['admin'], requiresAuthenticatedUser: true },
+        meta: {
+          label: 'Administration projet',
+          allowedRoles: ['admin'],
+          requiresAuthenticatedUser: true,
+        },
       },
       {
         path: '/admin',
         component: AdminBuilderView,
         meta: { label: 'Admin', allowedRoles: ['admin'], requiresAuthenticatedUser: true },
-      },
-      {
-        path: '/questionnaire',
-        component: RespondentView,
-        meta: { label: 'Questionnaire', allowedRoles: allRoles, requiresAuthenticatedUser: true },
       },
       {
         path: '/moderation',
@@ -98,7 +96,7 @@ describe('HomeView', () => {
 
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.text()).toContain('Application connectée')
+    expect(wrapper.text()).toContain('Espace de travail')
     expect(wrapper.text()).toContain('Administration projet')
     expect(wrapper.text()).toContain('Vos modules')
     expect(wrapper.text()).toContain('Statistiques')

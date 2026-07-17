@@ -20,7 +20,15 @@ const navigationDefinitions: NavigationDefinition[] = [
   {
     labelKey: 'nav.home',
     to: '/',
-    roles: ['admin', 'moderator', 'site_manager', 'questionnaire_admin', 'analyst', 'technical_admin', 'judicial_officer'],
+    roles: [
+      'admin',
+      'moderator',
+      'site_manager',
+      'questionnaire_admin',
+      'analyst',
+      'technical_admin',
+      'judicial_officer',
+    ],
     descriptionKey: 'nav.home.description',
   },
   {
@@ -40,12 +48,6 @@ const navigationDefinitions: NavigationDefinition[] = [
     to: '/moderation',
     roles: ['moderator', 'site_manager'],
     descriptionKey: 'nav.moderation.description',
-  },
-  {
-    labelKey: 'nav.respondentPreview',
-    to: '/questionnaire',
-    roles: ['admin', 'moderator', 'questionnaire_admin'],
-    descriptionKey: 'nav.respondentPreview.description',
   },
   {
     labelKey: 'nav.stats',
@@ -79,7 +81,7 @@ export const defaultPathByRole: Record<UserRole, string> = {
   judicial_officer: '/rgpd',
   technical_admin: '/terminaux',
   service_account: '/',
-  respondent: '/questionnaire',
+  respondent: '/',
 }
 
 export function getVisibleNavigation(role: UserRole): NavigationItem[] {

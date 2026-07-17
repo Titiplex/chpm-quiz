@@ -109,16 +109,6 @@ export function createConnectedRoutes(): RouteRecordRaw[] {
       },
     },
     {
-      path: '/questionnaire',
-      name: 'questionnaire',
-      component: () => import('@/views/RespondentView.vue'),
-      meta: {
-        label: t('nav.respondentPreview'),
-        allowedRoles: ['admin', 'moderator', 'questionnaire_admin'],
-        requiresAuthenticatedUser: true,
-      },
-    },
-    {
       path: '/r/:token',
       name: 'respondent-token',
       component: () => import('@/views/RespondentView.vue'),

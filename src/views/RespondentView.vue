@@ -5,7 +5,11 @@ import { RouterLink, useRoute } from 'vue-router'
 import KpiCard from '@/components/common/KpiCard.vue'
 import { t } from '@/i18n'
 import { useRespondentSessionStore } from '@/stores/respondentSession'
-import type { ApiPopupDefinition, RespondentQuestion, RespondentQuestionGroup } from '@shared/types/api'
+import type {
+  ApiPopupDefinition,
+  RespondentQuestion,
+  RespondentQuestionGroup,
+} from '@shared/types/api'
 
 const route = useRoute()
 const respondent = useRespondentSessionStore()
@@ -14,13 +18,18 @@ const textAutosaveTimers = new Map<string, number>()
 const pendingTextQuestionIds = new Set<string>()
 const questionStartedAt = new Map<string, number>()
 
-
 const token = computed(() => String(route.params.token ?? ''))
 const hasToken = computed(() => Boolean(token.value))
 const groups = computed(() => respondent.session?.questionnaire.groups ?? [])
 const pageIndex = ref(0)
 const pageStartedAt = ref(Date.now())
-const activePopup = ref<{ questionId: string; popupDefinitionId: string; termKey: string; language: string; openedAt: number } | null>(null)
+const activePopup = ref<{
+  questionId: string
+  popupDefinitionId: string
+  termKey: string
+  language: string
+  openedAt: number
+} | null>(null)
 const showSubmitConfirmation = ref(false)
 const isSubmitting = ref(false)
 const submitError = ref<string | null>(null)
@@ -50,16 +59,28 @@ const pages = computed<RespondentPage[]>(() =>
   }),
 )
 
-const currentPage = computed(() => pages.value[Math.min(pageIndex.value, Math.max(pages.value.length - 1, 0))] ?? null)
+const currentPage = computed(
+  () => pages.value[Math.min(pageIndex.value, Math.max(pages.value.length - 1, 0))] ?? null,
+)
 const currentPageNumber = computed(() => (pages.value.length ? pageIndex.value + 1 : 0))
 const isFirstPage = computed(() => pageIndex.value <= 0)
 const isLastPage = computed(() => pageIndex.value >= pages.value.length - 1)
 const unansweredRequiredQuestions = computed(() =>
-  respondent.questions.filter((question) => question.isRequired && !hasAnswerValue(questionValue(question))),
+  respondent.questions.filter(
+    (question) => question.isRequired && !hasAnswerValue(questionValue(question)),
+  ),
 )
 const missingConsent = computed(() => !respondent.isLocked && !consentAccepted.value)
-const isOnsiteTerminal = computed(() => respondent.session?.invitation.deliveryMode === 'onsite_terminal')
-const canSubmit = computed(() => !respondent.isLocked && consentAccepted.value && unansweredRequiredQuestions.value.length === 0 && respondent.status !== 'saving')
+const isOnsiteTerminal = computed(
+  () => respondent.session?.invitation.deliveryMode === 'onsite_terminal',
+)
+const canSubmit = computed(
+  () =>
+    !respondent.isLocked &&
+    consentAccepted.value &&
+    unansweredRequiredQuestions.value.length === 0 &&
+    respondent.status !== 'saving',
+)
 
 watch(
   pages,
@@ -81,7 +102,8 @@ onMounted(async () => {
     await respondent.load(token.value)
     pageIndex.value = Math.max(0, (respondent.session?.responseSession.currentPage ?? 1) - 1)
     hydrateLocalAnswers()
-    sessionStartedAtMs.value = Date.parse(String(respondent.session?.responseSession.startedAt ?? '')) || Date.now()
+    sessionStartedAtMs.value =
+      Date.parse(String(respondent.session?.responseSession.startedAt ?? '')) || Date.now()
     startQuestionTimers()
     await recordLifecycleTelemetry()
     await recordPageTelemetry('page_view')
@@ -190,7 +212,9 @@ async function flushQuestionAutosave(question: RespondentQuestion): Promise<void
 }
 
 async function flushPendingAutosaves(): Promise<void> {
-  const pendingQuestions = respondent.questions.filter((question) => pendingTextQuestionIds.has(question.id))
+  const pendingQuestions = respondent.questions.filter((question) =>
+    pendingTextQuestionIds.has(question.id),
+  )
   for (const question of pendingQuestions) {
     await flushQuestionAutosave(question)
   }
@@ -211,7 +235,9 @@ function isOptionSelected(question: RespondentQuestion, value: string): boolean 
 async function toggleMultipleChoice(question: RespondentQuestion, value: string): Promise<void> {
   const currentValue = questionValue(question)
   const current = Array.isArray(currentValue) ? [...currentValue] : []
-  const next = current.includes(value) ? current.filter((item) => item !== value) : [...current, value]
+  const next = current.includes(value)
+    ? current.filter((item) => item !== value)
+    : [...current, value]
   await save(question, next)
 }
 
@@ -254,7 +280,9 @@ function questionHelpIds(question: RespondentQuestion): string {
     question.helperText ? questionDomId(question, 'help') : null,
     question.isRequired ? questionDomId(question, 'required') : null,
     question.responseType.includes('free_text') ? questionDomId(question, 'free-text-help') : null,
-  ].filter(Boolean).join(' ')
+  ]
+    .filter(Boolean)
+    .join(' ')
 }
 
 async function previousPage(): Promise<void> {
@@ -265,7 +293,10 @@ async function previousPage(): Promise<void> {
   await respondent.telemetry({
     eventType: 'backward_navigation',
     currentPage: currentPageNumber.value,
-    eventPayload: { fromPage: currentPageNumber.value, toPage: Math.max(1, currentPageNumber.value - 1) },
+    eventPayload: {
+      fromPage: currentPageNumber.value,
+      toPage: Math.max(1, currentPageNumber.value - 1),
+    },
     occurredAt: new Date().toISOString(),
   })
   pageIndex.value = Math.max(0, pageIndex.value - 1)
@@ -285,7 +316,10 @@ async function nextPage(): Promise<void> {
   await recordPageTelemetry('page_view')
 }
 
-async function recordPageTelemetry(eventType: string, extraPayload: Record<string, unknown> = {}): Promise<void> {
+async function recordPageTelemetry(
+  eventType: string,
+  extraPayload: Record<string, unknown> = {},
+): Promise<void> {
   if (!currentPage.value || !respondent.session || respondent.isLocked) return
   await respondent.telemetry({
     eventType,
@@ -304,7 +338,8 @@ async function recordPageTelemetry(eventType: string, extraPayload: Record<strin
 async function recordLifecycleTelemetry(): Promise<void> {
   if (!respondent.session || respondent.isLocked) return
 
-  const hasDraft = respondent.answeredCount > 0 || (respondent.session.responseSession.currentPage ?? 1) > 1
+  const hasDraft =
+    respondent.answeredCount > 0 || (respondent.session.responseSession.currentPage ?? 1) > 1
   await respondent.telemetry({
     eventType: hasDraft ? 'questionnaire_resume' : 'questionnaire_start',
     currentPage: currentPageNumber.value || 1,
@@ -435,7 +470,8 @@ async function closeActivePopup(eventType: 'popup_close' | 'popup_switch'): Prom
 async function openSubmitConfirmation(): Promise<void> {
   submitError.value = null
   if (missingConsent.value) {
-    submitError.value = 'Merci de confirmer la notice d’information RGPD avant la soumission définitive.'
+    submitError.value =
+      'Merci de confirmer la notice d’information RGPD avant la soumission définitive.'
     return
   }
   await flushPendingAutosaves()
@@ -474,21 +510,20 @@ async function confirmSubmit(): Promise<void> {
   <section class="demo-page">
     <div class="container-fluid px-4 px-xl-5">
       <div v-if="!hasToken" class="hero-card p-4 p-lg-5 mb-4">
-        <p class="hero-eyebrow mb-3">Parcours répondant</p>
-        <h1 class="hero-title fw-black mb-4">Le répondant n’a plus de compte interne.</h1>
-        <p class="hero-text mb-4">
-          Le CDC impose un accès par lien signé et code public. Crée une invitation dans l’espace Modération : le backend génèrera un lien `/r/&lt;token&gt;` qui ouvrira cette page en mode répondant réel.
-        </p>
-        <RouterLink class="btn btn-primary btn-lg" to="/moderation">
-          Créer une invitation de test
-        </RouterLink>
+        <p class="hero-eyebrow mb-3">{{ t('respondent.access.eyebrow') }}</p>
+        <h1 class="hero-title fw-black mb-3">{{ t('respondent.access.invalidTitle') }}</h1>
+        <p class="hero-text mb-0">{{ t('respondent.access.invalidBody') }}</p>
       </div>
 
       <div v-else>
         <div v-if="respondent.status === 'loading'" class="alert alert-info rounded-4">
           Chargement de la session répondant…
         </div>
-        <div v-else-if="respondent.status === 'error'" class="alert alert-danger rounded-4" role="alert">
+        <div
+          v-else-if="respondent.status === 'error'"
+          class="alert alert-danger rounded-4"
+          role="alert"
+        >
           {{ respondent.error }}
         </div>
         <template v-else-if="respondent.session">
@@ -500,21 +535,55 @@ async function confirmSubmit(): Promise<void> {
                     <p class="section-eyebrow mb-2">Vue répondant par jeton signé</p>
                     <h1 class="h2 fw-bold mb-1">{{ respondent.session.questionnaire.title }}</h1>
                     <p class="muted mb-0">
-                      {{ respondent.session.questionnaire.finality }} La sauvegarde reste possible tant que la soumission finale n’a pas été confirmée.
+                      {{ respondent.session.questionnaire.finality }} La sauvegarde reste possible
+                      tant que la soumission finale n’a pas été confirmée.
                     </p>
                   </div>
-                  <span class="badge-soft success align-self-start">Code : {{ respondent.session.responseSession.publicCode }}</span>
+                  <span class="badge-soft success align-self-start"
+                    >Code : {{ respondent.session.responseSession.publicCode }}</span
+                  >
                 </div>
 
                 <div class="question-help mb-4" role="note">
                   <strong>{{ t('respondent.notice.title') }}</strong>
                   <ul class="small muted mb-3 mt-2 ps-3">
-                    <li>Finalité : {{ respondent.session.legalNotice?.finality ?? respondent.session.questionnaire.finality }}</li>
-                    <li>Durée estimée : {{ respondent.session.legalNotice?.estimatedDurationMinutes ?? 'quelques' }} minute(s), avec reprise possible depuis le même lien tant que la soumission finale n’est pas faite.</li>
-                    <li>Confidentialité : {{ respondent.session.legalNotice?.pseudonymizationStatus ?? (isOnsiteTerminal ? 'aucun email n’est collecté pour cette invitation terminal.' : 'l’email est conservé séparément dans la base identité.') }}</li>
-                    <li>Droits et contact : {{ respondent.session.legalNotice?.rights ?? 'Contactez le DPO pour toute demande RGPD.' }} Contact : {{ respondent.session.legalNotice?.dpoContact ?? 'DPO' }}.</li>
+                    <li>
+                      Finalité :
+                      {{
+                        respondent.session.legalNotice?.finality ??
+                        respondent.session.questionnaire.finality
+                      }}
+                    </li>
+                    <li>
+                      Durée estimée :
+                      {{
+                        respondent.session.legalNotice?.estimatedDurationMinutes ?? 'quelques'
+                      }}
+                      minute(s), avec reprise possible depuis le même lien tant que la soumission
+                      finale n’est pas faite.
+                    </li>
+                    <li>
+                      Confidentialité :
+                      {{
+                        respondent.session.legalNotice?.pseudonymizationStatus ??
+                        (isOnsiteTerminal
+                          ? 'aucun email n’est collecté pour cette invitation terminal.'
+                          : 'l’email est conservé séparément dans la base identité.')
+                      }}
+                    </li>
+                    <li>
+                      Droits et contact :
+                      {{
+                        respondent.session.legalNotice?.rights ??
+                        'Contactez le DPO pour toute demande RGPD.'
+                      }}
+                      Contact : {{ respondent.session.legalNotice?.dpoContact ?? 'DPO' }}.
+                    </li>
                   </ul>
-                  <label class="form-check d-flex gap-2 align-items-start mb-0" for="respondent-consent">
+                  <label
+                    class="form-check d-flex gap-2 align-items-start mb-0"
+                    for="respondent-consent"
+                  >
                     <input
                       id="respondent-consent"
                       v-model="consentAccepted"
@@ -528,57 +597,110 @@ async function confirmSubmit(): Promise<void> {
 
                 <div v-if="respondent.isLocked" class="alert alert-success rounded-4">
                   <div class="d-flex flex-wrap justify-content-between gap-3 align-items-center">
-                    <span>Soumission finale reçue et verrouillée. Une deuxième soumission est impossible.</span>
+                    <span
+                      >Soumission finale reçue et verrouillée. Une deuxième soumission est
+                      impossible.</span
+                    >
                     <RouterLink
                       v-if="isOnsiteTerminal && respondent.terminalToken"
                       class="btn btn-sm btn-outline-success"
-                      :to="{ name: 'terminal', params: { terminalToken: respondent.terminalToken } }"
+                      :to="{
+                        name: 'terminal',
+                        params: { terminalToken: respondent.terminalToken },
+                      }"
                     >
                       Retour au terminal
                     </RouterLink>
                   </div>
                 </div>
 
-                <div class="progress rounded-pill mb-4" role="progressbar" :aria-valuenow="respondent.progress" aria-valuemin="0" aria-valuemax="100">
+                <div
+                  class="progress rounded-pill mb-4"
+                  role="progressbar"
+                  :aria-valuenow="respondent.progress"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                >
                   <div class="progress-bar" :style="{ width: `${respondent.progress}%` }">
                     {{ respondent.progress }} %
                   </div>
                 </div>
 
                 <div v-if="currentPage" class="mb-4">
-                  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                  <div
+                    class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"
+                  >
                     <div>
                       <span class="badge-soft">
                         Page {{ currentPageNumber }} / {{ pages.length }} ·
                         {{ currentPage.group.title }} ·
                         {{ currentPage.group.questionsPerPage }} question(s)/page
                       </span>
-                      <span v-if="currentPage.group.randomize" class="badge-soft warning ms-2">ordre randomisé stable</span>
+                      <span v-if="currentPage.group.randomize" class="badge-soft warning ms-2"
+                        >ordre randomisé stable</span
+                      >
                     </div>
                     <div class="d-flex gap-2">
-                      <button class="btn btn-sm btn-outline-primary" type="button" :disabled="isFirstPage" @click="previousPage">
+                      <button
+                        class="btn btn-sm btn-outline-primary"
+                        type="button"
+                        :disabled="isFirstPage"
+                        @click="previousPage"
+                      >
                         {{ t('respondent.actions.previous') }}
                       </button>
-                      <button class="btn btn-sm btn-outline-primary" type="button" :disabled="isLastPage" @click="nextPage">
+                      <button
+                        class="btn btn-sm btn-outline-primary"
+                        type="button"
+                        :disabled="isLastPage"
+                        @click="nextPage"
+                      >
                         {{ t('respondent.actions.next') }}
                       </button>
                     </div>
                   </div>
-                  <p v-if="currentPage.group.description" class="muted mb-3">{{ currentPage.group.description }}</p>
+                  <p v-if="currentPage.group.description" class="muted mb-3">
+                    {{ currentPage.group.description }}
+                  </p>
 
-                  <div v-for="question in currentPage.questions" :key="question.id" class="question-row mb-3">
+                  <div
+                    v-for="question in currentPage.questions"
+                    :key="question.id"
+                    class="question-row mb-3"
+                  >
                     <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
-                      <span class="badge-soft">{{ question.code }} · {{ question.responseType }}</span>
-                      <span v-if="question.isRequired" class="badge-soft warning">{{ t('respondent.required') }}</span>
+                      <span class="badge-soft"
+                        >{{ question.code }} · {{ question.responseType }}</span
+                      >
+                      <span v-if="question.isRequired" class="badge-soft warning">{{
+                        t('respondent.required')
+                      }}</span>
                       <span v-if="question.popupDefinitions?.length" class="badge-soft warning">
                         {{ question.popupDefinitions.length }} terme(s) expliqué(s)
                       </span>
                     </div>
-                    <h2 :id="questionDomId(question, 'label')" class="h5 fw-bold">{{ question.label }}</h2>
-                    <p v-if="question.helperText" :id="questionDomId(question, 'help')" class="muted">{{ question.helperText }}</p>
-                    <span v-if="question.isRequired" :id="questionDomId(question, 'required')" class="visually-hidden">{{ t('respondent.required') }}</span>
+                    <h2 :id="questionDomId(question, 'label')" class="h5 fw-bold">
+                      {{ question.label }}
+                    </h2>
+                    <p
+                      v-if="question.helperText"
+                      :id="questionDomId(question, 'help')"
+                      class="muted"
+                    >
+                      {{ question.helperText }}
+                    </p>
+                    <span
+                      v-if="question.isRequired"
+                      :id="questionDomId(question, 'required')"
+                      class="visually-hidden"
+                      >{{ t('respondent.required') }}</span
+                    >
 
-                    <div v-if="question.popupDefinitions?.length" class="info-bubble-list mb-3" aria-label="Termes expliqués pour cette question">
+                    <div
+                      v-if="question.popupDefinitions?.length"
+                      class="info-bubble-list mb-3"
+                      aria-label="Termes expliqués pour cette question"
+                    >
                       <button
                         v-for="popup in question.popupDefinitions"
                         :key="popup.id"
@@ -609,13 +731,34 @@ async function confirmSubmit(): Promise<void> {
                       <p class="small muted mb-0 mt-2">{{ popup.body }}</p>
                     </div>
 
-                    <div v-if="question.responseType === 'likert' && question.likertScale" class="mb-3">
+                    <div
+                      v-if="question.responseType === 'likert' && question.likertScale"
+                      class="mb-3"
+                    >
                       <p class="small muted mb-2">
-                        {{ question.likertScale.leftAnchor }} · {{ question.likertScale.rightAnchor }}
+                        {{ question.likertScale.leftAnchor }} ·
+                        {{ question.likertScale.rightAnchor }}
                       </p>
-                      <div class="likert-scale" role="radiogroup" :aria-labelledby="questionDomId(question, 'label')" :aria-describedby="questionHelpIds(question)" :aria-label="t('respondent.likert.group', { points: question.likertScale.points, label: question.label })">
-                        <div v-for="value in likertValues(question.likertScale)" :key="value" class="likert-choice">
-                          <span class="likert-choice-label">{{ likertLabel(question.likertScale, value) }}</span>
+                      <div
+                        class="likert-scale"
+                        role="radiogroup"
+                        :aria-labelledby="questionDomId(question, 'label')"
+                        :aria-describedby="questionHelpIds(question)"
+                        :aria-label="
+                          t('respondent.likert.group', {
+                            points: question.likertScale.points,
+                            label: question.label,
+                          })
+                        "
+                      >
+                        <div
+                          v-for="value in likertValues(question.likertScale)"
+                          :key="value"
+                          class="likert-choice"
+                        >
+                          <span class="likert-choice-label">{{
+                            likertLabel(question.likertScale, value)
+                          }}</span>
                           <button
                             class="likert-dot border-0"
                             role="radio"
@@ -634,7 +777,11 @@ async function confirmSubmit(): Promise<void> {
                           <span class="likert-choice-label">Sans objet</span>
                           <button
                             class="btn btn-sm likert-extra-button"
-                            :class="questionValue(question) === 'not_applicable' ? 'btn-primary' : 'btn-outline-primary'"
+                            :class="
+                              questionValue(question) === 'not_applicable'
+                                ? 'btn-primary'
+                                : 'btn-outline-primary'
+                            "
                             type="button"
                             :disabled="respondent.isLocked"
                             @click="save(question, 'not_applicable')"
@@ -645,12 +792,19 @@ async function confirmSubmit(): Promise<void> {
                       </div>
                     </div>
 
-                    <div v-else-if="question.responseType === 'single_choice'" class="d-grid gap-2 mb-3">
+                    <div
+                      v-else-if="question.responseType === 'single_choice'"
+                      class="d-grid gap-2 mb-3"
+                    >
                       <button
                         v-for="option in question.options"
                         :key="option.id"
                         class="btn text-start"
-                        :class="questionValue(question) === option.value ? 'btn-primary' : 'btn-outline-primary'"
+                        :class="
+                          questionValue(question) === option.value
+                            ? 'btn-primary'
+                            : 'btn-outline-primary'
+                        "
                         type="button"
                         :aria-pressed="questionValue(question) === option.value"
                         :aria-describedby="questionHelpIds(question)"
@@ -661,12 +815,19 @@ async function confirmSubmit(): Promise<void> {
                       </button>
                     </div>
 
-                    <div v-else-if="question.responseType === 'multiple_choice'" class="d-grid gap-2 mb-3">
+                    <div
+                      v-else-if="question.responseType === 'multiple_choice'"
+                      class="d-grid gap-2 mb-3"
+                    >
                       <button
                         v-for="option in question.options"
                         :key="option.id"
                         class="btn text-start"
-                        :class="isOptionSelected(question, option.value) ? 'btn-primary' : 'btn-outline-primary'"
+                        :class="
+                          isOptionSelected(question, option.value)
+                            ? 'btn-primary'
+                            : 'btn-outline-primary'
+                        "
                         type="button"
                         :aria-pressed="isOptionSelected(question, option.value)"
                         :aria-describedby="questionHelpIds(question)"
@@ -678,7 +839,9 @@ async function confirmSubmit(): Promise<void> {
                     </div>
 
                     <div v-else-if="question.responseType === 'number'" class="mb-3">
-                      <label class="visually-hidden" :for="questionDomId(question, 'input')">{{ question.label }}</label>
+                      <label class="visually-hidden" :for="questionDomId(question, 'input')">{{
+                        question.label
+                      }}</label>
                       <input
                         :id="questionDomId(question, 'input')"
                         class="form-control"
@@ -691,7 +854,9 @@ async function confirmSubmit(): Promise<void> {
                     </div>
 
                     <div v-else-if="question.responseType === 'date'" class="mb-3">
-                      <label class="visually-hidden" :for="questionDomId(question, 'input')">{{ question.label }}</label>
+                      <label class="visually-hidden" :for="questionDomId(question, 'input')">{{
+                        question.label
+                      }}</label>
                       <input
                         :id="questionDomId(question, 'input')"
                         class="form-control"
@@ -703,12 +868,23 @@ async function confirmSubmit(): Promise<void> {
                       />
                     </div>
 
-                    <div v-else-if="question.responseType === 'information'" class="alert alert-info rounded-4 mb-3">
+                    <div
+                      v-else-if="question.responseType === 'information'"
+                      class="alert alert-info rounded-4 mb-3"
+                    >
                       Information affichée, aucune réponse attendue.
                     </div>
 
-                    <div v-else-if="question.responseType === 'free_text' || question.responseType === 'free_text_long' || question.responseType === 'free_text_short'">
-                      <label class="visually-hidden" :for="questionDomId(question, 'textarea')">{{ question.label }}</label>
+                    <div
+                      v-else-if="
+                        question.responseType === 'free_text' ||
+                        question.responseType === 'free_text_long' ||
+                        question.responseType === 'free_text_short'
+                      "
+                    >
+                      <label class="visually-hidden" :for="questionDomId(question, 'textarea')">{{
+                        question.label
+                      }}</label>
                       <textarea
                         :id="questionDomId(question, 'textarea')"
                         class="form-control mb-2"
@@ -716,7 +892,9 @@ async function confirmSubmit(): Promise<void> {
                         rows="4"
                         :disabled="respondent.isLocked"
                         :value="String(questionValue(question) ?? '')"
-                        @input="queueTextAutosave(question, ($event.target as HTMLTextAreaElement).value)"
+                        @input="
+                          queueTextAutosave(question, ($event.target as HTMLTextAreaElement).value)
+                        "
                         @blur="flushQuestionAutosave(question)"
                       ></textarea>
                       <p :id="questionDomId(question, 'free-text-help')" class="small muted mb-3">
@@ -725,8 +903,12 @@ async function confirmSubmit(): Promise<void> {
                     </div>
                   </div>
 
-                  <div v-if="unansweredRequiredQuestions.length" class="alert alert-warning rounded-4">
-                    {{ unansweredRequiredQuestions.length }} question(s) obligatoire(s) doivent encore recevoir une réponse avant soumission finale.
+                  <div
+                    v-if="unansweredRequiredQuestions.length"
+                    class="alert alert-warning rounded-4"
+                  >
+                    {{ unansweredRequiredQuestions.length }} question(s) obligatoire(s) doivent
+                    encore recevoir une réponse avant soumission finale.
                   </div>
 
                   <div v-if="missingConsent" class="alert alert-warning rounded-4">
@@ -734,7 +916,8 @@ async function confirmSubmit(): Promise<void> {
                   </div>
 
                   <div v-if="respondent.warnings.length" class="alert alert-warning rounded-4">
-                    Une réponse libre semble contenir une donnée directement identifiante. Elle est sauvegardée mais signalée pour information.
+                    Une réponse libre semble contenir une donnée directement identifiante. Elle est
+                    sauvegardée mais signalée pour information.
                   </div>
 
                   <div v-if="submitError" class="alert alert-danger rounded-4" role="alert">
@@ -742,10 +925,20 @@ async function confirmSubmit(): Promise<void> {
                   </div>
 
                   <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
-                    <button class="btn btn-outline-primary" type="button" :disabled="isFirstPage" @click="previousPage">
+                    <button
+                      class="btn btn-outline-primary"
+                      type="button"
+                      :disabled="isFirstPage"
+                      @click="previousPage"
+                    >
                       {{ t('respondent.actions.previous') }}
                     </button>
-                    <button v-if="!isLastPage" class="btn btn-primary" type="button" @click="nextPage">
+                    <button
+                      v-if="!isLastPage"
+                      class="btn btn-primary"
+                      type="button"
+                      @click="nextPage"
+                    >
                       {{ t('respondent.actions.next') }}
                     </button>
                     <button
@@ -759,16 +952,38 @@ async function confirmSubmit(): Promise<void> {
                     </button>
                   </div>
 
-                  <div v-if="showSubmitConfirmation" class="question-help mt-4" role="alertdialog" aria-modal="true" aria-labelledby="submit-confirm-title">
-                    <h2 id="submit-confirm-title" class="h5 fw-bold">{{ t('respondent.submit.title') }}</h2>
+                  <div
+                    v-if="showSubmitConfirmation"
+                    class="question-help mt-4"
+                    role="alertdialog"
+                    aria-modal="true"
+                    aria-labelledby="submit-confirm-title"
+                  >
+                    <h2 id="submit-confirm-title" class="h5 fw-bold">
+                      {{ t('respondent.submit.title') }}
+                    </h2>
                     <p class="muted">
                       {{ t('respondent.submit.body') }}
                     </p>
                     <div class="d-flex flex-wrap gap-2">
-                      <button class="btn btn-primary" type="button" :disabled="isSubmitting" @click="confirmSubmit">
-                        {{ isSubmitting ? t('respondent.submit.loading') : t('respondent.submit.confirm') }}
+                      <button
+                        class="btn btn-primary"
+                        type="button"
+                        :disabled="isSubmitting"
+                        @click="confirmSubmit"
+                      >
+                        {{
+                          isSubmitting
+                            ? t('respondent.submit.loading')
+                            : t('respondent.submit.confirm')
+                        }}
                       </button>
-                      <button class="btn btn-outline-primary" type="button" :disabled="isSubmitting" @click="showSubmitConfirmation = false">
+                      <button
+                        class="btn btn-outline-primary"
+                        type="button"
+                        :disabled="isSubmitting"
+                        @click="showSubmitConfirmation = false"
+                      >
                         {{ t('respondent.submit.back') }}
                       </button>
                     </div>
@@ -791,7 +1006,12 @@ async function confirmSubmit(): Promise<void> {
                     </div>
                   </div>
                   <p class="small muted mb-0 mt-3">
-                    Bâtiment : {{ respondent.session.invitation.building.label }}. <template v-if="isOnsiteTerminal">Terminal : {{ respondent.session.invitation.terminalDevice?.label }}. </template>Expiration : {{ new Date(respondent.session.invitation.expiresAt).toLocaleDateString() }}.
+                    Bâtiment : {{ respondent.session.invitation.building.label }}.
+                    <template v-if="isOnsiteTerminal"
+                      >Terminal :
+                      {{ respondent.session.invitation.terminalDevice?.label }}. </template
+                    >Expiration :
+                    {{ new Date(respondent.session.invitation.expiresAt).toLocaleDateString() }}.
                   </p>
                 </div>
 
@@ -799,7 +1019,12 @@ async function confirmSubmit(): Promise<void> {
                   <p class="section-eyebrow mb-2">Confidentialité</p>
                   <h2 class="h5 fw-bold">Pseudonymisation</h2>
                   <p class="muted mb-0">
-                    Les réponses sont rattachées au code public. {{ isOnsiteTerminal ? 'Cette passation terminal ne collecte pas d’adresse email.' : 'La correspondance email-code est isolée et inaccessible depuis cette interface.' }}
+                    Les réponses sont rattachées au code public.
+                    {{
+                      isOnsiteTerminal
+                        ? 'Cette passation terminal ne collecte pas d’adresse email.'
+                        : 'La correspondance email-code est isolée et inaccessible depuis cette interface.'
+                    }}
                   </p>
                 </div>
               </div>

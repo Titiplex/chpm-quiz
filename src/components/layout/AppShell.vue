@@ -25,10 +25,9 @@ const staticPagesNavigation = computed(() => [
             :to="appConfig.staticPagesDemo ? '/moderation' : '/'"
           >
             <span class="brand-dot">CH</span>
-            <span>
-              <strong style="font-size:0.95rem; letter-spacing:-0.01em;">{{ appConfig.appName }}</strong>
-              <small>{{ appConfig.staticPagesDemo ? t('app.mode.static') : t('app.mode.connected') }}</small>
-            </span>
+            <strong style="font-size: 0.95rem; letter-spacing: -0.01em">{{
+              appConfig.appName
+            }}</strong>
           </RouterLink>
 
           <div class="topbar-actions ms-xl-auto">
@@ -52,7 +51,6 @@ const staticPagesNavigation = computed(() => [
                 </RouterLink>
               </li>
             </ul>
-            <span v-if="appConfig.staticPagesDemo" class="badge-soft success">{{ t('app.githubPages') }}</span>
             <LanguageSwitcher />
             <UserMenu v-if="!appConfig.staticPagesDemo" />
           </div>
