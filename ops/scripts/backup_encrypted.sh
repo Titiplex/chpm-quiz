@@ -11,11 +11,14 @@ workdir="$(mktemp -d)"
 mkdir -p "$output_dir"
 trap 'rm -rf "$workdir"' EXIT
 
-pg_dump --format=custom --no-owner --file="$workdir/operational.dump" "$OPERATIONAL_DATABASE_URL"
-pg_dump --format=custom --no-owner --file="$workdir/identity.dump" "$IDENTITY_DATABASE_URL"
+operational_url="${OPERATIONAL_DATABASE_URL%%\?*}"
+identity_url="${IDENTITY_DATABASE_URL%%\?*}"
+
+pg_dump --format=custom --no-owner --schema=public --file="$workdir/operational.dump" "$operational_url"
+pg_dump --format=custom --no-owner --schema=identity --file="$workdir/identity.dump" "$identity_url"
 
 cat > "$workdir/manifest.json" <<MANIFEST
-{"createdAt":"$timestamp","format":"pg_dump custom","schemas":["public","identity"],"separationPreserved":true}
+{"createdAt":"$timestamp","format":"pg_dump custom","schemas":["public","identity"],"separationPreserved":true,"encryption":"aes-256-cbc-pbkdf2-600000"}
 MANIFEST
 
 tar -C "$workdir" -cf "$workdir/chpm-backup-$timestamp.tar" manifest.json operational.dump identity.dump
