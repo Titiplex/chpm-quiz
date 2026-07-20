@@ -2,7 +2,7 @@
   "name": "quiz-backend",
   "version": "0.2.0",
   "private": true,
-  "description": "API centrale NestJS pour Quiz.",
+  "description": "NestJS API for the CHPM Survey platform.",
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
