@@ -17,6 +17,12 @@ const request = { ip: '127.0.0.1', get: vi.fn(() => 'Vitest') } as any
 
 function makeService(overrides: Record<string, unknown> = {}) {
   const tx = {
+    site: {
+      create: vi.fn(async (args: any) => ({ id: 'site-created', ...args.data, organization: site.organization })),
+    },
+    building: {
+      create: vi.fn(async (args: any) => ({ id: 'building-created', ...args.data, site })),
+    },
     user: {
       create: vi.fn(async (args: any) => args.data.role === 'site_manager'
         ? ({ ...siteAdmin, ...args.data, id: 'created-site-admin', site, building: null })
@@ -50,6 +56,46 @@ describe('UsersService', () => {
 
     expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ siteId: 'site-1' }) }))
     expect(result[0]).toMatchObject({ id: 'mod-1', role: 'moderator', email: 'mod@example.test' })
+  })
+
+  it('creates a site only in the project administrator organization', async () => {
+    const { service, prisma, tx } = makeService({
+      site: { findUnique: vi.fn(async () => null), findMany: vi.fn(async () => [site]) },
+    })
+
+    const result = await service.createManagedSite(adminUser, {
+      code: ' new_site ',
+      name: ' New site ',
+      country: 'Canada',
+      timezone: 'America/Toronto',
+    }, request)
+
+    expect(tx.site.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ organizationId: 'org-1', code: 'NEW_SITE', name: 'New site' }),
+    }))
+    expect(tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'site.create' }) }))
+    expect(result).toMatchObject({ id: 'site-created', organizationId: 'org-1', code: 'NEW_SITE' })
+    expect(prisma.$transaction).toHaveBeenCalled()
+  })
+
+  it('creates a building only in the site manager assigned site', async () => {
+    const { service, tx } = makeService({
+      building: { findUnique: vi.fn(async () => null) },
+    })
+
+    const result = await service.createManagedBuilding(siteUser, {
+      code: ' north ',
+      label: ' North wing ',
+      city: 'Avignon',
+      country: 'France',
+      timezone: 'Europe/Paris',
+    }, request)
+
+    expect(tx.building.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ organizationId: 'org-1', siteId: 'site-1', code: 'NORTH' }),
+    }))
+    expect(tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'building.create' }) }))
+    expect(result).toMatchObject({ id: 'building-created', organizationId: 'org-1', siteId: 'site-1' })
   })
 
   it('creates or reactivates a moderator scoped to a managed building', async () => {

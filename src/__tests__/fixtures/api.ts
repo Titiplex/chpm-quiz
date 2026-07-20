@@ -236,6 +236,7 @@ export const statsFixture: StatsResponse['stats'] = {
     backtracks: 1,
     resumes: 2,
     medianTotalDurationMs: 120_000,
+    effectifSufficient: true,
   },
   fieldTracking: {
     approached: 12,
@@ -248,6 +249,8 @@ export const statsFixture: StatsResponse['stats'] = {
     paperForms: 1,
     digitalContact: 7,
     pendingWithoutDigitalContact: 1,
+    effectifSufficient: true,
+    displayValue: '12 approchée(s)',
   },
   versions: [],
   deliveryModes: [],

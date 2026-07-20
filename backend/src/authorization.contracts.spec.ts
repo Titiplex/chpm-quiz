@@ -113,7 +113,7 @@ describe('RBAC authorization contracts', () => {
   }
   const auditService = {
     log: vi.fn(async () => undefined),
-    list: vi.fn(async () => []),
+    listForUser: vi.fn(async () => []),
   }
   const judicialService = {
     list: vi.fn(async () => []),
@@ -121,7 +121,7 @@ describe('RBAC authorization contracts', () => {
     validateDpo: vi.fn(async () => ({ id: 'judicial-1' })),
     validateLegal: vi.fn(async () => ({ id: 'judicial-1' })),
     reject: vi.fn(async () => ({ id: 'judicial-1' })),
-    execute: vi.fn(async () => { throw new ForbiddenException('Export code-email refusé via API principale : utiliser la console DPO dédiée et auditée.') }),
+    execute: vi.fn(async () => ({ judicialRequest: { id: 'judicial-1', status: 'executed' }, export: { envelope: 'encrypted' } })),
     close: vi.fn(async () => ({ id: 'judicial-1' })),
   }
   const identityVaultService = {
@@ -208,8 +208,8 @@ describe('RBAC authorization contracts', () => {
     await postAs('dpo', '/api/identity-vault/access-attempt').send({ publicCode: 'ABCD-1234', justification: 'Tentative DPO via API métier.' }).expect(403)
   })
 
-  it('prevents identity export execution through the main API', async () => {
-    await postAs('dpo', '/api/judicial-access/requests/judicial-1/execute').expect(403)
+  it('allows encrypted execution only to the DPO role', async () => {
+    await postAs('dpo', '/api/judicial-access/requests/judicial-1/execute').expect(201)
     await postAs('judicial_officer', '/api/judicial-access/requests/judicial-1/execute').expect(403)
   })
 

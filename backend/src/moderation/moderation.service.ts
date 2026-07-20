@@ -130,7 +130,12 @@ export class ModerationService {
 
     assertCanAccessVersion(user, questionnaireVersion)
 
-    if (questionnaireVersion.openUntil && questionnaireVersion.openUntil < new Date()) {
+    const now = new Date()
+    if (questionnaireVersion.openFrom && questionnaireVersion.openFrom > now) {
+      throw new BadRequestException('La période d’ouverture du questionnaire n’a pas commencé')
+    }
+
+    if (questionnaireVersion.openUntil && questionnaireVersion.openUntil < now) {
       throw new BadRequestException('La période d’ouverture du questionnaire est terminée')
     }
 
@@ -146,7 +151,13 @@ export class ModerationService {
     const assistanceMode = dto.assistanceMode ?? 'none'
     const publicCode = await this.generateUniquePublicCode()
     const { token, tokenHash } = this.accessTokenService.create(publicCode)
-    const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : this.defaultExpiry(deliveryMode)
+    let expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : this.defaultExpiry(deliveryMode)
+    if (questionnaireVersion.openUntil && expiresAt > questionnaireVersion.openUntil) {
+      if (dto.expiresAt) {
+        throw new BadRequestException('La date d’expiration de l’invitation dépasse la fermeture du questionnaire')
+      }
+      expiresAt = questionnaireVersion.openUntil
+    }
 
     if (deliveryMode === 'onsite_terminal') {
       if (!dto.terminalDeviceId) {
@@ -332,7 +343,7 @@ export class ModerationService {
           request,
         })
 
-        const smsJobId = this.smsQueue.enqueue(this.buildInvitationSms({
+        const smsJobId = await this.smsQueue.enqueue(this.buildInvitationSms({
           invitation,
           recipientPhone: dto.phone!,
           token,
@@ -359,7 +370,7 @@ export class ModerationService {
           request,
         })
 
-        const emailJobId = this.mailQueue.enqueue(this.buildInvitationMail({
+        const emailJobId = await this.mailQueue.enqueue(this.buildInvitationMail({
           invitation,
           recipientEmail: dto.email!,
           token,
@@ -635,7 +646,7 @@ export class ModerationService {
         if (!identity) {
           throw new BadRequestException('Relance impossible : identité téléphone introuvable ou supprimée')
         }
-        deliveryJobId = this.smsQueue.enqueue(this.buildInvitationSms({
+        deliveryJobId = await this.smsQueue.enqueue(this.buildInvitationSms({
           invitation: updated,
           recipientPhone: identity.phone,
           token: refreshedToken.token,
@@ -646,7 +657,7 @@ export class ModerationService {
         if (!identity) {
           throw new BadRequestException('Relance impossible : identité email introuvable ou supprimée')
         }
-        deliveryJobId = this.mailQueue.enqueue(this.buildInvitationMail({
+        deliveryJobId = await this.mailQueue.enqueue(this.buildInvitationMail({
           invitation: updated,
           recipientEmail: identity.email,
           token: refreshedToken.token,
@@ -838,7 +849,7 @@ export class ModerationService {
         if (invitation.deliveryMode === 'sms' || invitation.deliveryMode === 'sms_simulation') {
           const identity = await this.identityVaultService.loadOutboundPhoneForInvitation(invitation.id)
           if (identity) {
-            this.smsQueue.enqueue(this.buildInvitationSms({
+            await this.smsQueue.enqueue(this.buildInvitationSms({
               invitation: { ...invitation, status: 'expired' },
               recipientPhone: identity.phone,
               token: null,
@@ -848,7 +859,7 @@ export class ModerationService {
         } else {
           const identity = await this.identityVaultService.loadOutboundEmailForInvitation(invitation.id)
           if (identity) {
-            this.mailQueue.enqueue(this.buildInvitationMail({
+            await this.mailQueue.enqueue(this.buildInvitationMail({
               invitation: { ...invitation, status: 'expired' },
               recipientEmail: identity.email,
               token: null,

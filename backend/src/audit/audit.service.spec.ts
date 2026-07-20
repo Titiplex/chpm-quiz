@@ -43,18 +43,18 @@ describe('AuditService', () => {
     })
   })
 
-  it('returns the complete list by default and honors an explicit positive limit', async () => {
+  it('scopes logs by organization and caps result size', async () => {
     const { service, prisma } = makeService()
 
-    await service.list()
-    const completeQuery = (prisma.auditLog.findMany as any).mock.calls[0][0]
-    expect(completeQuery).not.toHaveProperty('take')
+    await service.listForUser({ organizationId: 'org-1' } as any)
+    expect(prisma.auditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { organizationId: 'org-1' },
+      take: 100,
+    }))
 
-    await service.list(999)
-    expect(prisma.auditLog.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ take: 999 }))
+    await service.listForUser({ organizationId: 'org-1' } as any, 999)
+    expect(prisma.auditLog.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ take: 200 }))
 
-    await service.list(-5)
-    const invalidLimitQuery = (prisma.auditLog.findMany as any).mock.calls.at(-1)[0]
-    expect(invalidLimitQuery).not.toHaveProperty('take')
+    await expect(service.listForUser({ organizationId: null } as any)).resolves.toEqual([])
   })
 })

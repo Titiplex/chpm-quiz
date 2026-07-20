@@ -110,6 +110,7 @@ export class StatsService {
       .map((event: any) => event.durationMs)
       .filter((duration: unknown): duration is number => typeof duration === 'number')
     const abandoned = Math.max(totalStarted - totalSubmitted, 0)
+    const effectifSufficient = totalSubmitted >= this.threshold()
 
     return {
       questionnaire: {
@@ -119,23 +120,24 @@ export class StatsService {
       },
       threshold: this.threshold(),
       totals: {
-        invited: totalInvited,
-        opened: totalOpened,
-        started: totalStarted,
-        submitted: totalSubmitted,
-        abandoned,
-        expired: totalExpired,
-        openingRate: this.percent(totalOpened, totalInvited),
-        startRate: this.percent(totalStarted, totalInvited),
-        submissionRate: this.percent(totalSubmitted, totalInvited),
-        completionRate: this.percent(totalSubmitted, totalInvited),
-        abandonmentRate: this.percent(abandoned, totalStarted),
-        telemetryEvents: telemetryEvents.length,
-        popupOpens: telemetryEvents.filter((event: any) => event.eventType === 'popup_open').length,
-        answerChanges: telemetryEvents.filter((event: any) => event.eventType === 'answer_change').length,
-        backtracks: telemetryEvents.filter((event: any) => event.eventType === 'backward_navigation').length,
-        resumes: telemetryEvents.filter((event: any) => event.eventType === 'questionnaire_resume').length,
-        medianTotalDurationMs: this.median(totalDurations),
+        invited: effectifSufficient ? totalInvited : null,
+        opened: effectifSufficient ? totalOpened : null,
+        started: effectifSufficient ? totalStarted : null,
+        submitted: effectifSufficient ? totalSubmitted : null,
+        abandoned: effectifSufficient ? abandoned : null,
+        expired: effectifSufficient ? totalExpired : null,
+        openingRate: effectifSufficient ? this.percent(totalOpened, totalInvited) : null,
+        startRate: effectifSufficient ? this.percent(totalStarted, totalInvited) : null,
+        submissionRate: effectifSufficient ? this.percent(totalSubmitted, totalInvited) : null,
+        completionRate: effectifSufficient ? this.percent(totalSubmitted, totalInvited) : null,
+        abandonmentRate: effectifSufficient ? this.percent(abandoned, totalStarted) : null,
+        telemetryEvents: effectifSufficient ? telemetryEvents.length : null,
+        popupOpens: effectifSufficient ? telemetryEvents.filter((event: any) => event.eventType === 'popup_open').length : null,
+        answerChanges: effectifSufficient ? telemetryEvents.filter((event: any) => event.eventType === 'answer_change').length : null,
+        backtracks: effectifSufficient ? telemetryEvents.filter((event: any) => event.eventType === 'backward_navigation').length : null,
+        resumes: effectifSufficient ? telemetryEvents.filter((event: any) => event.eventType === 'questionnaire_resume').length : null,
+        medianTotalDurationMs: effectifSufficient ? this.median(totalDurations) : null,
+        effectifSufficient,
       },
       fieldTracking: this.fieldTrackingBreakdown(scopedInvitations),
       versions: scopedVersions.map((version: any) => this.versionStats(version)),
@@ -261,22 +263,24 @@ export class StatsService {
     const started = invitations.filter((invitation: any) => this.isStarted(invitation)).length
     const submitted = version.submissions.length
     const abandoned = Math.max(started - submitted, 0)
+    const effectifSufficient = submitted >= this.threshold()
 
     return {
       id: version.id,
       versionLabel: version.versionLabel,
       status: version.status,
-      invited,
-      opened,
-      started,
-      submitted,
-      abandoned,
-      openingRate: this.percent(opened, invited),
-      startRate: this.percent(started, invited),
-      submissionRate: this.percent(submitted, invited),
-      completionRate: this.percent(submitted, invited),
-      abandonmentRate: this.percent(abandoned, started),
-      effectifSufficient: submitted >= this.threshold(),
+      invited: effectifSufficient ? invited : null,
+      opened: effectifSufficient ? opened : null,
+      started: effectifSufficient ? started : null,
+      submitted: effectifSufficient ? submitted : null,
+      abandoned: effectifSufficient ? abandoned : null,
+      openingRate: effectifSufficient ? this.percent(opened, invited) : null,
+      startRate: effectifSufficient ? this.percent(started, invited) : null,
+      submissionRate: effectifSufficient ? this.percent(submitted, invited) : null,
+      completionRate: effectifSufficient ? this.percent(submitted, invited) : null,
+      abandonmentRate: effectifSufficient ? this.percent(abandoned, started) : null,
+      effectifSufficient,
+      displayValue: effectifSufficient ? `${submitted} soumis` : 'effectif insuffisant',
     }
   }
 
@@ -332,17 +336,22 @@ export class StatsService {
       bySite.set(siteId, row)
     }
 
-    return Array.from(bySite.entries()).map(([siteId, row]) => ({
-      siteId,
-      label: row.label,
-      invited: row.invited,
-      opened: row.opened,
-      started: row.started,
-      submitted: row.submitted,
-      openingRate: this.percent(row.opened, row.invited),
-      startRate: this.percent(row.started, row.invited),
-      submissionRate: this.percent(row.submitted, row.invited),
-    }))
+    return Array.from(bySite.entries()).map(([siteId, row]) => {
+      const effectifSufficient = row.submitted >= this.threshold()
+      return {
+        siteId,
+        label: row.label,
+        invited: effectifSufficient ? row.invited : null,
+        opened: effectifSufficient ? row.opened : null,
+        started: effectifSufficient ? row.started : null,
+        submitted: effectifSufficient ? row.submitted : null,
+        openingRate: effectifSufficient ? this.percent(row.opened, row.invited) : null,
+        startRate: effectifSufficient ? this.percent(row.started, row.invited) : null,
+        submissionRate: effectifSufficient ? this.percent(row.submitted, row.invited) : null,
+        effectifSufficient,
+        displayValue: effectifSufficient ? `${row.submitted} soumis` : 'effectif insuffisant',
+      }
+    })
   }
 
   private languageBreakdown(versions: any[]) {
@@ -357,13 +366,18 @@ export class StatsService {
       byLanguage.set(language, row)
     }
 
-    return Array.from(byLanguage.entries()).map(([language, row]) => ({
-      language,
-      versionCount: row.versionCount,
-      invited: row.invited,
-      submitted: row.submitted,
-      submissionRate: this.percent(row.submitted, row.invited),
-    }))
+    return Array.from(byLanguage.entries()).map(([language, row]) => {
+      const effectifSufficient = row.submitted >= this.threshold()
+      return {
+        language,
+        versionCount: row.versionCount,
+        invited: effectifSufficient ? row.invited : null,
+        submitted: effectifSufficient ? row.submitted : null,
+        submissionRate: effectifSufficient ? this.percent(row.submitted, row.invited) : null,
+        effectifSufficient,
+        displayValue: effectifSufficient ? `${row.submitted} soumis` : 'effectif insuffisant',
+      }
+    })
   }
 
   private popupBreakdown(versions: any[], visibleSessionIds?: Set<string>) {
@@ -416,17 +430,22 @@ export class StatsService {
       byMode.set(mode, row)
     }
 
-    return Array.from(byMode.entries()).map(([mode, row]) => ({
-      mode,
-      label: labels[mode] ?? mode,
-      invited: row.invited,
-      opened: row.opened,
-      started: row.started,
-      submitted: row.submitted,
-      openingRate: this.percent(row.opened, row.invited),
-      startRate: this.percent(row.started, row.invited),
-      submissionRate: this.percent(row.submitted, row.invited),
-    }))
+    return Array.from(byMode.entries()).map(([mode, row]) => {
+      const effectifSufficient = row.submitted >= this.threshold()
+      return {
+        mode,
+        label: labels[mode] ?? mode,
+        invited: effectifSufficient ? row.invited : null,
+        opened: effectifSufficient ? row.opened : null,
+        started: effectifSufficient ? row.started : null,
+        submitted: effectifSufficient ? row.submitted : null,
+        openingRate: effectifSufficient ? this.percent(row.opened, row.invited) : null,
+        startRate: effectifSufficient ? this.percent(row.started, row.invited) : null,
+        submissionRate: effectifSufficient ? this.percent(row.submitted, row.invited) : null,
+        effectifSufficient,
+        displayValue: effectifSufficient ? `${row.submitted} soumis` : 'effectif insuffisant',
+      }
+    })
   }
 
   private fieldTrackingBreakdown(invitations: any[]) {
@@ -439,18 +458,21 @@ export class StatsService {
     const paperForms = noDigitalContactInvitations.filter((invitation: any) => invitation.deliveryMode === 'paper_form').length
     const digitalContact = invitations.filter((invitation: any) => this.isDigitalContactMode(invitation)).length
     const pendingWithoutDigitalContact = noDigitalContactInvitations.filter((invitation: any) => invitation.status !== 'submitted').length
+    const effectifSufficient = approached >= this.threshold()
 
     return {
-      approached,
-      invited,
-      refused,
-      refusalRate: this.percent(refused, approached),
-      noDigitalContact,
-      noDigitalContactRate: this.percent(noDigitalContact, invited),
-      onsiteTerminal,
-      paperForms,
-      digitalContact,
-      pendingWithoutDigitalContact,
+      approached: effectifSufficient ? approached : null,
+      invited: effectifSufficient ? invited : null,
+      refused: effectifSufficient ? refused : null,
+      refusalRate: effectifSufficient ? this.percent(refused, approached) : null,
+      noDigitalContact: effectifSufficient ? noDigitalContact : null,
+      noDigitalContactRate: effectifSufficient ? this.percent(noDigitalContact, invited) : null,
+      onsiteTerminal: effectifSufficient ? onsiteTerminal : null,
+      paperForms: effectifSufficient ? paperForms : null,
+      digitalContact: effectifSufficient ? digitalContact : null,
+      pendingWithoutDigitalContact: effectifSufficient ? pendingWithoutDigitalContact : null,
+      effectifSufficient,
+      displayValue: effectifSufficient ? `${approached} approchée(s)` : 'effectif insuffisant',
     }
   }
 

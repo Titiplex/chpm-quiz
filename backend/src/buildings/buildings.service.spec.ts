@@ -25,13 +25,20 @@ describe('BuildingsService', () => {
     expect(prisma.building.findMany).not.toHaveBeenCalled()
   })
 
-  it('scopes site managers by site and admins globally', async () => {
+  it('scopes site managers by site and organization-wide roles by organization', async () => {
     const { service, prisma } = makeService()
 
-    await service.listForUser({ role: 'site_manager', siteId: 'site-1' } as any)
-    expect(prisma.building.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { siteId: 'site-1' } }))
+    await service.listForUser({ role: 'site_manager', siteId: 'site-1', organizationId: 'org-1' } as any)
+    expect(prisma.building.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { siteId: 'site-1', organizationId: 'org-1' } }))
 
-    await service.listForUser({ role: 'admin' } as any)
-    expect(prisma.building.findMany).toHaveBeenLastCalledWith(expect.not.objectContaining({ where: expect.anything() }))
+    await service.listForUser({ role: 'admin', organizationId: 'org-1' } as any)
+    expect(prisma.building.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ where: { organizationId: 'org-1' } }))
+  })
+
+  it('returns no buildings to an unscoped organization-wide account', async () => {
+    const { service, prisma } = makeService()
+
+    await expect(service.listForUser({ role: 'admin', organizationId: null } as any)).resolves.toEqual([])
+    expect(prisma.building.findMany).not.toHaveBeenCalled()
   })
 })

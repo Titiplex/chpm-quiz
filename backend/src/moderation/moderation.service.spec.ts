@@ -16,7 +16,7 @@ const siteUser = { id: 'site-user', role: 'site_manager', organizationId: 'org-1
 const request = { ip: '127.0.0.1', get: vi.fn(() => 'Vitest') } as any
 
 const building = { id: 'building-1', siteId: 'site-1', organizationId: 'org-1', label: 'Bâtiment 1', code: 'B1' }
-const version = { id: 'version-1', status: 'published', openUntil: null, questionnaire: { id: 'q1', title: 'ITQ', organizationId: 'org-1' } }
+const version = { id: 'version-1', status: 'published', openFrom: null, openUntil: null, questionnaire: { id: 'q1', title: 'ITQ', organizationId: 'org-1' } }
 const terminal = { id: 'terminal-1', code: 'TERM-0001', label: 'Tablette', status: 'active', buildingId: 'building-1', building, invitations: [] }
 
 function invitation(data: Record<string, unknown> = {}) {
@@ -182,6 +182,44 @@ describe('ModerationService', () => {
 
     expect(result.accessToken).toBeNull()
     expect(result.devAccessLink).toBeNull()
+  })
+
+  it('enforces the questionnaire collection window and invitation expiry', async () => {
+    const futureOpen = { ...version, openFrom: new Date(Date.now() + 60_000) }
+    await expect(makeService({ questionnaireVersion: { findUnique: vi.fn(async () => futureOpen) } }).service.create(adminUser, {
+      questionnaireVersionId: version.id,
+      buildingId: building.id,
+      email: 'patient@example.test',
+      deliveryMode: 'email',
+    } as any, request)).rejects.toBeInstanceOf(BadRequestException)
+
+    const closed = { ...version, openUntil: new Date(Date.now() - 60_000) }
+    await expect(makeService({ questionnaireVersion: { findUnique: vi.fn(async () => closed) } }).service.create(adminUser, {
+      questionnaireVersionId: version.id,
+      buildingId: building.id,
+      email: 'patient@example.test',
+      deliveryMode: 'email',
+    } as any, request)).rejects.toBeInstanceOf(BadRequestException)
+
+    const closingSoon = { ...version, openUntil: new Date(Date.now() + 60_000) }
+    await expect(makeService({ questionnaireVersion: { findUnique: vi.fn(async () => closingSoon) } }).service.create(adminUser, {
+      questionnaireVersionId: version.id,
+      buildingId: building.id,
+      email: 'patient@example.test',
+      deliveryMode: 'email',
+      expiresAt: new Date(Date.now() + 120_000).toISOString(),
+    } as any, request)).rejects.toBeInstanceOf(BadRequestException)
+
+    const { service, prisma } = makeService({ questionnaireVersion: { findUnique: vi.fn(async () => closingSoon) } })
+    await service.create(adminUser, {
+      questionnaireVersionId: version.id,
+      buildingId: building.id,
+      email: 'patient@example.test',
+      deliveryMode: 'email',
+    } as any, request)
+    expect(prisma.invitation.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ expiresAt: closingSoon.openUntil }),
+    }))
   })
 
   it('creates onsite terminal invitations without email identity or direct token exposure', async () => {

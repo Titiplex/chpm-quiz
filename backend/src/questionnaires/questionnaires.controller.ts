@@ -8,6 +8,7 @@ import { Roles } from '../common/decorators/roles.decorator'
 import { RolesGuard } from '../common/guards/roles.guard'
 import { SessionAuthGuard } from '../common/guards/session-auth.guard'
 import { CreateQuestionnaireDto } from './dto/create-questionnaire.dto'
+import { CreateTranslationDto } from './dto/create-translation.dto'
 import {
   CreateQuestionDto,
   CreateQuestionGroupDto,
@@ -61,6 +62,26 @@ export class QuestionnairesController {
       entityId: questionnaire.id,
       request,
       metadata: { code: questionnaire.code, versionId: questionnaire.versionId },
+    })
+    return { questionnaire }
+  }
+
+  @Post(':id/translations')
+  @Roles('admin', 'questionnaire_admin')
+  async createTranslation(
+    @Param('id') id: string,
+    @Body() dto: CreateTranslationDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: Request,
+  ) {
+    const questionnaire = await this.questionnairesService.createTranslationDraft(id, dto, user)
+    await this.auditService.log({
+      actor: user,
+      action: 'questionnaire.translation.create',
+      entityType: 'Questionnaire',
+      entityId: questionnaire.id,
+      request,
+      metadata: { sourceQuestionnaireId: id, language: dto.language, versionId: questionnaire.versionId },
     })
     return { questionnaire }
   }

@@ -62,6 +62,14 @@ function formatDuration(durationMs?: number | null): string {
   return remainder ? `${minutes} min ${remainder} s` : `${minutes} min`
 }
 
+function formatCount(value?: number | null): string {
+  return value === null || value === undefined ? '—' : String(value)
+}
+
+function formatPercent(value?: number | null): string {
+  return value === null || value === undefined ? '—' : `${value} %`
+}
+
 function formatDate(value?: string | Date | null): string {
   if (!value) return '—'
   return new Intl.DateTimeFormat('fr-FR', {
@@ -148,21 +156,21 @@ function closeSubmissionDetail(): void {
               <div class="col-md-3">
                 <KpiCard
                   label="Invitations"
-                  :value="String(statsStore.stats.totals.invited)"
+                  :value="formatCount(statsStore.stats.totals.invited)"
                   icon="📨"
                 />
               </div>
               <div class="col-md-3">
                 <KpiCard
                   label="Taux d'ouverture"
-                  :value="`${statsStore.stats.totals.openingRate} %`"
+                  :value="formatPercent(statsStore.stats.totals.openingRate)"
                   icon="📬"
                 />
               </div>
               <div class="col-md-3">
                 <KpiCard
                   label="Taux de soumission"
-                  :value="`${statsStore.stats.totals.submissionRate} %`"
+                  :value="formatPercent(statsStore.stats.totals.submissionRate)"
                   tone="success"
                   icon="✅"
                 />
@@ -170,13 +178,13 @@ function closeSubmissionDetail(): void {
               <div class="col-md-3">
                 <KpiCard
                   label="Taux d'abandon"
-                  :value="`${statsStore.stats.totals.abandonmentRate} %`"
+                  :value="formatPercent(statsStore.stats.totals.abandonmentRate)"
                   tone="warning"
                   icon="⚠️"
                 />
               </div>
               <div class="col-md-3">
-                <KpiCard label="Démarrage" :value="`${statsStore.stats.totals.startRate} %`" />
+                <KpiCard label="Démarrage" :value="formatPercent(statsStore.stats.totals.startRate)" />
               </div>
               <div class="col-md-3">
                 <KpiCard
@@ -188,13 +196,13 @@ function closeSubmissionDetail(): void {
               <div class="col-md-3">
                 <KpiCard
                   label="Popups ouvertes"
-                  :value="String(statsStore.stats.totals.popupOpens)"
+                  :value="formatCount(statsStore.stats.totals.popupOpens)"
                   tone="warning"
                   icon="💬"
                 />
               </div>
               <div class="col-md-3">
-                <KpiCard label="Reprises" :value="String(statsStore.stats.totals.resumes)" />
+                <KpiCard label="Reprises" :value="formatCount(statsStore.stats.totals.resumes)" />
               </div>
             </div>
 
@@ -215,27 +223,27 @@ function closeSubmissionDetail(): void {
                 <div class="col-md-3">
                   <KpiCard
                     label="Personnes approchées"
-                    :value="String(statsStore.stats.fieldTracking.approached)"
+                    :value="formatCount(statsStore.stats.fieldTracking.approached)"
                   />
                 </div>
                 <div class="col-md-3">
                   <KpiCard
                     label="Refus déclarés"
-                    :value="String(statsStore.stats.fieldTracking.refused)"
+                    :value="formatCount(statsStore.stats.fieldTracking.refused)"
                     tone="danger"
                   />
                 </div>
                 <div class="col-md-3">
                   <KpiCard
                     label="Taux de refus"
-                    :value="`${statsStore.stats.fieldTracking.refusalRate} %`"
+                    :value="formatPercent(statsStore.stats.fieldTracking.refusalRate)"
                     tone="warning"
                   />
                 </div>
                 <div class="col-md-3">
                   <KpiCard
                     label="Sans contact numérique"
-                    :value="String(statsStore.stats.fieldTracking.noDigitalContact)"
+                    :value="formatCount(statsStore.stats.fieldTracking.noDigitalContact)"
                     tone="warning"
                   />
                 </div>
@@ -244,25 +252,25 @@ function closeSubmissionDetail(): void {
                 <div class="col-md-3">
                   <KpiCard
                     label="Terminaux"
-                    :value="String(statsStore.stats.fieldTracking.onsiteTerminal)"
+                    :value="formatCount(statsStore.stats.fieldTracking.onsiteTerminal)"
                   />
                 </div>
                 <div class="col-md-3">
                   <KpiCard
                     label="Versions papier"
-                    :value="String(statsStore.stats.fieldTracking.paperForms)"
+                    :value="formatCount(statsStore.stats.fieldTracking.paperForms)"
                   />
                 </div>
                 <div class="col-md-3">
                   <KpiCard
                     label="Contacts numériques"
-                    :value="String(statsStore.stats.fieldTracking.digitalContact)"
+                    :value="formatCount(statsStore.stats.fieldTracking.digitalContact)"
                   />
                 </div>
                 <div class="col-md-3">
                   <KpiCard
                     label="Sans contact en attente"
-                    :value="String(statsStore.stats.fieldTracking.pendingWithoutDigitalContact)"
+                    :value="formatCount(statsStore.stats.fieldTracking.pendingWithoutDigitalContact)"
                     tone="warning"
                   />
                 </div>
@@ -289,13 +297,15 @@ function closeSubmissionDetail(): void {
                       <tbody>
                         <tr v-for="version in statsStore.stats.versions" :key="version.id">
                           <td class="fw-semibold">{{ version.versionLabel }}</td>
-                          <td>{{ version.invited }}</td>
-                          <td>{{ version.openingRate }} %</td>
-                          <td>{{ version.startRate }} %</td>
+                          <td>{{ formatCount(version.invited) }}</td>
+                          <td>{{ formatPercent(version.openingRate) }}</td>
+                          <td>{{ formatPercent(version.startRate) }}</td>
                           <td>
-                            <span class="badge-soft success">{{ version.submissionRate }} %</span>
+                            <span class="badge-soft" :class="version.effectifSufficient ? 'success' : 'warning'">
+                              {{ version.effectifSufficient ? formatPercent(version.submissionRate) : version.displayValue }}
+                            </span>
                           </td>
-                          <td>{{ version.abandonmentRate }} %</td>
+                          <td>{{ formatPercent(version.abandonmentRate) }}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -323,11 +333,13 @@ function closeSubmissionDetail(): void {
                       <tbody>
                         <tr v-for="mode in statsStore.stats.deliveryModes" :key="mode.mode">
                           <td class="fw-semibold">{{ mode.label }}</td>
-                          <td>{{ mode.invited }}</td>
-                          <td>{{ mode.openingRate }} %</td>
-                          <td>{{ mode.startRate }} %</td>
+                          <td>{{ formatCount(mode.invited) }}</td>
+                          <td>{{ formatPercent(mode.openingRate) }}</td>
+                          <td>{{ formatPercent(mode.startRate) }}</td>
                           <td>
-                            <span class="badge-soft success">{{ mode.submissionRate }} %</span>
+                            <span class="badge-soft" :class="mode.effectifSufficient ? 'success' : 'warning'">
+                              {{ mode.effectifSufficient ? formatPercent(mode.submissionRate) : mode.displayValue }}
+                            </span>
                           </td>
                         </tr>
                       </tbody>
@@ -354,11 +366,13 @@ function closeSubmissionDetail(): void {
                       <tbody>
                         <tr v-for="site in statsStore.stats.sites ?? []" :key="site.siteId">
                           <td class="fw-semibold">{{ site.label }}</td>
-                          <td>{{ site.invited }}</td>
-                          <td>{{ site.openingRate }} %</td>
-                          <td>{{ site.startRate }} %</td>
+                          <td>{{ formatCount(site.invited) }}</td>
+                          <td>{{ formatPercent(site.openingRate) }}</td>
+                          <td>{{ formatPercent(site.startRate) }}</td>
                           <td>
-                            <span class="badge-soft success">{{ site.submissionRate }} %</span>
+                            <span class="badge-soft" :class="site.effectifSufficient ? 'success' : 'warning'">
+                              {{ site.effectifSufficient ? formatPercent(site.submissionRate) : site.displayValue }}
+                            </span>
                           </td>
                         </tr>
                       </tbody>
@@ -389,10 +403,12 @@ function closeSubmissionDetail(): void {
                         >
                           <td class="fw-semibold text-uppercase">{{ language.language }}</td>
                           <td>{{ language.versionCount }}</td>
-                          <td>{{ language.invited }}</td>
-                          <td>{{ language.submitted }}</td>
+                          <td>{{ formatCount(language.invited) }}</td>
+                          <td>{{ formatCount(language.submitted) }}</td>
                           <td>
-                            <span class="badge-soft success">{{ language.submissionRate }} %</span>
+                            <span class="badge-soft" :class="language.effectifSufficient ? 'success' : 'warning'">
+                              {{ language.effectifSufficient ? formatPercent(language.submissionRate) : language.displayValue }}
+                            </span>
                           </td>
                         </tr>
                       </tbody>
@@ -608,7 +624,7 @@ function closeSubmissionDetail(): void {
                   <div class="stats-list-actions">
                     <span class="small" style="color: var(--chm-muted)">
                       Liste complète · {{ statsStore.stats.popups?.length ?? 0 }} terme(s) défini(s)
-                      · {{ statsStore.stats.totals.popupOpens }} ouverture(s) enregistrée(s)
+                      · {{ formatCount(statsStore.stats.totals.popupOpens) }} ouverture(s) enregistrée(s)
                     </span>
                   </div>
                 </CollapsibleSection>
@@ -619,7 +635,7 @@ function closeSubmissionDetail(): void {
                 <CollapsibleSection
                   title="Signaux de compréhension par question"
                   badge-tone="warning"
-                  :badge="`${statsStore.stats.totals.popupOpens} ouverture(s) popup`"
+                  :badge="`${formatCount(statsStore.stats.totals.popupOpens)} ouverture(s) popup`"
                   :default-open="false"
                   body-class="compact"
                 >
@@ -731,7 +747,7 @@ function closeSubmissionDetail(): void {
                   <div class="stats-list-actions">
                     <span class="small" style="color: var(--chm-muted)">
                       Liste complète · {{ statsStore.stats.questions.length }} question(s)
-                      analysée(s) · {{ statsStore.stats.totals.popupOpens }} ouverture(s) de popup
+                      analysée(s) · {{ formatCount(statsStore.stats.totals.popupOpens) }} ouverture(s) de popup
                       au total
                     </span>
                   </div>

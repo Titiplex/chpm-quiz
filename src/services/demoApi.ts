@@ -3891,6 +3891,7 @@ function createStats(questionnaireId: string): StatsResponse['stats'] {
       backtracks: 3,
       resumes: 3,
       medianTotalDurationMs: isItq ? 9 * 60 * 1000 : 4 * 60 * 1000,
+      effectifSufficient: true,
     },
     fieldTracking: {
       approached: 11,
@@ -3903,6 +3904,8 @@ function createStats(questionnaireId: string): StatsResponse['stats'] {
       paperForms: 1,
       digitalContact: 6,
       pendingWithoutDigitalContact: 2,
+      effectifSufficient: true,
+      displayValue: '11 approchée(s)',
     },
     versions: [
       {
@@ -3920,6 +3923,7 @@ function createStats(questionnaireId: string): StatsResponse['stats'] {
         completionRate: 67,
         abandonmentRate: 14,
         effectifSufficient: true,
+        displayValue: '6 soumis',
       },
     ],
     deliveryModes: [
@@ -3933,39 +3937,47 @@ function createStats(questionnaireId: string): StatsResponse['stats'] {
         openingRate: 100,
         startRate: 100,
         submissionRate: 83,
+        effectifSufficient: true,
+        displayValue: '5 soumis',
       },
       {
         mode: 'sms_simulation',
         label: 'SMS',
-        invited: 1,
-        opened: 1,
-        started: 1,
-        submitted: 1,
-        openingRate: 100,
-        startRate: 100,
-        submissionRate: 100,
+        invited: null,
+        opened: null,
+        started: null,
+        submitted: null,
+        openingRate: null,
+        startRate: null,
+        submissionRate: null,
+        effectifSufficient: false,
+        displayValue: 'effectif insuffisant',
       },
       {
         mode: 'onsite_terminal',
         label: 'Terminal hospitalier',
-        invited: 2,
-        opened: 1,
-        started: 1,
-        submitted: 1,
-        openingRate: 50,
-        startRate: 50,
-        submissionRate: 50,
+        invited: null,
+        opened: null,
+        started: null,
+        submitted: null,
+        openingRate: null,
+        startRate: null,
+        submissionRate: null,
+        effectifSufficient: false,
+        displayValue: 'effectif insuffisant',
       },
       {
         mode: 'paper_form',
         label: 'Version papier',
-        invited: 1,
-        opened: 0,
-        started: 0,
-        submitted: 0,
-        openingRate: 0,
-        startRate: 0,
-        submissionRate: 0,
+        invited: null,
+        opened: null,
+        started: null,
+        submitted: null,
+        openingRate: null,
+        startRate: null,
+        submissionRate: null,
+        effectifSufficient: false,
+        displayValue: 'effectif insuffisant',
       },
     ],
     buildings: [
@@ -4272,7 +4284,7 @@ function updateJudicialRequest(id: string, action: string): JudicialAccessReques
       throw new Error('Double validation requise avant exécution.')
     request.status = 'executed'
     request.executedAt = nowIso()
-    request.executedByUserId = `demo-user-${currentUser?.role ?? 'judicial_officer'}`
+    request.executedByUserId = `demo-user-${currentUser?.role ?? 'dpo'}`
     request.exportFingerprint = `demo-sha256-${Math.random().toString(16).slice(2).padEnd(16, '0')}`
     request.secureDocumentId = `demo-secure-doc-${request.id}`
     request.exportExpiresAt = addMinutesIso(15)
@@ -4301,18 +4313,17 @@ function updateJudicialRequest(id: string, action: string): JudicialAccessReques
     judicialRequest: request,
     ...(action === 'execute'
       ? {
-          secureDocument: {
-            id: request.secureDocumentId ?? `demo-secure-doc-${request.id}`,
-            documentType: 'judicial_identity_export',
-            storageRef: `secure-document:judicial_identity_export:${request.id}`,
-            algorithm: 'aes-256-gcm',
-            keyRef: 'demo:SECURE_DOCUMENT_KEY_B64',
+          export: {
             fingerprint: request.exportFingerprint ?? 'demo-fingerprint',
-            sizeBytes: request.exportSizeBytes ?? 256,
             expiresAt: request.exportExpiresAt ?? addMinutesIso(15),
-            status: 'available',
-            warning:
-              'Export fictif conservé dans le coffre documentaire ; aucun ciphertext n’est renvoyé.',
+            rowCount: request.requestedPublicCodes.length,
+            envelope: {
+              algorithm: 'aes-256-gcm',
+              keyRef: 'demo:JUDICIAL_EXPORT_KEY_B64',
+              iv: 'demo-iv',
+              authTag: 'demo-auth-tag',
+              ciphertext: 'demo-encrypted-payload',
+            },
           },
         }
       : {}),

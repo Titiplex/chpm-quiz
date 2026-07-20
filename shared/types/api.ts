@@ -1,4 +1,14 @@
-import type { AssistanceMode, BuildingScope, InvitationDeliveryMode, InvitationStatus, LanguageCode, QuestionDefinition, QuestionType, SubmissionStatus, TerminalDeviceStatus } from './domain'
+import type {
+  AssistanceMode,
+  BuildingScope,
+  InvitationDeliveryMode,
+  InvitationStatus,
+  LanguageCode,
+  QuestionDefinition,
+  QuestionType,
+  SubmissionStatus,
+  TerminalDeviceStatus,
+} from './domain'
 import type { Permission, UserRole } from './rbac'
 
 export interface ApiBuilding extends BuildingScope {
@@ -17,7 +27,6 @@ export interface ApiSite {
   country?: string | null
   timezone?: string | null
 }
-
 
 export interface CreateSiteRequest {
   code: string
@@ -48,6 +57,7 @@ export interface AuthUserProfile {
   displayName: string
   role: UserRole
   permissions: Permission[]
+  mustChangePassword?: boolean
   building: ApiBuilding | null
 }
 
@@ -56,10 +66,14 @@ export interface LoginRequest {
   password: string
 }
 
+export interface ChangePasswordRequest {
+  currentPassword: string
+  newPassword: string
+}
+
 export interface AuthResponse {
   user: AuthUserProfile
 }
-
 
 export interface ApiSiteTeamUser {
   id: string
@@ -180,7 +194,16 @@ export interface ApiPopupDefinition {
 export interface ConditionExpression {
   questionId?: string
   questionCode?: string
-  operator?: 'answered' | 'not_answered' | 'equals' | 'not_equals' | 'contains' | 'gt' | 'gte' | 'lt' | 'lte'
+  operator?:
+    | 'answered'
+    | 'not_answered'
+    | 'equals'
+    | 'not_equals'
+    | 'contains'
+    | 'gt'
+    | 'gte'
+    | 'lt'
+    | 'lte'
   value?: unknown
   equals?: unknown
   all?: ConditionExpression[]
@@ -242,7 +265,6 @@ export interface QuestionnairesResponse {
 export interface QuestionnaireResponse {
   questionnaire: ApiQuestionnaire
 }
-
 
 export interface AddQuestionnaireLanguageRequest {
   language: LanguageCode
@@ -307,12 +329,28 @@ export interface CreateQuestionRequest {
   code: string
   label: string
   helperText?: string
-  responseType: Extract<QuestionType, 'free_text' | 'free_text_short' | 'free_text_long' | 'likert' | 'single_choice' | 'multiple_choice' | 'number' | 'date' | 'information'>
+  responseType: Extract<
+    QuestionType,
+    | 'free_text'
+    | 'free_text_short'
+    | 'free_text_long'
+    | 'likert'
+    | 'single_choice'
+    | 'multiple_choice'
+    | 'number'
+    | 'date'
+    | 'information'
+  >
   isRequired?: boolean
   displayOrder?: number
   conditionExpression?: ConditionExpression | null
   likertScale?: LikertScaleRequest
-  answerOptions?: Array<{ value: string; label: string; displayOrder?: number; isExclusive?: boolean }>
+  answerOptions?: Array<{
+    value: string
+    label: string
+    displayOrder?: number
+    isExclusive?: boolean
+  }>
   popupDefinition?: PopupDefinitionRequest
 }
 
@@ -320,12 +358,28 @@ export interface UpdateQuestionRequest {
   code?: string
   label?: string
   helperText?: string
-  responseType?: Extract<QuestionType, 'free_text' | 'free_text_short' | 'free_text_long' | 'likert' | 'single_choice' | 'multiple_choice' | 'number' | 'date' | 'information'>
+  responseType?: Extract<
+    QuestionType,
+    | 'free_text'
+    | 'free_text_short'
+    | 'free_text_long'
+    | 'likert'
+    | 'single_choice'
+    | 'multiple_choice'
+    | 'number'
+    | 'date'
+    | 'information'
+  >
   isRequired?: boolean
   displayOrder?: number
   conditionExpression?: ConditionExpression | null
   likertScale?: LikertScaleRequest
-  answerOptions?: Array<{ value: string; label: string; displayOrder?: number; isExclusive?: boolean }>
+  answerOptions?: Array<{
+    value: string
+    label: string
+    displayOrder?: number
+    isExclusive?: boolean
+  }>
   popupDefinition?: PopupDefinitionRequest | null
 }
 
@@ -384,7 +438,6 @@ export interface InvitationsResponse {
   invitations: ApiInvitation[]
 }
 
-
 export interface TerminalDevicesResponse {
   terminalDevices: ApiTerminalDevice[]
 }
@@ -399,7 +452,6 @@ export interface RegisterTerminalDeviceResponse {
   terminalAccessToken: string
   terminalLaunchLink: string
 }
-
 
 export interface UpdateTerminalDeviceRequest {
   label?: string
@@ -447,7 +499,6 @@ export interface CreateInvitationResponse {
   devAccessLink: string | null
   terminalDispatchLink?: string | null
 }
-
 
 export interface SubmitPaperResponsesRequest {
   answers: Array<{ questionId: string; value: unknown }>
@@ -563,62 +614,68 @@ export interface StatsResponse {
     questionnaire: { id: string; code: string; title: string }
     threshold: number
     totals: {
-      invited: number
-      opened: number
-      started: number
-      submitted: number
-      abandoned: number
-      expired: number
-      openingRate: number
-      startRate: number
-      submissionRate: number
-      completionRate: number
-      abandonmentRate: number
-      telemetryEvents: number
-      popupOpens: number
-      answerChanges: number
-      backtracks: number
-      resumes: number
+      invited: number | null
+      opened: number | null
+      started: number | null
+      submitted: number | null
+      abandoned: number | null
+      expired: number | null
+      openingRate: number | null
+      startRate: number | null
+      submissionRate: number | null
+      completionRate: number | null
+      abandonmentRate: number | null
+      telemetryEvents: number | null
+      popupOpens: number | null
+      answerChanges: number | null
+      backtracks: number | null
+      resumes: number | null
       medianTotalDurationMs: number | null
+      effectifSufficient: boolean
     }
     fieldTracking: {
-      approached: number
-      invited: number
-      refused: number
-      refusalRate: number
-      noDigitalContact: number
-      noDigitalContactRate: number
-      onsiteTerminal: number
-      paperForms: number
-      digitalContact: number
-      pendingWithoutDigitalContact: number
+      approached: number | null
+      invited: number | null
+      refused: number | null
+      refusalRate: number | null
+      noDigitalContact: number | null
+      noDigitalContactRate: number | null
+      onsiteTerminal: number | null
+      paperForms: number | null
+      digitalContact: number | null
+      pendingWithoutDigitalContact: number | null
+      effectifSufficient: boolean
+      displayValue: string
     }
     versions: Array<{
       id: string
       versionLabel: string
       status: string
-      invited: number
-      opened: number
-      started: number
-      submitted: number
-      abandoned: number
-      openingRate: number
-      startRate: number
-      submissionRate: number
-      completionRate: number
-      abandonmentRate: number
+      invited: number | null
+      opened: number | null
+      started: number | null
+      submitted: number | null
+      abandoned: number | null
+      openingRate: number | null
+      startRate: number | null
+      submissionRate: number | null
+      completionRate: number | null
+      abandonmentRate: number | null
       effectifSufficient: boolean
+      displayValue: string
     }>
     deliveryModes: Array<{
       mode: InvitationDeliveryMode
       label: string
-      invited: number
-      opened: number
-      started: number
-      submitted: number
-      openingRate: number
-      startRate: number
-      submissionRate: number
+      invited: number | null
+      opened: number | null
+      started: number | null
+      submitted: number | null
+      openingRate: number | null
+      startRate: number | null
+      submissionRate: number | null
+      effectifSufficient: boolean
+      displayValue: string
     }>
     buildings: Array<{
       buildingId: string
@@ -637,20 +694,24 @@ export interface StatsResponse {
     sites?: Array<{
       siteId: string
       label: string
-      invited: number
-      opened: number
-      started: number
-      submitted: number
-      openingRate: number
-      startRate: number
-      submissionRate: number
+      invited: number | null
+      opened: number | null
+      started: number | null
+      submitted: number | null
+      openingRate: number | null
+      startRate: number | null
+      submissionRate: number | null
+      effectifSufficient: boolean
+      displayValue: string
     }>
     languages?: Array<{
       language: string
       versionCount: number
-      invited: number
-      submitted: number
-      submissionRate: number
+      invited: number | null
+      submitted: number | null
+      submissionRate: number | null
+      effectifSufficient: boolean
+      displayValue: string
     }>
     popups?: Array<{
       id: string
@@ -691,7 +752,12 @@ export interface StatsResponse {
       responseChanges: number | null
       backtracks: number | null
       medianDurationMs?: number | null
-      likertDistribution: Array<{ value: number; label: string; count: number; rate: number }> | null
+      likertDistribution: Array<{
+        value: number
+        label: string
+        count: number
+        rate: number
+      }> | null
       freeTextResponses: Array<{ publicCode: string | null; value: string; warning: string | null }>
       freeTextAccess: 'granted' | 'forbidden' | 'not_applicable'
       highMedianDuration: boolean
@@ -809,12 +875,25 @@ export interface CreateJudicialAccessRequest {
   comments?: string
 }
 
-export interface JudicialAccessRequestResponse {
-  judicialRequest: JudicialAccessRequestRecord
-  secureDocument?: SecureDocumentDescriptor
+export interface JudicialEncryptedEnvelope {
+  algorithm: 'aes-256-gcm'
+  keyRef: string
+  iv: string
+  authTag: string
+  ciphertext: string
 }
 
+export interface JudicialEncryptedExport {
+  fingerprint: string
+  expiresAt: string
+  rowCount: number
+  envelope: JudicialEncryptedEnvelope
+}
 
+export interface JudicialAccessRequestResponse {
+  judicialRequest: JudicialAccessRequestRecord
+  export?: JudicialEncryptedExport
+}
 
 export type NotificationFrequency = 'none' | 'immediate' | 'daily'
 export type NotificationChannel = 'email' | 'internal' | 'simulation'
@@ -849,7 +928,6 @@ export interface ApiNotificationSubscription {
 export interface NotificationsResponse {
   subscriptions: ApiNotificationSubscription[]
 }
-
 
 export interface NotificationDigestRunResponse {
   result: {
@@ -907,14 +985,24 @@ export interface RetentionPolicyResponse {
 
 export interface ComplianceMaintenanceResponse {
   result: {
+    skipped?: boolean
+    reason?: string
     expiredCount?: number
+    expiredInvitationCount?: number
     deletedDraftSessionCount?: number
+    deletedSubmittedSessionCount?: number
+    deletedAuditCount?: number
+    expiredExportCount?: number
+    anonymizedIdentityCount?: number
+    deletedDeliveryEventCount?: number
+    deletedDeliveryJobCount?: number
+    deletedIdentityAuditCount?: number
     purgedTokenCount?: number
     purgedCount?: number
     deletedResponseSessionCount?: number
     purgedStorageRefs?: string[]
     cutoff?: string
-    executedAt: string
+    executedAt?: string
   }
 }
 
@@ -945,7 +1033,12 @@ export interface PseudonymizedExportResponse {
       submittedAt: string
       answerCount: number
       telemetryEventCount: number
-      answers: Array<{ questionCode: string; responseType: QuestionType; value: unknown; warning: string | null }>
+      answers: Array<{
+        questionCode: string
+        responseType: QuestionType
+        value: unknown
+        warning: string | null
+      }>
     }>
   }
 }

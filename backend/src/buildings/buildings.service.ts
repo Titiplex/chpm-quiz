@@ -22,13 +22,21 @@ export class BuildingsService {
 
     if (user.role === 'site_manager' && user.siteId) {
       return this.prisma.building.findMany({
-        where: { siteId: user.siteId },
+        where: {
+          siteId: user.siteId,
+          ...(user.organizationId ? { organizationId: user.organizationId } : {}),
+        },
         orderBy: [{ country: 'asc' }, { city: 'asc' }, { label: 'asc' }],
         include: { site: true },
       })
     }
 
+    if (!user.organizationId) {
+      return []
+    }
+
     return this.prisma.building.findMany({
+      where: { organizationId: user.organizationId },
       orderBy: [{ country: 'asc' }, { city: 'asc' }, { label: 'asc' }],
       include: { site: true },
     })

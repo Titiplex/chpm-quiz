@@ -120,4 +120,51 @@ describe('StatsService disclosure controls', () => {
     })
   })
 
+  it('applies the disclosure threshold to every demographic and delivery segment', () => {
+    const service = makeService('2')
+    const invitation = {
+      buildingId: 'b1',
+      building: { label: 'Building A', site: { id: 's1', name: 'Site A' } },
+      status: 'submitted',
+      deliveryMode: 'email',
+      responseSession: { id: 'session-1' },
+    }
+
+    expect(service.versionStats({
+      id: 'v1',
+      versionLabel: '1.0',
+      status: 'published',
+      invitations: [invitation],
+      submissions: [{}],
+    })).toMatchObject({ effectifSufficient: false, invited: null, submissionRate: null })
+    expect(service.siteBreakdown([invitation])[0]).toMatchObject({
+      effectifSufficient: false,
+      invited: null,
+      submissionRate: null,
+    })
+    expect(service.deliveryModeBreakdown([invitation])[0]).toMatchObject({
+      effectifSufficient: false,
+      submitted: null,
+      openingRate: null,
+    })
+    expect(service.languageBreakdown([{
+      language: 'fr',
+      invitations: [invitation],
+      submissions: [{}],
+    }])[0]).toMatchObject({ effectifSufficient: false, submitted: null, submissionRate: null })
+  })
+
+  it('masks field-tracking counts when too few people were approached', () => {
+    const service = makeService('3')
+    expect(service.fieldTrackingBreakdown([
+      { deliveryMode: 'refusal_record', status: 'cancelled' },
+      { deliveryMode: 'paper_form', status: 'sent' },
+    ])).toMatchObject({
+      effectifSufficient: false,
+      approached: null,
+      refused: null,
+      refusalRate: null,
+    })
+  })
+
 })

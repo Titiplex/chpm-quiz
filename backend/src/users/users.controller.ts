@@ -7,6 +7,8 @@ import { Roles } from '../common/decorators/roles.decorator'
 import { RolesGuard } from '../common/guards/roles.guard'
 import { SessionAuthGuard } from '../common/guards/session-auth.guard'
 import { CreateSiteAdminDto } from './dto/create-site-admin.dto'
+import { CreateSiteDto } from './dto/create-site.dto'
+import { CreateBuildingDto } from './dto/create-building.dto'
 import { CreateSiteModeratorDto } from './dto/create-site-moderator.dto'
 import { UpdateSiteAdminDto } from './dto/update-site-admin.dto'
 import { UpdateSiteModeratorDto } from './dto/update-site-moderator.dto'
@@ -22,6 +24,13 @@ export class ProjectAdministrationController {
   async listManagedSites(@CurrentUser() user: AuthenticatedUser) {
     const sites = await this.usersService.listManagedSites(user)
     return { sites }
+  }
+
+  @Post('sites')
+  @Roles('admin')
+  async createSite(@Body() dto: CreateSiteDto, @CurrentUser() user: AuthenticatedUser, @Req() request: Request) {
+    const site = await this.usersService.createManagedSite(user, dto, request)
+    return { site }
   }
 
   @Get('site-admins')
@@ -68,6 +77,13 @@ export class ProjectAdministrationController {
 @Controller('site')
 export class SiteAdministrationController {
   constructor(private readonly usersService: UsersService) {}
+
+  @Post('buildings')
+  @Roles('site_manager')
+  async createBuilding(@Body() dto: CreateBuildingDto, @CurrentUser() user: AuthenticatedUser, @Req() request: Request) {
+    const building = await this.usersService.createManagedBuilding(user, dto, request)
+    return { building }
+  }
 
   @Get('team')
   @Roles('site_manager')

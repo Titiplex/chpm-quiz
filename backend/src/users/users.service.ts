@@ -10,6 +10,8 @@ import { canDelegateRole, roleProfiles } from '../auth/role-permissions'
 import { sameOrganizationOrUnscoped } from '../common/access-scope'
 import { PrismaService } from '../prisma/prisma.service'
 import { CreateSiteAdminDto } from './dto/create-site-admin.dto'
+import { CreateSiteDto } from './dto/create-site.dto'
+import { CreateBuildingDto } from './dto/create-building.dto'
 import { CreateSiteModeratorDto } from './dto/create-site-moderator.dto'
 import { UpdateSiteAdminDto } from './dto/update-site-admin.dto'
 import { UpdateSiteModeratorDto } from './dto/update-site-moderator.dto'
@@ -73,6 +75,87 @@ export class UsersService {
     }))
   }
 
+  async createManagedSite(actor: AuthenticatedUser, dto: CreateSiteDto, request: Request) {
+    this.assertProjectAdmin(actor)
+    if (!actor.organizationId) {
+      throw new ForbiddenException('Administrateur projet sans organisation affectée')
+    }
+
+    const code = dto.code.trim().toUpperCase()
+    const existing = await this.prisma.site.findUnique({ where: { code } })
+    if (existing) {
+      throw new ConflictException('Ce code site existe déjà')
+    }
+
+    const site = await this.prisma.$transaction(async (tx: any) => {
+      const created = await tx.site.create({
+        data: {
+          organizationId: actor.organizationId,
+          code,
+          name: dto.name.trim(),
+          country: dto.country?.trim() || 'France',
+          timezone: dto.timezone?.trim() || 'Europe/Paris',
+        },
+        include: { organization: { select: { id: true, code: true, name: true } } },
+      })
+
+      await this.writeAudit(tx, actor, request, {
+        action: 'site.create',
+        entityType: 'Site',
+        entityId: created.id,
+        metadata: { code: created.code },
+      })
+      return created
+    })
+
+    return {
+      id: site.id,
+      code: site.code,
+      name: site.name,
+      organizationId: site.organizationId,
+      organization: site.organization,
+      country: site.country,
+      timezone: site.timezone,
+    }
+  }
+
+  async createManagedBuilding(actor: AuthenticatedUser, dto: CreateBuildingDto, request: Request) {
+    this.assertCanUseScopedTeamAdministration(actor)
+    if (!actor.organizationId || !actor.siteId) {
+      throw new ForbiddenException('Responsable de site sans périmètre complet')
+    }
+
+    const site = await this.loadManagedSite(actor, actor.siteId)
+    const code = dto.code.trim().toUpperCase()
+    const existing = await this.prisma.building.findUnique({ where: { code } })
+    if (existing) {
+      throw new ConflictException('Ce code bâtiment existe déjà')
+    }
+
+    return this.prisma.$transaction(async (tx: any) => {
+      const building = await tx.building.create({
+        data: {
+          organizationId: actor.organizationId,
+          siteId: site.id,
+          code,
+          label: dto.label.trim(),
+          city: dto.city.trim(),
+          country: dto.country.trim(),
+          timezone: dto.timezone.trim(),
+        },
+        include: { site: true },
+      })
+
+      await this.writeAudit(tx, actor, request, {
+        action: 'building.create',
+        entityType: 'Building',
+        entityId: building.id,
+        metadata: { code: building.code, siteId: site.id },
+      })
+      return building
+    })
+  }
+
   async listSiteAdmins(actor: AuthenticatedUser) {
     this.assertProjectAdmin(actor)
 
@@ -125,6 +208,7 @@ export class UsersService {
             data: {
               displayName,
               passwordHash,
+              mustChangePassword: true,
               role: 'site_manager',
               isActive: true,
               organizationId: site.organizationId,
@@ -141,6 +225,7 @@ export class UsersService {
               email,
               displayName,
               passwordHash,
+              mustChangePassword: true,
               role: 'site_manager',
               isActive: true,
               organizationId: site.organizationId,
@@ -243,7 +328,7 @@ export class UsersService {
     const updated = (await this.prisma.$transaction(async (tx: any) => {
       const user = await tx.user.update({
         where: { id: target.id },
-        data: { passwordHash, isActive: true },
+        data: { passwordHash, isActive: true, mustChangePassword: true, failedLoginCount: 0, lockedUntil: null },
         include: {
           site: { select: { id: true, code: true, name: true } },
           building: { include: { site: { select: { id: true, code: true, name: true } } } },
@@ -329,6 +414,7 @@ export class UsersService {
             data: {
               displayName,
               passwordHash,
+              mustChangePassword: true,
               role: 'moderator',
               isActive: true,
               organizationId: building.organizationId,
@@ -345,6 +431,7 @@ export class UsersService {
               email,
               displayName,
               passwordHash,
+              mustChangePassword: true,
               role: 'moderator',
               isActive: true,
               organizationId: building.organizationId,
@@ -448,7 +535,7 @@ export class UsersService {
     const updated = (await this.prisma.$transaction(async (tx: any) => {
       const user = await tx.user.update({
         where: { id: target.id },
-        data: { passwordHash, isActive: true },
+        data: { passwordHash, isActive: true, mustChangePassword: true, failedLoginCount: 0, lockedUntil: null },
         include: {
           site: { select: { id: true, code: true, name: true } },
           building: { include: { site: { select: { id: true, code: true, name: true } } } },
@@ -674,12 +761,13 @@ export class UsersService {
     })
   }
 
-  private async writeAudit(tx: any, actor: AuthenticatedUser, request: Request, input: { action: string; entityId: string; metadata: Record<string, unknown> }) {
+  private async writeAudit(tx: any, actor: AuthenticatedUser, request: Request, input: { action: string; entityId: string; entityType?: string; metadata: Record<string, unknown> }) {
     await tx.auditLog.create({
       data: {
         actorUserId: actor.id,
+        organizationId: actor.organizationId,
         action: input.action,
-        entityType: 'User',
+        entityType: input.entityType ?? 'User',
         entityId: input.entityId,
         metadata: {
           source: 'staff-management-api',

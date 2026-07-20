@@ -49,7 +49,15 @@ export type Permission =
   | 'terminal:administer'
 
 export type RoleFamily = 'operational' | 'specialized' | 'system'
-export type RoleScope = 'global' | 'site' | 'building' | 'questionnaire' | 'analytics' | 'legal' | 'technical' | 'none'
+export type RoleScope =
+  | 'global'
+  | 'site'
+  | 'building'
+  | 'questionnaire'
+  | 'analytics'
+  | 'legal'
+  | 'technical'
+  | 'none'
 
 /** Human-facing role metadata; it does not replace backend authorization checks. */
 export interface RoleProfile {
@@ -75,7 +83,11 @@ export interface SecuredRouteMeta {
 
 export const allRoles = [...userRoles]
 
-export const activeOperationalRoles = ['admin', 'site_manager', 'moderator'] as const satisfies readonly UserRole[]
+export const activeOperationalRoles = [
+  'admin',
+  'site_manager',
+  'moderator',
+] as const satisfies readonly UserRole[]
 export type ActiveOperationalRole = (typeof activeOperationalRoles)[number]
 
 export const specializedStaffRoles = [
@@ -92,7 +104,8 @@ export const roleProfiles: Record<UserRole, RoleProfile> = {
     role: 'admin',
     label: 'Administrateur projet / chercheur',
     shortLabel: 'Admin projet',
-    description: 'Niveau 1 : responsable central du projet, nommé uniquement par console locale sécurisée. Gère les responsables de site sans accès au coffre identité ni aux emails répondants.',
+    description:
+      'Niveau 1 : responsable central du projet, nommé uniquement par console locale sécurisée. Gère les responsables de site sans accès au coffre identité ni aux emails répondants.',
     family: 'operational',
     rank: 300,
     scope: 'global',
@@ -120,7 +133,8 @@ export const roleProfiles: Record<UserRole, RoleProfile> = {
     role: 'site_manager',
     label: 'Responsable de site',
     shortLabel: 'Resp. site',
-    description: 'Niveau 2 : administre son site, ses bâtiments et ses modérateurs. Ne peut pas créer de rôle supérieur ni accéder au coffre identité.',
+    description:
+      'Niveau 2 : administre son site, ses bâtiments et ses modérateurs. Ne peut pas créer de rôle supérieur ni accéder au coffre identité.',
     family: 'operational',
     rank: 200,
     scope: 'site',
@@ -144,7 +158,8 @@ export const roleProfiles: Record<UserRole, RoleProfile> = {
     role: 'moderator',
     label: 'Modérateur terrain',
     shortLabel: 'Modérateur',
-    description: 'Niveau 3 : invite les répondants et suit les statuts dans son périmètre, sans accès aux emails ni aux réponses confidentielles.',
+    description:
+      'Niveau 3 : invite les répondants et suit les statuts dans son périmètre, sans accès aux emails ni aux réponses confidentielles.',
     family: 'operational',
     rank: 100,
     scope: 'building',
@@ -152,13 +167,20 @@ export const roleProfiles: Record<UserRole, RoleProfile> = {
     activeRole: true,
     parentRole: 'site_manager',
     canDelegateTo: [],
-    permissions: ['questionnaire:preview', 'invitation:create', 'invitation:readScoped', 'invitation:resend', 'notification:configure'],
+    permissions: [
+      'questionnaire:preview',
+      'invitation:create',
+      'invitation:readScoped',
+      'invitation:resend',
+      'notification:configure',
+    ],
   },
   questionnaire_admin: {
     role: 'questionnaire_admin',
     label: 'Administrateur questionnaire',
     shortLabel: 'Admin quest.',
-    description: 'Rôle spécialisé : crée, versionne et publie les questionnaires sans accès direct aux emails.',
+    description:
+      'Rôle spécialisé : crée, versionne et publie les questionnaires sans accès direct aux emails.',
     family: 'specialized',
     rank: 240,
     scope: 'questionnaire',
@@ -179,27 +201,41 @@ export const roleProfiles: Record<UserRole, RoleProfile> = {
     role: 'analyst',
     label: 'Analyste données',
     shortLabel: 'Analyste',
-    description: 'Rôle spécialisé : consulte les statistiques agrégées et exports pseudonymisés sous seuils anti-réidentification, sans email.',
+    description:
+      'Rôle spécialisé : consulte les statistiques agrégées et exports pseudonymisés sous seuils anti-réidentification, sans email.',
     family: 'specialized',
     rank: 160,
     scope: 'analytics',
     scopeLabel: 'Statistiques pseudonymisées',
     activeRole: false,
     canDelegateTo: [],
-    permissions: ['stats:readAggregatedScoped', 'stats:readPseudonymized', 'statistics:read', 'statistics:readSubmission', 'statistics:exportPseudonymized', 'compliance:read'],
+    permissions: [
+      'stats:readAggregatedScoped',
+      'stats:readPseudonymized',
+      'statistics:read',
+      'statistics:readSubmission',
+      'statistics:exportPseudonymized',
+      'compliance:read',
+    ],
   },
   dpo: {
     role: 'dpo',
     label: 'DPO / référent RGPD',
     shortLabel: 'DPO',
-    description: 'Rôle conformité séparé du frontend métier. Accède exceptionnellement aux données confidentielles par console dédiée, avec justification, périmètre explicite et audit.',
+    description:
+      'Rôle conformité séparé du frontend métier. Accède exceptionnellement aux données confidentielles par console dédiée, avec justification, périmètre explicite et audit.',
     family: 'specialized',
     rank: 260,
     scope: 'legal',
     scopeLabel: 'Console DPO dédiée, hors SPA métier',
     activeRole: false,
     canDelegateTo: [],
-    permissions: ['identity:accessConfidential', 'identity:exportCodeEmail', 'audit:read', 'compliance:read', 'compliance:maintain'],
+    permissions: [
+      'identity:accessConfidential',
+      'identity:exportCodeEmail',
+      'audit:read',
+      'compliance:read',
+    ],
   },
   judicial_officer: {
     role: 'judicial_officer',
@@ -212,20 +248,32 @@ export const roleProfiles: Record<UserRole, RoleProfile> = {
     scopeLabel: 'Procédures et audit légal',
     activeRole: false,
     canDelegateTo: [],
-    permissions: ['judicial:createRequest', 'judicial:validateRequest', 'audit:read', 'compliance:read'],
+    permissions: [
+      'judicial:createRequest',
+      'judicial:validateRequest',
+      'audit:read',
+      'compliance:read',
+    ],
   },
   technical_admin: {
     role: 'technical_admin',
     label: 'Administrateur technique',
     shortLabel: 'Tech',
-    description: 'Rôle exploitation : maintenance, sécurité et observabilité sans accès applicatif aux données confidentielles.',
+    description:
+      'Rôle exploitation : maintenance, sécurité et observabilité sans accès applicatif aux données confidentielles.',
     family: 'specialized',
     rank: 220,
     scope: 'technical',
     scopeLabel: 'Infrastructure, terminaux et registre technique',
     activeRole: false,
     canDelegateTo: [],
-    permissions: ['audit:read', 'architecture:read', 'compliance:read', 'compliance:maintain', 'terminal:administer'],
+    permissions: [
+      'audit:read',
+      'architecture:read',
+      'compliance:read',
+      'compliance:maintain',
+      'terminal:administer',
+    ],
   },
   service_account: {
     role: 'service_account',
@@ -295,5 +343,10 @@ export function roleInheritsFrom(role: UserRole, ancestorRole: UserRole): boolea
 }
 
 export const adminLikeRoles: UserRole[] = ['admin', 'questionnaire_admin']
-export const statisticsRoles: UserRole[] = ['admin', 'site_manager', 'questionnaire_admin', 'analyst']
+export const statisticsRoles: UserRole[] = [
+  'admin',
+  'site_manager',
+  'questionnaire_admin',
+  'analyst',
+]
 export const auditRoles: UserRole[] = ['admin', 'dpo', 'judicial_officer', 'technical_admin']

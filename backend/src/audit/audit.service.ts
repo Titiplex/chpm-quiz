@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service'
 
 export interface AuditEventInput {
   actor?: AuthenticatedUser | null
+  organizationId?: string | null
   action: string
   entityType: string
   entityId?: string | null
@@ -22,6 +23,7 @@ export class AuditService {
     await this.prisma.auditLog.create({
       data: {
         actorUserId: input.actor?.id,
+        organizationId: input.organizationId ?? input.actor?.organizationId ?? undefined,
         action: input.action,
         entityType: input.entityType,
         entityId: input.entityId ?? undefined,
@@ -33,14 +35,20 @@ export class AuditService {
     })
   }
 
-  async list(limit?: number) {
-    const take = typeof limit === 'number' && Number.isFinite(limit) && limit > 0
+  async listForUser(user: AuthenticatedUser, limit?: number) {
+    if (!user.organizationId) {
+      return []
+    }
+
+    const requestedLimit = typeof limit === 'number' && Number.isFinite(limit) && limit > 0
       ? Math.floor(limit)
-      : undefined
+      : 100
+    const take = Math.min(requestedLimit, 200)
 
     return this.prisma.auditLog.findMany({
+      where: { organizationId: user.organizationId },
       orderBy: { occurredAt: 'desc' },
-      ...(take ? { take } : {}),
+      take,
       include: {
         actor: {
           select: {
