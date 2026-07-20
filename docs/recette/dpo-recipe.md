@@ -1,21 +1,48 @@
-# Recette DPO
+# DPO/privacy acceptance
 
-## Points à vérifier
+The DPO/privacy owner should verify implementation with fabricated data, review the actual processing context, and retain a signed decision. Code inspection or documentation alone is insufficient.
 
-1. Les écrans et notices utilisent `pseudonymisé` dans les textes techniques/RGPD.
-2. Les interfaces métier ne montrent pas l'email du répondant.
-3. La navigation Vue principale ne contient ni coffre identité, ni correspondance code-email, ni export confidentiel.
-4. Le compte DPO ne dispose pas d'une navigation métier sensible dans la SPA.
-5. La notice répondant explique finalité, droits, contact, durée estimée et soumission définitive.
-6. Les réponses libres avertissent contre les identifiants directs.
-7. Les statistiques agrégées appliquent un seuil minimal et affichent `effectif insuffisant` sous seuil.
-8. Les exports pseudonymisés excluent explicitement la table identité, ne contiennent aucun email et sont journalisés avec empreinte.
-9. L'accès code-email exige la console DPO dédiée, un login nominatif DPO, une justification, une référence de procédure et une liste explicite de codes publics.
-10. La console DPO interdit la recherche libre par email et l'export massif non borné.
-11. L'export DPO code-email est minimal, chiffré si écrit sur disque, hashé, horodaté et journalisé dans l'audit opérationnel et l'audit identity vault.
-12. L'AIPD est décidée et documentée avant production.
+## Notice and lawful processing
 
-## Décision attendue
+1. Each questionnaire shows the approved controller, purpose, lawful basis/plain-language condition, recipients/providers, duration, pseudonymization, telemetry, retention, rights, DPO contact, support, and final-submission behavior.
+2. Participation/consent/withdrawal wording matches the actual legal basis and care/research context.
+3. Free-text instructions discourage direct identifiers.
+4. The DPIA/record/processor/transfer decisions are complete and current.
 
-- `GO DPO` uniquement si base légale, notice, durées, AIPD, procédure droits et procédure d'accès exceptionnel sont signées.
-- `NO-GO DPO` si le questionnaire contient des données sensibles sans AIPD, si les durées restent non validées, ou si la console DPO peut être contournée par l'API principale ou le frontend métier.
+## Data separation and minimization
+
+1. Business screens and normal API responses never show clear respondent email/phone, identity hashes/ciphertext, cookies, or tokens.
+2. Operational records are described as pseudonymized, not anonymous.
+3. Telemetry fields and notification payloads are necessary, documented, and retention-limited.
+4. Demo/static modes cannot receive real data in production.
+5. Logs/audit/provider data exclude unnecessary contact, tokens, secrets, and answer bodies.
+
+## Roles, scope, and statistics
+
+1. Test every role and cross-organization/site/building/questionnaire attempt.
+2. DPO has no ordinary business super-admin path.
+3. Aggregate statistics suppress small cells on every dimension and do not permit simple differencing reconstruction.
+4. Individual pseudonymized detail is analyst-only as designed and audited.
+5. Exports exclude identity data, respect suppression, have a fingerprint/secure handling, and are audited.
+
+## Identity and rights procedure
+
+1. The SPA and normal API contain no code-to-contact export/search.
+2. DPO console requires a named DPO login, justification, procedure reference, and explicit public codes.
+3. Free email search and unbounded export are impossible in the approved workflow.
+4. Output is minimal, encrypted, fingerprinted, time-limited, transferred securely, and recorded in operational plus identity-vault audit.
+5. Judicial/request approval, rejection, execution metadata, closure, and destruction are evidenced.
+6. Data-subject identity verification, search scope, response deadlines, exceptions, correction/deletion propagation, and communication are documented and rehearsed.
+
+## Retention and recovery
+
+1. Final object-specific periods are approved and match configuration, provider, logs, paper, exports, derived files, and backups.
+2. Expiry/draft cleanup is executed and evidenced without deleting final submissions.
+3. Identity unlinking/deletion and holds are controlled and audited.
+4. Restoration does not silently reintroduce deleted data into active processing.
+
+## Decision
+
+`DPO GO` requires signed lawful-basis/Article 9 analysis, approved notice, completed DPIA where required, processor/transfer review, final retention, tested rights/identity procedure, verified scope/suppression, security/accessibility/restore evidence, and accepted residual risk.
+
+`DPO NO-GO` applies when sensitive processing lacks the required DPIA/approval, retention or rights remain undefined, small-cell/direct-contact leakage exists, identity access bypasses the console/procedure, or any critical evidence is missing.

@@ -1,35 +1,32 @@
-# shared/
+# Shared TypeScript contracts
 
-Types partagés entre le frontend Vue et le backend NestJS du projet CHPM Quiz.
+`shared/types` contains framework-independent contracts used by the Vue frontend and by tests that verify backend behavior.
 
-- `types/rbac.ts` : rôles, permissions et profils utilisés par le routing front et les guards backend.
-- `types/domain.ts` : entités métier stables du questionnaire, des invitations et des soumissions pseudonymisées.
-- `types/api.ts` : contrats JSON partagés pour les endpoints frontend/backend.
+- `api.ts` defines request/response shapes exchanged with the REST API.
+- `domain.ts` defines questionnaire, invitation, submission, terminal, and building primitives.
+- `rbac.ts` defines roles, permissions, role profiles, and frontend route-access helpers.
 
-## Hiérarchie d'autorité
+These files document the client contract, but they do not enforce backend authorization. Server controllers and services remain authoritative for authentication, RBAC, and scope checks.
 
-La valeur technique persistée `admin` désigne maintenant l'**administrateur projet / chercheur / responsable central**. Elle est conservée pour éviter une migration enum inutile, mais elle ne doit pas être interprétée comme un super-admin identité.
-
-Chaîne attendue :
+## Authority hierarchy
 
 ```text
-console locale sécurisée
-  -> crée admin projet / chercheur et DPO
-admin projet / chercheur
-  -> crée responsables de site depuis le frontend
-responsable de site
-  -> crée modérateurs de son site depuis le frontend
-modérateur
-  -> invite et suit les répondants dans son périmètre
-DPO
-  -> hors frontend principal, accès exceptionnel code-email via console dédiée
+local sensitive-user console
+  -> project administrator / researcher (admin)
+      -> site manager
+          -> moderator
 ```
 
-Permissions structurantes :
+Specialized DPO, judicial, technical, analyst, and questionnaire-administrator roles are not part of this delegation chain. They are provisioned and used through their dedicated procedures.
 
-- `user:createProjectAdmin` : console locale uniquement.
-- `user:manageSiteAdmins` : admin projet uniquement, pour gérer les responsables de site.
-- `user:manageModeratorsScoped` : responsable de site uniquement, pour gérer les modérateurs de son site.
-- `identity:accessConfidential` et `identity:exportCodeEmail` : DPO uniquement, jamais consommées par la SPA Vue principale.
-- `stats:readAggregatedScoped` : statistiques agrégées et seuillées.
-- `stats:readPseudonymized` : accès contrôlé, sans email et sans reconstruction d'identité.
+## Change rules
+
+When changing an API payload:
+
+1. Update the backend DTO/service behavior.
+2. Update the relevant type in `shared/types/api.ts`.
+3. Update `docs/openapi.yaml` and examples.
+4. Add or update contract tests.
+5. Run `npm run docs:check`, `npm run typecheck`, and the affected test suites.
+
+Prefer TSDoc on exported contracts when a field has security, lifecycle, privacy, or compatibility semantics that its type cannot express. Avoid comments that merely restate the property name.

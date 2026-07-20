@@ -1,69 +1,73 @@
-# Modifier les textes et traductions sans toucher au code
+# Editing interface translations without changing code
 
-Les textes mutualisés du front sont exposés dans des fichiers JSON éditables dans `public/content/i18n/` :
+Shared frontend text is stored as editable JSON files in `public/content/i18n/`:
 
-- `fr.json` pour le français, langue de référence et fallback obligatoire ;
-- `en.json` pour l’anglais ;
-- tout autre fichier `<code-langue>.json`, par exemple `de.json`, `es.json` ou `it.json`.
+- `fr.json` is the required reference/fallback locale;
+- `en.json` contains English strings;
+- any additional `<language-code>.json` file can provide another locale, for example `de.json`, `es.json`, or `it.json`.
 
-Ces fichiers concernent uniquement l’interface globale : navigation, connexion, boutons communs, messages d’accès, etc. Ils ne traduisent pas le contenu clinique des questionnaires. Les questionnaires gardent leur propre workflow de version/traduction.
+These files cover the application shell and reusable interface text: navigation, login, shared buttons, access messages, and similar content. They do not translate questionnaire/instrument content. Questionnaire languages follow their own reviewed version lifecycle.
 
-Le front lit `public/content/i18n/locales.json` au démarrage pour savoir quelles langues afficher dans le sélecteur global. Ce manifeste est généré automatiquement à partir des fichiers JSON présents dans le dossier.
+At startup, the frontend reads `public/content/i18n/locales.json` to build the global language selector. The manifest is generated from the locale JSON files in the directory.
 
-## Règles d’édition
+## Editing rules
 
-1. Garder exactement les mêmes clés dans chaque langue.
-2. Modifier uniquement la partie droite, entre guillemets.
-3. Ne jamais supprimer les variables entre accolades, par exemple `{points}`, `{label}` ou `{level}`.
-4. Utiliser des guillemets doubles valides JSON. Un guillemet dans une phrase doit être échappé avec `\"`.
-5. Ne pas ajouter de données personnelles, d’exemples patients réels, d’emails réels ou de secrets dans ces fichiers.
+1. Keep exactly the same keys in every language.
+2. Change values only; never translate keys.
+3. Preserve every placeholder in braces, such as `{points}`, `{label}`, or `{level}`.
+4. Use valid JSON double quotes. Escape a quote inside text as `\"`.
+5. Keep the intended meaning, action, severity, and accessibility context.
+6. Do not add personal data, real respondent/patient examples, real email addresses, tokens, credentials, or secrets.
+7. Have sensitive, legal, clinical, and research wording reviewed by the responsible subject-matter owner.
 
-Exemple :
+Example:
 
 ```json
 {
-  "auth.login": "Connexion",
-  "respondent.likert.group": "Échelle Likert {points} points pour {label}"
+  "auth.login": "Sign in",
+  "respondent.likert.group": "{points}-point Likert scale for {label}"
 }
 ```
 
-## Validation avant livraison
+## Validate before delivery
 
-Depuis la racine du projet :
+From the repository root:
 
-```sh
+```powershell
 npm run content:i18n:check
 ```
 
-La commande vérifie que :
+The validator confirms that:
 
-- `fr.json` existe comme langue de référence ;
-- tous les fichiers `*.json` du dossier, sauf `locales.json`, contiennent les mêmes clés que `fr.json` ;
-- chaque valeur est une chaîne non vide ;
-- les variables entre accolades sont conservées d’une langue à l’autre.
+- `fr.json` exists as the reference locale;
+- all locale files except `locales.json` have the same keys as `fr.json`;
+- every value is a non-empty string;
+- placeholders are preserved across languages.
 
-## Ajouter une langue
+The check cannot assess translation quality, legal accuracy, readability, tone, or validated-instrument equivalence. Those require human review.
 
-1. Copier `public/content/i18n/fr.json` vers un nouveau fichier nommé avec le code langue :
+## Add a language
 
-   ```sh
-   cp public/content/i18n/fr.json public/content/i18n/de.json
+1. Copy the reference locale to a file named with the new language code:
+
+   ```powershell
+   Copy-Item public/content/i18n/fr.json public/content/i18n/de.json
    ```
 
-2. Traduire uniquement les valeurs à droite des clés.
-3. Vérifier le fichier :
+2. Translate values only.
+3. Validate the locale set:
 
-   ```sh
+   ```powershell
    npm run content:i18n:check
    ```
 
-4. Régénérer la liste des langues visibles :
+4. Regenerate the visible-locale manifest:
 
-   ```sh
+   ```powershell
    npm run content:i18n:manifest
    ```
 
-Le manifeste produit ressemble à ceci :
+The generated manifest resembles:
 
 ```json
 {
@@ -74,4 +78,14 @@ Le manifeste produit ressemble à ceci :
 }
 ```
 
-Le serveur de développement et le build régénèrent ce manifeste automatiquement avant de démarrer ou de compiler. La commande manuelle sert surtout à contrôler le résultat avant commit.
+Development and build commands regenerate this manifest automatically. The manual command is useful for reviewing the exact result before commit.
+
+## Review checklist
+
+- Test the language selector before and after authentication.
+- Check long labels on narrow screens and at 200% zoom.
+- Verify button text still describes the action.
+- Confirm errors remain specific and are announced by assistive technology.
+- Check placeholders with representative values.
+- Confirm the document language changes correctly for screen readers.
+- Verify right-to-left layout before adding an RTL locale; manifest direction alone does not prove full RTL support.

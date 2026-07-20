@@ -1,237 +1,144 @@
-# Backend
+# CHPM Survey backend
 
-API centrale NestJS TypeScript pour la semaine 2.
+The backend is a NestJS REST API for internal authentication, scoped administration, questionnaire versioning, respondent workflows, statistics, compliance operations, terminals, notifications, and audit logging.
 
-## Stack
+The API prefix is `/api` by default. The machine-readable contract is [docs/openapi.yaml](../docs/openapi.yaml), and the developer-facing usage guide is [docs/api/README.md](../docs/api/README.md).
 
-- NestJS ;
-- Prisma ;
-- PostgreSQL ;
-- sessions persistées en base ;
-- cookie HTTP-only ;
-- guards `SessionAuthGuard` et `RolesGuard`.
+## Technology
 
-### Prérequis Node.js
+- NestJS 11 and TypeScript
+- Prisma 6
+- PostgreSQL
+- Persistent opaque staff sessions in an HTTP-only cookie
+- HMAC-signed respondent and terminal tokens stored only as hashes
+- `class-validator` DTO validation with unknown-field rejection
+- Vitest unit, contract, authorization, and functional tests
 
-Le backend cible Node `22.18.x` et npm `10.9.x`. Si PowerShell répond que `nvm` est introuvable, c’est normal : `nvm` n’est pas livré avec Node.js. Installer soit Node.js `22.18.0` directement, soit un gestionnaire de versions Windows comme `nvm-windows` ou Volta, puis rouvrir PowerShell.
+## Local startup
 
-```sh
-node -v
-npm -v
-```
+From `backend/`:
 
-## Démarrage
-
-```sh
+```powershell
 npm install
-cp .env.example .env
-docker compose up -d
-npm run prisma:migrate
-npm run db:seed
-npm run dev
-```
-
-Sous PowerShell, remplacer `cp .env.example .env` par :
-
-```powershell
 Copy-Item .env.example .env
-```
-
-La configuration `.env.example` locale utilise les mêmes identifiants que `docker-compose.yml` : `chpm` / `chpm` sur `localhost:5432`, base `chpm_quiz`. `OPERATIONAL_DATABASE_URL` pointe vers le schéma `public`; `IDENTITY_DATABASE_URL` pointe vers le schéma `identity`.
-
-Si une ancienne base Docker a déjà été initialisée avec d’autres identifiants, réinitialiser le volume local :
-
-```powershell
-docker compose down -v
 docker compose up -d
 npm run prisma:migrate
 npm run db:seed
 npm run dev
 ```
 
-`docker compose down -v` supprime les données PostgreSQL locales.
+The default API URL is `http://localhost:3000/api`.
 
-L’API écoute par défaut sur `http://localhost:3000/api`.
+The sample configuration uses database `chpm_quiz`, local user/password `chpm`/`chpm`, and separate PostgreSQL schemas:
 
+- `OPERATIONAL_DATABASE_URL` targets `public` for users, scoped operational records, questionnaires, responses, audit records, and workflows.
+- `IDENTITY_DATABASE_URL` targets `identity` for encrypted contact values and identity-vault audit records.
 
+Use separate database roles and strong passwords in production-like environments. Schema separation is a defense-in-depth boundary, not a substitute for separate credentials and least privilege.
 
-## Hiérarchie des rôles et gestion des comptes
+## Module map
 
-Le modèle opérationnel est hiérarchique et cloisonné :
+| Module | Responsibility |
+| --- | --- |
+| `auth` | Login, session restoration, logout, public staff profile |
+| `users` | Project-to-site and site-to-moderator delegation |
+| `questionnaires` / `versions` | Questionnaire builder, conditional rules, publication checks, immutable publication |
+| `moderation` | Scoped invitations, resend, paper entry, terminal assignment |
+| `respondent` | Token resolution, autosave, telemetry, final submission |
+| `terminal` / `terminal-admin` | On-site device registration and token-bound invitation opening |
+| `stats` | Threshold-protected aggregates and analyst-only pseudonymized submission detail |
+| `compliance` | Technical register, retention policy, maintenance jobs, pseudonymized export |
+| `identity-vault` | Technical status and denied-access evidence; no direct identity export endpoint |
+| `judicial` | Exceptional legal-request state machine and secure-document metadata |
+| `notifications` | User subscriptions and scheduled digest processing |
+| `audit` | Append-only application audit reads for authorized roles |
+| `observability` | Liveness, readiness, JSON metrics, and Prometheus exposition |
 
-```text
-console locale sécurisée
-  -> crée les administrateurs projet / chercheurs et les DPO
-administrateur projet / chercheur (`admin` technique)
-  -> gère les responsables de site via `/api/admin/site-admins`
-responsable de site (`site_manager`)
-  -> gère les modérateurs de son site via `/api/site/moderators`
-modérateur (`moderator`)
-  -> crée, relance et suit les invitations dans son périmètre
-DPO (`dpo`)
-  -> accède exceptionnellement au code-email hors API métier via console dédiée
-```
+For service and boundary details, see the [codebase reference](../docs/development/codebase-reference.md).
 
-La valeur technique `admin` est conservée en base pour compatibilité Prisma, mais elle signifie **administrateur projet / chercheur / responsable central**. Elle ne donne aucun droit sur les emails répondants, la table identité ou l'identity vault.
+## Authentication and authorization
 
-## Console locale de gestion des comptes sensibles
+Internal users authenticate with email and password. Successful login creates a random opaque session token; only its SHA-256 hash is stored. The browser receives `chpm_session` as an HTTP-only cookie.
 
-La console `npm run user:console` sert uniquement au bootstrap et aux opérations sensibles hors navigateur. Elle permet :
+Authorization has two layers:
 
-- créer un administrateur projet / chercheur (`admin`) ;
-- créer un DPO (`dpo`) ;
-- créer un administrateur technique (`technical_admin`) si nécessaire ;
-- réinitialiser le mot de passe d'un compte sensible ;
-- désactiver un compte sensible ;
-- révoquer ses sessions ;
-- journaliser chaque action dans `audit_logs`.
+1. Controller-level RBAC through `SessionAuthGuard`, `RolesGuard`, and `@Roles(...)`.
+2. Service-level ABAC for organization, site, building, questionnaire, and invitation scope.
 
-Elle ne sert plus à gérer quotidiennement les responsables de site ou les modérateurs. Ces opérations passent par le frontend et par les endpoints RBAC/ABAC dédiés.
+The frontend navigation is a usability layer only. Never rely on hidden menu items for access control.
 
-Démarrer depuis `backend` :
+Respondents do not have internal accounts. Their link contains a signed token bound to one public code. Terminal-assisted sessions additionally require the terminal token. Tokens are validated and compared by hash before data access.
+
+## Sensitive-account console
+
+Daily site-team administration happens in the web application. The local console is reserved for bootstrap and sensitive roles:
 
 ```powershell
 npm run user:console
 ```
 
-La console ouvre un prompt :
+Supported actions include creating approved sensitive roles, resetting passwords, disabling accounts, revoking sessions, and listing accounts without secrets. Every mutation is audited. The console applies production safeguards and protects the last active project administrator from accidental deactivation.
 
-```text
-chpm-sensitive-users>>
-```
+The technical role value `admin` means project administrator/researcher. It does not grant access to respondent contact values or DPO exports.
 
-Commandes disponibles :
+## DPO console
 
-```text
-create          créer un compte sensible autorisé
-reset-password  réinitialiser le mot de passe et révoquer les sessions
-disable         désactiver le compte et révoquer les sessions
-revoke-sessions révoquer les sessions sans changer le compte
-list            lister les comptes sensibles sans secret
-help            afficher l'aide
-exit            quitter
-```
-
-Sécurité appliquée : terminal interactif local, blocage prudent en production, confirmation si la base n'est pas locale, mot de passe fort ou généré, hash bcrypt, révocation de sessions, protection contre la désactivation du dernier admin projet actif et audit source `local-sensitive-user-console`.
-
-## Gestion frontend/API des responsables de site
-
-Un administrateur projet / chercheur peut gérer les responsables de site depuis le frontend “Administration projet” ou via :
-
-- `GET /api/admin/sites` ;
-- `GET /api/admin/site-admins` ;
-- `POST /api/admin/site-admins` ;
-- `PATCH /api/admin/site-admins/:id` ;
-- `POST /api/admin/site-admins/:id/reset-password` ;
-- `POST /api/admin/site-admins/:id/revoke-sessions`.
-
-Ces routes sont réservées à `admin`. Elles ne permettent pas de créer un autre admin projet, un DPO, un administrateur technique ou un responsable judiciaire. Toute création, désactivation, changement de site, reset ou révocation est auditée ; les sessions sont révoquées après mutation sensible.
-
-## Gestion frontend/API des modérateurs de site
-
-Un responsable de site peut gérer les modérateurs de son propre site uniquement :
-
-- `GET /api/site/team` ;
-- `POST /api/site/moderators` ;
-- `PATCH /api/site/moderators/:id` ;
-- `POST /api/site/moderators/:id/reset-password` ;
-- `POST /api/site/moderators/:id/revoke-sessions`.
-
-Les garde-fous backend sont : RBAC explicite, ABAC par site/bâtiment, refus des bâtiments hors site, impossibilité de créer ou modifier un rôle supérieur/spécialisé, mot de passe temporaire affiché une seule fois, révocation des sessions et audit `user.siteModerator.*`.
-
-## Console DPO dédiée
-
-L'accès exceptionnel code-email ne passe plus par la SPA Vue ni par l'API métier principale. Il passe par :
+Exceptional code-to-contact exports are deliberately outside the SPA and normal REST API:
 
 ```powershell
 npm run dpo:console
-# ou
-npm run identity-vault:console
 ```
 
-Fonctions minimales : login nominatif DPO, justification obligatoire, référence de procédure, liste explicite de codes publics, interdiction de recherche libre par email, export minimal code-email, chiffrement fichier, empreinte SHA-256 et double audit opérationnel + identity vault. Un administrateur projet / chercheur ne peut pas exécuter cette console avec succès.
+The procedure requires a named DPO login, justification, a procedure reference, and an explicit list of public codes. It forbids free email search, encrypts the output, records a SHA-256 fingerprint, and writes operational and identity-vault audit evidence. Follow [Exceptional identity access](../docs/production/judicial-access.md).
 
-## Comptes seedés
+## Delivery providers
 
-- `admin@chpm.local` / `Admin123!`
-- `site.manager@chpm.local` / `SiteManager123!`
-- `moderateur@chpm.local` / `Moderator123!`
-- `questionnaire.admin@chpm.local` / `Questionnaire123!`
-- `analyste@chpm.local` / `Analyst123!`
-- `dpo@chpm.local` / `Dpo12345!`
-- `judiciaire@chpm.local` / `Judiciaire123!`
-- `tech@chpm.local` / `Tech12345!`
-
-## Questionnaires seedés pour la démo
-
-- `CHPM-BASE` : questionnaire métier adaptatif de démonstration.
-- `ITQ-CN2R` : ITQ publié, 2 questions de contexte puis 18 items cotés P1–P9/C1–C9.
-- `LEC5-PPP` : inventaire LEC-5 en version papier de démonstration, avec 17 situations cochables, une question d’événement le plus difficile et un champ `Autre`.
-
-Le seed affiche dans la console les liens répondants de démonstration pour l’ITQ et la LEC-5.
-
-## Sécurité
-
-- mot de passe hashé avec bcrypt ;
-- session opaque stockée en base sous forme de hash SHA-256 ;
-- cookie HTTP-only non lisible par JavaScript ;
-- durée de session configurable par `SESSION_TTL_HOURS` ;
-- CORS limité à `FRONTEND_ORIGIN` ;
-- validation DTO avec `class-validator` ;
-- RBAC appliqué côté serveur.
-
-## Saisie papier par modérateur
-
-Le backend expose `POST /moderation/invitations/:id/paper-entry` pour transformer une invitation `paper_form` en soumission verrouillée. Le contrôleur exige une session modérateur ou responsable de site et applique le périmètre bâtiment/site avant toute écriture.
-
-La saisie manuelle :
-
-- ne demande aucun email ni téléphone ;
-- crée ou réutilise une `ResponseSession` liée à l'invitation papier ;
-- valide que les réponses ciblent des questions de la version publiée ;
-- verrouille les `Answer`, la `ResponseSession` et crée une `Submission` ;
-- marque l'invitation comme `submitted` ;
-- écrit un audit `response.paper_entry.submit` et un événement coffre `paper_form_entered_by_moderator`.
-
-Les refus `refusal_record` restent des lignes de suivi terrain et ne sont pas saisissables comme réponses.
-
-
-## Invitations par SMS
-
-Le workflow de modération accepte maintenant trois familles de canaux :
-
-- `email` / `email_simulation` ;
-- `sms` / `sms_simulation` ;
-- `onsite_terminal`.
-
-Le téléphone du répondant est traité comme donnée directement identifiante. Il est chiffré et hashé dans le schéma `identity`, séparé des tables opérationnelles, au même titre que l'email. Les écrans de modération n'affichent jamais le numéro en clair.
-
-En local :
+Local development may use simulation providers:
 
 ```env
+MAIL_PROVIDER=simulation
 SMS_PROVIDER=simulation
-SMS_SENDER=CHPM
 ```
 
-En préproduction ou production, deux choix sont possibles :
+Production-like environments must use `disabled` or an approved real provider with valid credentials. SMS currently supports Twilio and Brevo configuration. Phone numbers and email addresses are normalized, encrypted with AES-256-GCM, and separately HMAC-hashed for controlled lookup/deduplication.
 
-```env
-SMS_PROVIDER=disabled
+## Database and Prisma commands
+
+```powershell
+npm run prisma:generate
+npm run prisma:validate
+npm run prisma:migrate
+npm run prisma:migrate:status
+npm run prisma:migrate:deploy
+npm run db:seed
 ```
 
-ou bien un provider réel :
+`npm run db:reset` and `docker compose down -v` destroy local data. Use them only against a verified disposable development database.
 
-```env
-SMS_PROVIDER=twilio
-TWILIO_ACCOUNT_SID=...
-TWILIO_AUTH_TOKEN=...
-TWILIO_FROM=+33600000000
+## Quality commands
+
+```powershell
+npm run lint
+npm run typecheck
+npm run build
+npm run test:unit
+npm run test:functional
+npm run test:coverage
 ```
 
-```env
-SMS_PROVIDER=brevo
-BREVO_API_KEY=...
-SMS_SENDER=CHPM
-```
+From the repository root, `npm run docs:check` verifies that all controller operations are represented in OpenAPI.
 
-`SMS_PROVIDER=simulation` est interdit en environnement production-like. Si le canal SMS n'est pas encore contractualisé, garder `SMS_PROVIDER=disabled` : le backend démarre, mais une tentative d'envoi SMS renverra une erreur explicite.
+## Error and request conventions
+
+- JSON request bodies are whitelisted; unexpected properties return `400`.
+- Errors use a stable envelope with `statusCode`, `error.code`, `error.message`, `path`, and `timestamp`.
+- Clients may send `X-Correlation-ID` or `X-Request-ID` using 8–128 safe characters.
+- Responses echo the accepted/generated identifier as `X-Request-Id` and `X-Correlation-ID`.
+- CORS allows configured frontend origins and credentials only.
+- The current rate limiter is per process, IP, method, and path.
+
+See [API conventions](../docs/api/README.md) for examples and status-code semantics.
+
+## Production warning
+
+Seed credentials, simulation providers, fallback development secrets, and the local Compose database are not production configuration. Complete the [production runbooks](../docs/production/README.md) and the [go/no-go acceptance matrix](../docs/recette/compliance-matrix.md) before deployment.

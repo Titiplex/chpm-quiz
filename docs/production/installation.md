@@ -1,48 +1,77 @@
-# Guide d'installation préproduction
+# Preproduction installation guide
 
-## Objectif
+This procedure recreates the supplied preproduction stack from repository source, environment values, Prisma migrations, and TLS certificate files.
 
-Recréer un environnement préproduction à partir du dépôt, des variables d'environnement, des migrations Prisma et des certificats TLS.
+## Prerequisites
 
-## Prérequis
+- Reviewed release commit/tag and trusted build host.
+- Docker Engine and Docker Compose v2.
+- DNS name pointing to the reverse proxy.
+- Valid certificate directory (`TLS_CERT_DIR`) containing `fullchain.pem` and `privkey.pem` with restricted permissions.
+- Approved secret injection for database passwords, session/respondent secrets, AES keys, HMAC pepper, provider credentials, judicial-export key, and backup passphrase.
+- Approved email/SMS provider modes and sender identities.
+- Isolated preproduction data; never clone real production personal data without explicit authorization and minimization.
 
-- Docker Engine et Docker Compose v2.
-- Un nom DNS pointant vers le reverse proxy.
-- Un certificat TLS valide dans `TLS_CERT_DIR` avec `fullchain.pem` et `privkey.pem`.
-- Secrets injectés depuis un vault ou un gestionnaire de secrets : mots de passe PostgreSQL, clés AES 32 octets base64, pepper HMAC, clés provider email, passphrase de sauvegarde.
+## Prepare configuration
 
-## Installation
+From the repository root in PowerShell:
+
+```powershell
+Copy-Item .env.preprod.example .env.preprod
+Select-String -Path .env.preprod -Pattern 'replace-with-|example|simulation'
+```
+
+Replace every placeholder and review every URL/origin/provider. Generate secrets using an approved cryptographic secret manager. Example commands for a controlled POSIX shell are:
 
 ```sh
-cp .env.preprod.example .env.preprod
-# éditer toutes les valeurs replace-with-*
-openssl rand -base64 32 # EMAIL_ENCRYPTION_KEY_B64
-openssl rand -base64 32 # JUDICIAL_EXPORT_KEY_B64
-openssl rand -base64 48 # RESPONDENT_TOKEN_SECRET / EMAIL_HASH_PEPPER
+openssl rand -base64 32  # EMAIL_ENCRYPTION_KEY_B64
+openssl rand -base64 32  # JUDICIAL_EXPORT_KEY_B64
+openssl rand -base64 48  # RESPONDENT_TOKEN_SECRET / EMAIL_HASH_PEPPER
+```
+
+Do not copy command output into tickets, shell history, chat, or repository files. Do not reuse a value across purposes.
+
+## Deploy
+
+```powershell
 npm run preprod:up
 ```
 
-Le compose exécute d'abord `migrator`, puis démarre l'API, le front statique Nginx et le reverse proxy TLS. Les migrations sont exécutées par `prisma migrate deploy`, pas par `migrate dev`.
+Compose runs the Prisma migrator before the API, frontend, and TLS reverse proxy. Deployment uses `prisma migrate deploy`, never development migration commands.
 
-## Vérifications immédiates
+## Verify
 
-```sh
-curl -k https://<host>/healthz
-curl -k https://<host>/api/health/ready
+```powershell
+curl.exe -k https://<host>/healthz
+curl.exe -k https://<host>/api/health/ready
 npm run preprod:logs
 ```
 
-La préproduction n'est considérée recréée que si :
+Preproduction is accepted only when:
 
-1. `reverse-proxy`, `frontend`, `backend` et `postgres` sont healthy.
-2. `/api/health/ready` répond `status: ok`.
-3. Les logs backend sont au format JSON et incluent `correlationId`.
-4. Le cookie de session est `HttpOnly`, `Secure`, `SameSite=strict` ou mieux selon la politique.
-5. Aucun secret n'est présent dans le bundle front : seules les variables `VITE_*` publiques sont utilisées.
+1. `reverse-proxy`, `frontend`, `backend`, and `postgres` report healthy.
+2. Readiness reports both database domains as `ok`.
+3. Migration status matches the reviewed release.
+4. Backend/proxy logs are structured and include a correlation identifier without secrets/contact/answer bodies.
+5. Staff session cookies are `HttpOnly`, `Secure`, and use the approved `SameSite` value.
+6. CORS accepts only final HTTPS frontend origins.
+7. TLS/protocol/certificate/HSTS checks pass from an independent client.
+8. No secret appears in built frontend assets; only explicitly public `VITE_*` values are present.
+9. Simulation delivery providers are disabled in production-like mode.
+10. Representative RBAC/ABAC, invitation, respondent autosave/submit, terminal, statistics suppression, audit, backup, and monitoring checks pass with fabricated data.
 
-## Rotation des secrets
+Record the release, configuration/change reference, image digests, migration output, health results, certificate result, test evidence, approvers, and time.
 
-- `RESPONDENT_TOKEN_SECRET` : rotation planifiée avec invalidation des anciennes invitations non soumises, ou fenêtre de double validation si un mécanisme multi-secret est ajouté.
-- `EMAIL_ENCRYPTION_KEY_B64` : rotation par ré-encryption contrôlée du coffre identité ; ne pas remplacer brutalement sans migration.
-- `EMAIL_HASH_PEPPER` : rotation avec recalcul des hash email si l'ancien pepper est encore disponible.
-- `JUDICIAL_EXPORT_KEY_B64` : rotation sans impact sur les données, mais vérifier la déchiffrabilité des exports actifs avant purge.
+## Secret rotation constraints
+
+- `RESPONDENT_TOKEN_SECRET`: current implementation has no multi-key verification. Rotation invalidates existing respondent/terminal-style signatures that depend on it; plan invitation handling and communication.
+- `EMAIL_ENCRYPTION_KEY_B64`: rotate through controlled re-encryption with verified rollback/backup. Replacing it directly makes existing ciphertext unreadable.
+- `EMAIL_HASH_PEPPER`: rotation requires recomputing hashes while authorized access to the old pepper/data remains.
+- `JUDICIAL_EXPORT_KEY_B64`: verify active export decryptability/retention before retiring the old key.
+- Session/database/provider credentials: revoke/rotate with staged health checks and documented dependency impact.
+
+Keys and peppers require versioned custody, access review, recovery, and destruction procedures outside this repository.
+
+## Rollback
+
+Define rollback before deploying. Application rollback may be unsafe after a non-backward-compatible database migration. Prefer forward fixes and expand/contract migrations. If rollback is authorized, preserve evidence, confirm schema compatibility, use a reviewed image digest, verify both database domains, and repeat the acceptance checks.

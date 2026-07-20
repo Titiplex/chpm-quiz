@@ -1,16 +1,23 @@
-# Production / préproduction
+# Production and preproduction runbooks
 
-Documents livrés pour les passes 8 et 9 :
+These runbooks describe the repository's operational baseline. They must be adapted to the target organization's infrastructure, contacts, legal decisions, recovery objectives, and security policy.
 
-- `installation.md` : recréer une préproduction depuis dépôt + variables + migrations.
-- `exploitation.md` : services, healthchecks, métriques, alertes et logs.
-- `incident-response.md` : procédure incident / violation potentielle.
-- `backup-restore.md` : sauvegarde chiffrée et test de restauration.
-- `judicial-access.md` : accès exceptionnel email-code.
-- `retention-purge.md` : conservation, purge, expiration.
-- `respondent-notice.md` : notice répondant prête à intégrer.
-- `rgpd-register.md` : registre RGPD finalisable.
-- `aipd-checklist.md` : checklist AIPD.
+| Document | Purpose |
+| --- | --- |
+| [Installation](installation.md) | Recreate preproduction from repository, environment, migrations, and TLS material |
+| [Operations](exploitation.md) | Services, health, metrics, alerts, logs, maintenance, and routine checks |
+| [Backup and restore](backup-restore.md) | Encrypted backups and isolated restoration tests |
+| [Incident response](incident-response.md) | Containment, evidence, privacy assessment, recovery, and closure |
+| [Retention and purge](retention-purge.md) | Configured lifetimes and safe maintenance actions |
+| [Respondent notice](respondent-notice.md) | English baseline notice requiring local approval/localization |
+| [GDPR processing register](rgpd-register.md) | Technical draft for the controller's formal record |
+| [DPIA checklist](aipd-checklist.md) | Screening and approval questions for high-risk processing |
+| [Exceptional identity access](judicial-access.md) | DPO-controlled code-to-contact procedure |
 
-Référentiel de recette : `docs/recette/`.
-OpenAPI : `docs/openapi.yaml`.
+Acceptance evidence is organized under [docs/recette](../recette/README.md). The API contract is [docs/openapi.yaml](../openapi.yaml).
+
+## Release gate
+
+Preproduction may start only after placeholders are replaced, TLS/secrets/providers are configured, migrations succeed, and health checks pass. Production additionally requires signed privacy/legal decisions, security and accessibility acceptance, tested restoration, monitored alerts, incident rehearsal, identity-access rehearsal, and organization-approved authentication.
+
+Documentation marked “draft,” “recommended,” or “to be approved” is not a passed control.
