@@ -69,6 +69,16 @@ export function createConnectedRoutes(): RouteRecordRaw[] {
       },
     },
     {
+      path: '/change-password',
+      name: 'change-password',
+      component: () => import('@/views/ChangePasswordView.vue'),
+      meta: {
+        label: 'Change password',
+        allowedRoles: [...allRoles],
+        requiresAuthenticatedUser: true,
+      },
+    },
+    {
       path: '/',
       name: 'home',
       component: () => import('@/views/HomeView.vue'),
@@ -154,7 +164,17 @@ export function createConnectedRoutes(): RouteRecordRaw[] {
       component: () => import('@/views/ComplianceView.vue'),
       meta: {
         label: t('nav.rgpd'),
-        allowedRoles: ['admin', 'analyst', 'technical_admin', 'judicial_officer'],
+        allowedRoles: ['admin', 'analyst', 'dpo', 'technical_admin', 'judicial_officer'],
+        requiresAuthenticatedUser: true,
+      },
+    },
+    {
+      path: '/coffre-email',
+      name: 'identity-vault',
+      component: () => import('@/views/IdentityVaultView.vue'),
+      meta: {
+        label: t('nav.identityVault'),
+        allowedRoles: ['dpo', 'judicial_officer'],
         requiresAuthenticatedUser: true,
       },
     },
@@ -208,6 +228,22 @@ export function createAuthorizationGuard(staticPagesDemo = isStaticPagesDemo) {
       }
 
       return true
+    }
+
+    if (
+      session.isAuthenticated &&
+      session.user?.mustChangePassword &&
+      to.name !== 'change-password'
+    ) {
+      return '/change-password'
+    }
+
+    if (
+      to.name === 'change-password' &&
+      session.isAuthenticated &&
+      !session.user?.mustChangePassword
+    ) {
+      return defaultPathByRole[session.currentRole]
     }
 
     if (to.meta.requiresAuthenticatedUser && !session.isAuthenticated) {

@@ -4,7 +4,7 @@ import { loadPrismaClient } from './prisma-client.loader'
 
 const PrismaClientBase = loadPrismaClient()
 
-const identityDelegates = ['identityVaultEntry', 'emailDeliveryEvent', 'identityVaultAuditLog'] as const
+const identityDelegates = ['identityVaultEntry', 'emailDeliveryEvent', 'identityVaultAuditLog', 'outboundDeliveryJob'] as const
 
 @Injectable()
 export class PrismaService extends PrismaClientBase implements OnModuleInit, OnModuleDestroy {

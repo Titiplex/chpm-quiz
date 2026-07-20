@@ -24,11 +24,13 @@ export class HealthController {
     const checks = await Promise.allSettled([
       this.prisma.$queryRaw`SELECT 1`,
       this.identityPrisma.$queryRaw`SELECT 1`,
+      this.identityPrisma.outboundDeliveryJob.findFirst({ select: { id: true } }),
     ])
 
     const operational = checks[0]?.status === 'fulfilled'
     const identity = checks[1]?.status === 'fulfilled'
-    const status = operational && identity ? 'ok' : 'degraded'
+    const deliveryQueue = checks[2]?.status === 'fulfilled'
+    const status = operational && identity && deliveryQueue ? 'ok' : 'degraded'
 
     const payload = {
       status,
@@ -36,6 +38,7 @@ export class HealthController {
       checks: {
         operationalDatabase: operational ? 'ok' : 'failed',
         identityDatabase: identity ? 'ok' : 'failed',
+        deliveryQueue: deliveryQueue ? 'ok' : 'failed',
       },
       timestamp: new Date().toISOString(),
     }

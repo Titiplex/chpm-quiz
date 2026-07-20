@@ -130,6 +130,7 @@ async function main() {
         where: { email: seed.email },
         update: {
           passwordHash,
+          mustChangePassword: false,
           displayName: seed.displayName,
           role: seed.role,
           isActive: true,
@@ -140,6 +141,7 @@ async function main() {
         create: {
           email: seed.email,
           passwordHash,
+          mustChangePassword: false,
           displayName: seed.displayName,
           role: seed.role,
           isActive: true,

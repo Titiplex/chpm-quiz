@@ -24,6 +24,9 @@ export interface AuthUserRecord {
   displayName: string
   role: UserRole
   isActive: boolean
+  mustChangePassword?: boolean
+  failedLoginCount?: number
+  lockedUntil?: Date | null
   building: AuthBuilding | null
   createdAt: Date
   updatedAt: Date

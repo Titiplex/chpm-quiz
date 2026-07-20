@@ -7,18 +7,18 @@ import { apiRequest } from '@/services/api'
 import { useSessionStore } from '@/stores/session'
 import type {
   CreateJudicialAccessRequest,
-  IdentityVaultStatusResponse,
   JudicialAccessRequestRecord,
+  JudicialEncryptedExport,
   JudicialAccessRequestResponse,
   JudicialAccessRequestsResponse,
 } from '@shared/types/api'
 
 const session = useSessionStore()
-const status = ref<IdentityVaultStatusResponse['status'] | null>(null)
 const requests = ref<JudicialAccessRequestRecord[]>([])
 const message = ref<string | null>(null)
 const error = ref<string | null>(null)
-const secureDocument = ref<JudicialAccessRequestResponse['secureDocument'] | null>(null)
+const encryptedExport = ref<JudicialEncryptedExport | null>(null)
+const encryptedExportReference = ref('')
 const isLoading = ref(false)
 
 const form = reactive({
@@ -30,9 +30,11 @@ const form = reactive({
   comments: '',
 })
 
+const canCreate = computed(() => session.currentRole === 'judicial_officer')
 const canValidateDpo = computed(() => session.currentRole === 'dpo')
 const canValidateLegal = computed(() => session.currentRole === 'judicial_officer')
-const canExecute = computed(() => session.currentRole === 'judicial_officer')
+const canExecute = computed(() => session.currentRole === 'dpo')
+const canClose = computed(() => session.currentRole === 'judicial_officer')
 
 onMounted(async () => {
   await refresh()
@@ -42,11 +44,9 @@ async function refresh(): Promise<void> {
   isLoading.value = true
   error.value = null
   try {
-    const [vaultStatus, requestList] = await Promise.all([
-      apiRequest<IdentityVaultStatusResponse>('/identity-vault/status'),
-      apiRequest<JudicialAccessRequestsResponse>('/judicial-access/requests'),
-    ])
-    status.value = vaultStatus.status
+    const requestList = await apiRequest<JudicialAccessRequestsResponse>(
+      '/judicial-access/requests',
+    )
     requests.value = requestList.requests
   } catch (caught) {
     error.value =
@@ -111,8 +111,13 @@ async function executeRequest(id: string): Promise<void> {
         method: 'POST',
       },
     )
-    secureDocument.value = response.secureDocument ?? null
-    message.value = `Export chiffré placé dans le coffre documentaire pour ${response.judicialRequest.requestReference}. Aucun email ni ciphertext n’est affiché.`
+    if (!response.export) {
+      throw new Error('The API did not return the expected encrypted export.')
+    }
+    encryptedExport.value = response.export
+    encryptedExportReference.value = response.judicialRequest.requestReference
+    downloadEncryptedExport(response.export, response.judicialRequest.requestReference)
+    message.value = `Export chiffré téléchargé pour ${response.judicialRequest.requestReference}. Vérifiez son empreinte avant transmission.`
   })
 }
 
@@ -123,7 +128,7 @@ async function closeRequest(id: string): Promise<void> {
       {
         method: 'POST',
         body: {
-          closureReport:
+          comments:
             'Clôture après transmission sécurisée et vérification de l’empreinte en coffre documentaire.',
         },
       },
@@ -132,17 +137,20 @@ async function closeRequest(id: string): Promise<void> {
   })
 }
 
-async function simulateDeniedAccess(): Promise<void> {
+async function rejectRequest(id: string): Promise<void> {
+  const reason = window.prompt('Motif du rejet (obligatoire) :')?.trim()
+  if (!reason) return
+
   await runWorkflow(async () => {
-    await apiRequest('/identity-vault/access-attempt', {
-      method: 'POST',
-      body: {
-        publicCode: '8F4K-29QX',
-        justification: 'Simulation d’une tentative hors workflow direct.',
+    const response = await apiRequest<JudicialAccessRequestResponse>(
+      `/judicial-access/requests/${id}/reject`,
+      {
+        method: 'POST',
+        body: { reason },
       },
-    })
-    message.value = 'Tentative routée vers le workflow judiciaire, sans lecture directe.'
-  }, false)
+    )
+    message.value = `Demande ${response.judicialRequest.requestReference} rejetée et auditée.`
+  })
 }
 
 async function runWorkflow(action: () => Promise<void>, refreshAfter = true): Promise<void> {
@@ -157,6 +165,27 @@ async function runWorkflow(action: () => Promise<void>, refreshAfter = true): Pr
   } finally {
     isLoading.value = false
   }
+}
+
+function downloadEncryptedExport(value: JudicialEncryptedExport, requestReference: string): void {
+  const safeReference = requestReference.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-|-$/g, '')
+  const payload = JSON.stringify(
+    {
+      requestReference,
+      fingerprint: value.fingerprint,
+      expiresAt: value.expiresAt,
+      rowCount: value.rowCount,
+      envelope: value.envelope,
+    },
+    null,
+    2,
+  )
+  const url = URL.createObjectURL(new Blob([payload], { type: 'application/json' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `judicial-export-${safeReference || 'request'}.encrypted.json`
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 function formatDate(value: string | null | undefined): string {
@@ -184,8 +213,8 @@ function statusLabel(value: string): string {
     <div class="container-fluid px-4 px-xl-5">
       <PageHeader
         eyebrow="Coffre email"
-        title="Accès judiciaire séparé du dashboard métier"
-        description="Écran réservé : il matérialise le workflow exceptionnel d’accès code-email, avec double validation, export chiffré et journalisation dans le coffre identité et l’audit applicatif."
+        title="Accès judiciaire contrôlé"
+        description="Console dédiée au workflow exceptionnel d’accès code-contact : demande juridique, double validation indépendante, export chiffré à durée limitée et double journalisation."
         badge="Accès restreint"
       />
       <RoleGateInfo class="mb-4" />
@@ -194,47 +223,7 @@ function statusLabel(value: string): string {
       <div v-if="message" class="alert alert-success rounded-4" role="status">{{ message }}</div>
 
       <div class="row g-4">
-        <div class="col-xl-4">
-          <div class="demo-card h-100">
-            <p class="section-eyebrow mb-2">Séparation logique</p>
-            <h2 class="h4 fw-bold mb-4">État du coffre</h2>
-            <div v-if="status" class="d-grid gap-3">
-              <div class="p-3 rounded-4 border bg-white">
-                <strong>Modèle</strong>
-                <div class="muted">{{ status.model }}</div>
-              </div>
-              <div class="p-3 rounded-4 border bg-white">
-                <strong>Table identité</strong>
-                <div class="muted">{{ status.identityTable }}</div>
-              </div>
-              <div class="p-3 rounded-4 border bg-white">
-                <strong>Mode d’accès</strong>
-                <div class="muted">{{ status.accessMode }}</div>
-              </div>
-              <span
-                class="badge-soft"
-                :class="status.currentRoleCanExecuteEmailAccess ? 'warning' : 'danger'"
-              >
-                Rôle courant : {{ status.currentRole }} · accès direct
-                {{ status.currentRoleCanExecuteEmailAccess ? 'habilité via procédure' : 'refusé' }}
-              </span>
-            </div>
-            <button
-              class="btn btn-outline-danger rounded-pill mt-4"
-              type="button"
-              :disabled="isLoading"
-              @click="simulateDeniedAccess"
-            >
-              Simuler une tentative sensible
-            </button>
-            <p class="small muted mt-3 mb-0">
-              Cette action ne renvoie jamais l’email. Elle produit une trace d’audit, y compris en
-              cas de refus.
-            </p>
-          </div>
-        </div>
-
-        <div class="col-xl-8">
+        <div v-if="canCreate" class="col-12">
           <div class="demo-card h-100">
             <p class="section-eyebrow mb-2">Nouvelle demande</p>
             <h2 class="h4 fw-bold mb-4">Créer une JudicialAccessRequest</h2>
@@ -326,8 +315,8 @@ function statusLabel(value: string): string {
                     </td>
                     <td class="small muted">
                       <div>{{ request.exportFingerprint ?? '—' }}</div>
-                      <div v-if="request.secureDocumentId">
-                        coffre : {{ request.secureDocumentId }}
+                      <div v-if="request.exportExpiresAt">
+                        expiration : {{ formatDate(request.exportExpiresAt) }}
                       </div>
                     </td>
                     <td>
@@ -335,7 +324,12 @@ function statusLabel(value: string): string {
                         <button
                           class="btn btn-sm btn-outline-primary rounded-pill"
                           type="button"
-                          :disabled="!canValidateDpo || isLoading"
+                          :disabled="
+                            !canValidateDpo ||
+                            Boolean(request.dpoValidationUserId) ||
+                            !['received', 'validated'].includes(request.status) ||
+                            isLoading
+                          "
                           @click="validateDpo(request.id)"
                         >
                           Valider DPO
@@ -343,7 +337,12 @@ function statusLabel(value: string): string {
                         <button
                           class="btn btn-sm btn-outline-primary rounded-pill"
                           type="button"
-                          :disabled="!canValidateLegal || isLoading"
+                          :disabled="
+                            !canValidateLegal ||
+                            Boolean(request.legalValidationUserId) ||
+                            !['received', 'validated'].includes(request.status) ||
+                            isLoading
+                          "
                           @click="validateLegal(request.id)"
                         >
                           Valider juridique
@@ -359,10 +358,20 @@ function statusLabel(value: string): string {
                         <button
                           class="btn btn-sm btn-outline-secondary rounded-pill"
                           type="button"
-                          :disabled="request.status !== 'executed' || isLoading"
+                          :disabled="!canClose || request.status !== 'executed' || isLoading"
                           @click="closeRequest(request.id)"
                         >
                           Clôturer
+                        </button>
+                        <button
+                          class="btn btn-sm btn-outline-danger rounded-pill"
+                          type="button"
+                          :disabled="
+                            !['received', 'validated'].includes(request.status) || isLoading
+                          "
+                          @click="rejectRequest(request.id)"
+                        >
+                          Rejeter
                         </button>
                       </div>
                     </td>
@@ -373,16 +382,27 @@ function statusLabel(value: string): string {
           </div>
         </div>
 
-        <div v-if="secureDocument" class="col-12">
+        <div v-if="encryptedExport" class="col-12">
           <div class="demo-card border border-warning">
-            <p class="section-eyebrow mb-2">Coffre documentaire sécurisé</p>
-            <h2 class="h5 fw-bold">Empreinte {{ secureDocument.fingerprint }}</h2>
-            <p class="muted mb-2">{{ secureDocument.warning }}</p>
-            <code class="small d-block text-break"
-              >{{ secureDocument.algorithm }} · {{ secureDocument.keyRef }} ·
-              {{ secureDocument.storageRef }} · expiration
-              {{ formatDate(secureDocument.expiresAt) }}</code
+            <p class="section-eyebrow mb-2">Export chiffré en mémoire</p>
+            <h2 class="h5 fw-bold">Empreinte {{ encryptedExport.fingerprint }}</h2>
+            <p class="muted mb-3">
+              Le fichier contient uniquement une enveloppe AES-256-GCM. Conservez-le dans le coffre
+              documentaire approuvé, transmettez la clé par un canal séparé et détruisez-le à
+              l’expiration.
+            </p>
+            <code class="small d-block text-break mb-3"
+              >{{ encryptedExport.envelope.algorithm }} · {{ encryptedExport.envelope.keyRef }} ·
+              {{ encryptedExport.rowCount }} ligne(s) · expiration
+              {{ formatDate(encryptedExport.expiresAt) }}</code
             >
+            <button
+              class="btn btn-outline-warning rounded-pill"
+              type="button"
+              @click="downloadEncryptedExport(encryptedExport, encryptedExportReference)"
+            >
+              Télécharger à nouveau l’enveloppe chiffrée
+            </button>
           </div>
         </div>
       </div>

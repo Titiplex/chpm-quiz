@@ -13,11 +13,36 @@ import { loadPrismaClient } from '../src/prisma/prisma-client.loader'
 const EMAIL_CIPHER_VERSION = 'v1'
 const EMAIL_ALGORITHM = 'aes-256-gcm'
 const EXPORT_ALGORITHM = 'aes-256-gcm'
-const CODE_REGEX = /^[A-Z0-9][A-Z0-9-]{3,64}$/
 const MAX_CODES_PER_EXPORT = 50
 
-type AuthenticatedDpo = { id: string; email: string; displayName: string; role: string; isActive: boolean; passwordHash: string }
-type IdentityRow = { uniqueCode: string; contactChannel: string; encryptedEmail: string | null; encryptedPhone: string | null; questionnaireVersionId: string; buildingId: string }
+type AuthenticatedDpo = {
+  id: string
+  organizationId: string | null
+  email: string
+  displayName: string
+  role: string
+  isActive: boolean
+  passwordHash: string
+}
+type IdentityRow = {
+  uniqueCode: string
+  contactChannel: string
+  encryptedEmail: string | null
+  encryptedPhone: string | null
+  questionnaireVersionId: string
+  buildingId: string
+}
+type ValidatedJudicialRequest = {
+  id: string
+  organizationId: string | null
+  requestReference: string
+  legalBasisDescription: string
+  courtOrderReference: string | null
+  requestedPublicCodes: string[]
+  status: string
+  dpoValidationUserId: string | null
+  legalValidationUserId: string | null
+}
 
 loadEnvFile(join(process.cwd(), '.env'))
 
@@ -33,10 +58,15 @@ async function main() {
 
   printBanner()
   const dpo = await loginDpo()
-  const justification = await promptLongRequired('Justification opérationnelle DPO')
-  const procedureReference = await promptLongRequired('Référence légale / procédure')
-  const codes = await promptPublicCodes()
-  await requireTypedConfirmation('Tapez "EXPORT DPO" pour produire l’export minimal code-contact chiffré', 'EXPORT DPO')
+  const requestReference = await promptRequired('Référence de la demande judiciaire validée')
+  const judicialRequest = await loadValidatedJudicialRequest(requestReference, dpo)
+  const justification = await promptLongRequired('Note d’exécution DPO')
+  const procedureReference = judicialRequest.requestReference
+  const codes = judicialRequest.requestedPublicCodes
+  await requireTypedConfirmation(
+    'Tapez "EXPORT DPO" pour produire l’export minimal code-contact chiffré',
+    'EXPORT DPO',
+  )
 
   const rows = await loadExplicitIdentityRows(codes)
   const missingCodes = codes.filter((code) => !rows.some((row) => row.uniqueCode === code))
@@ -44,6 +74,9 @@ async function main() {
     exportedAt: new Date().toISOString(),
     exportedBy: { id: dpo.id, email: dpo.email, displayName: dpo.displayName },
     procedureReference,
+    requestId: judicialRequest.id,
+    legalBasisDescription: judicialRequest.legalBasisDescription,
+    courtOrderReference: judicialRequest.courtOrderReference,
     justification,
     requestedCodes: codes,
     missingCodes,
@@ -58,6 +91,7 @@ async function main() {
 
   const encrypted = await encryptExport(JSON.stringify(payload, null, 2))
   const fingerprint = createHash('sha256').update(encrypted.fileBytes).digest('hex')
+  const expiresAt = new Date(Date.now() + exportTtlMinutes() * 60_000)
   const outputDir = resolve(process.env.DPO_EXPORT_DIR ?? join(process.cwd(), 'dpo-exports'))
   mkdirSync(outputDir, { recursive: true })
   const filename = `dpo-code-contact-export-${new Date().toISOString().replace(/[:.]/g, '-')}.json.enc`
@@ -65,9 +99,22 @@ async function main() {
   writeFileSync(filepath, encrypted.fileBytes, { mode: 0o600 })
 
   await prisma.$transaction(async (tx: any) => {
+    await tx.judicialAccessRequest.update({
+      where: { id: judicialRequest.id },
+      data: {
+        status: 'executed',
+        executedByUserId: dpo.id,
+        executedAt: new Date(),
+        exportFingerprint: fingerprint,
+        exportExpiresAt: expiresAt,
+        exportDeletedAt: null,
+      },
+      select: { id: true },
+    })
     await tx.auditLog.create({
       data: {
         actorUserId: dpo.id,
+        organizationId: dpo.organizationId,
         action: 'identity_vault.dpo_console.export_code_contact',
         entityType: 'IdentityVault',
         entityId: null,
@@ -76,6 +123,7 @@ async function main() {
           source: 'dpo-console',
           osUser: getOsUser(),
           procedureReference,
+          judicialRequestId: judicialRequest.id,
           justification,
           requestedCodeCount: codes.length,
           requestedCodes: codes,
@@ -90,18 +138,21 @@ async function main() {
         ipAddress: 'local-cli',
         userAgent: `chpm-dpo-console ${process.version}`,
       },
+      select: { id: true },
     })
 
     await tx.identityVaultAuditLog.create({
       data: {
         actorUserId: dpo.id,
         action: 'dpo_console.export_code_contact',
+        requestId: judicialRequest.id,
         publicCode: codes.length === 1 ? codes[0] : undefined,
         ipAddress: 'local-cli',
         metadata: {
           source: 'dpo-console',
           osUser: getOsUser(),
           procedureReference,
+          judicialRequestId: judicialRequest.id,
           justification,
           requestedCodes: codes,
           missingCodes,
@@ -110,23 +161,74 @@ async function main() {
           exportPath: filepath,
         },
       },
+      select: { id: true },
     })
   })
 
   console.log('\nExport DPO produit.')
   console.log(`- Fichier chiffré : ${filepath}`)
   console.log(`- Empreinte SHA-256 : ${fingerprint}`)
+  console.log(`- Expiration obligatoire : ${expiresAt.toISOString()}`)
   console.log(`- Codes demandés : ${codes.length}`)
   console.log(`- Lignes exportées : ${rows.length}`)
   if (missingCodes.length) console.log(`- Codes introuvables : ${missingCodes.join(', ')}`)
-  console.log('Aucun email ni téléphone n’a été affiché dans le terminal. Le fichier doit être transféré et conservé selon la procédure DPO validée.\n')
+  console.log(
+    'Aucun email ni téléphone n’a été affiché dans le terminal. Le fichier doit être transféré et conservé selon la procédure DPO validée.\n',
+  )
+}
+
+async function loadValidatedJudicialRequest(
+  reference: string,
+  dpo: AuthenticatedDpo,
+): Promise<ValidatedJudicialRequest> {
+  if (!dpo.organizationId) throw new Error('Le compte DPO doit être affecté à une organisation.')
+  const judicialRequest = (await prisma.judicialAccessRequest.findFirst({
+    where: {
+      organizationId: dpo.organizationId,
+      requestReference: reference.trim(),
+    },
+    select: {
+      id: true,
+      organizationId: true,
+      requestReference: true,
+      legalBasisDescription: true,
+      courtOrderReference: true,
+      requestedPublicCodes: true,
+      status: true,
+      dpoValidationUserId: true,
+      legalValidationUserId: true,
+    },
+  })) as ValidatedJudicialRequest | null
+
+  if (!judicialRequest || judicialRequest.organizationId !== dpo.organizationId) {
+    throw new Error('Demande judiciaire introuvable dans le périmètre du DPO.')
+  }
+  if (
+    judicialRequest.status !== 'validated' ||
+    !judicialRequest.dpoValidationUserId ||
+    !judicialRequest.legalValidationUserId
+  ) {
+    throw new Error('La demande doit avoir les validations DPO et juridique avant tout export.')
+  }
+  if (
+    !judicialRequest.requestedPublicCodes.length ||
+    judicialRequest.requestedPublicCodes.length > MAX_CODES_PER_EXPORT
+  ) {
+    throw new Error(`La demande doit contenir entre 1 et ${MAX_CODES_PER_EXPORT} codes explicites.`)
+  }
+  await assertCodesBelongToOrganization(judicialRequest.requestedPublicCodes, dpo.organizationId)
+  return judicialRequest
 }
 
 async function loginDpo(): Promise<AuthenticatedDpo> {
   console.log('\nConnexion nominative DPO obligatoire.\n')
   const email = (await promptRequired('Email DPO')).trim().toLowerCase()
   const password = await askHidden('Mot de passe : ')
-  const user = (await prisma.user.findUnique({ where: { email } })) as AuthenticatedDpo | null
+  const users = (await prisma.$queryRawUnsafe(
+    'SELECT "id", "organizationId", "email", "displayName", "role", "isActive", "passwordHash" FROM "public"."dpo_console_users" WHERE "email" = $1 LIMIT 1',
+    email,
+  )) as AuthenticatedDpo[]
+  const user = users[0] ?? null
 
   if (!user || !user.isActive || user.role !== 'dpo') {
     await auditFailedLogin(email, user?.id ?? null, user?.role ?? null, 'not_active_dpo')
@@ -142,38 +244,42 @@ async function loginDpo(): Promise<AuthenticatedDpo> {
   await prisma.auditLog.create({
     data: {
       actorUserId: user.id,
+      organizationId: user.organizationId,
       action: 'identity_vault.dpo_console.login_success',
       entityType: 'IdentityVault',
       metadata: { source: 'dpo-console', osUser: getOsUser() },
       ipAddress: 'local-cli',
       userAgent: `chpm-dpo-console ${process.version}`,
     },
+    select: { id: true },
   })
   return user
 }
 
-async function auditFailedLogin(email: string, actorUserId: string | null, role: string | null, reason: string) {
-  await prisma.auditLog.create({
-    data: {
-      actorUserId,
-      action: 'identity_vault.dpo_console.login_denied',
-      entityType: 'IdentityVault',
-      metadata: { source: 'dpo-console', osUser: getOsUser(), email, role, reason },
-      ipAddress: 'local-cli',
-      userAgent: `chpm-dpo-console ${process.version}`,
-    },
-  }).catch(() => undefined)
+async function auditFailedLogin(
+  email: string,
+  actorUserId: string | null,
+  role: string | null,
+  reason: string,
+) {
+  await prisma.auditLog
+    .create({
+      data: {
+        actorUserId,
+        action: 'identity_vault.dpo_console.login_denied',
+        entityType: 'IdentityVault',
+        metadata: { source: 'dpo-console', osUser: getOsUser(), email, role, reason },
+        ipAddress: 'local-cli',
+        userAgent: `chpm-dpo-console ${process.version}`,
+      },
+      select: { id: true },
+    })
+    .catch(() => undefined)
 }
 
-async function promptPublicCodes() {
-  console.log('\nSaisir uniquement des codes publics explicites. Recherche libre par email ou téléphone interdite.')
-  const raw = await promptLongRequired(`Codes publics, séparés par virgules ou espaces, maximum ${MAX_CODES_PER_EXPORT}`)
-  const codes = Array.from(new Set(raw.split(/[\s,;]+/).map((value) => value.trim().toUpperCase()).filter(Boolean)))
-  if (codes.length === 0) throw new Error('Au moins un code public explicite est obligatoire.')
-  if (codes.length > MAX_CODES_PER_EXPORT) throw new Error(`Export refusé : maximum ${MAX_CODES_PER_EXPORT} codes explicites par exécution.`)
-  const invalid = codes.filter((code) => !CODE_REGEX.test(code))
-  if (invalid.length) throw new Error(`Code(s) public(s) invalides : ${invalid.join(', ')}`)
-  return codes
+function exportTtlMinutes(): number {
+  const value = Number(process.env.JUDICIAL_EXPORT_TTL_MINUTES ?? '60')
+  return Number.isFinite(value) ? Math.min(Math.max(Math.floor(value), 5), 1_440) : 60
 }
 
 async function loadExplicitIdentityRows(codes: string[]) {
@@ -194,13 +300,34 @@ async function loadExplicitIdentityRows(codes: string[]) {
   })) as IdentityRow[]
 }
 
+async function assertCodesBelongToOrganization(codes: string[], organizationId: string) {
+  const rows = (await prisma.invitation.findMany({
+    where: {
+      publicCode: { in: codes },
+      building: { organizationId },
+    },
+    select: { publicCode: true },
+  })) as Array<{ publicCode: string }>
+  const scopedCodes = new Set(rows.map((row) => row.publicCode))
+  if (codes.some((code) => !scopedCodes.has(code))) {
+    throw new Error(
+      'Un ou plusieurs codes sont absents ou hors du périmètre de l’organisation DPO.',
+    )
+  }
+}
+
 function decryptEmail(payload: string): string {
   const [version, ivB64, authTagB64, ciphertextB64] = payload.split('.')
   if (version !== EMAIL_CIPHER_VERSION || !ivB64 || !authTagB64 || !ciphertextB64) {
     throw new Error('Format de chiffrement email invalide')
   }
 
-  const decipher = createDecipheriv(EMAIL_ALGORITHM, emailEncryptionKey(), Buffer.from(ivB64, 'base64url'), { authTagLength: 16 })
+  const decipher = createDecipheriv(
+    EMAIL_ALGORITHM,
+    emailEncryptionKey(),
+    Buffer.from(ivB64, 'base64url'),
+    { authTagLength: 16 },
+  )
   decipher.setAAD(Buffer.from(version, 'utf8'))
   decipher.setAuthTag(Buffer.from(authTagB64, 'base64url'))
   return Buffer.concat([
@@ -229,25 +356,32 @@ function emailEncryptionKey(): Buffer {
   const rawKey = process.env.EMAIL_ENCRYPTION_KEY_B64
   if (rawKey) {
     const key = Buffer.from(rawKey, 'base64')
-    if (key.length !== 32) throw new Error('EMAIL_ENCRYPTION_KEY_B64 doit contenir 32 octets encodés en base64')
+    if (key.length !== 32)
+      throw new Error('EMAIL_ENCRYPTION_KEY_B64 doit contenir 32 octets encodés en base64')
     return key
   }
-  if (process.env.NODE_ENV === 'production') throw new Error('EMAIL_ENCRYPTION_KEY_B64 est obligatoire en production')
-  return createHash('sha256').update(process.env.DEV_EMAIL_ENCRYPTION_SECRET ?? 'development-email-key-change-me').digest()
+  if (process.env.NODE_ENV === 'production')
+    throw new Error('EMAIL_ENCRYPTION_KEY_B64 est obligatoire en production')
+  return createHash('sha256')
+    .update(process.env.DEV_EMAIL_ENCRYPTION_SECRET ?? 'development-email-key-change-me')
+    .digest()
 }
 
 async function exportEncryptionKey(): Promise<Buffer> {
   const rawKey = process.env.DPO_EXPORT_ENCRYPTION_KEY_B64
   if (rawKey) {
     const key = Buffer.from(rawKey, 'base64')
-    if (key.length !== 32) throw new Error('DPO_EXPORT_ENCRYPTION_KEY_B64 doit contenir 32 octets encodés en base64')
+    if (key.length !== 32)
+      throw new Error('DPO_EXPORT_ENCRYPTION_KEY_B64 doit contenir 32 octets encodés en base64')
     return key
   }
 
   const passphrase = await askHidden('Phrase de chiffrement de l’export DPO : ')
   const confirmation = await askHidden('Confirmation phrase de chiffrement : ')
-  if (passphrase !== confirmation) throw new Error('Les deux phrases de chiffrement ne correspondent pas.')
-  if (passphrase.length < 16) throw new Error('La phrase de chiffrement doit contenir au moins 16 caractères.')
+  if (passphrase !== confirmation)
+    throw new Error('Les deux phrases de chiffrement ne correspondent pas.')
+  if (passphrase.length < 16)
+    throw new Error('La phrase de chiffrement doit contenir au moins 16 caractères.')
   return scryptSync(passphrase, 'chpm-dpo-export-v1', 32)
 }
 
@@ -315,20 +449,37 @@ async function askHidden(question: string): Promise<string> {
 }
 
 function resolveDatabaseUrl(): string {
-  const url = process.env.IDENTITY_DATABASE_URL || process.env.OPERATIONAL_DATABASE_URL || process.env.DATABASE_URL
-  if (!url) throw new Error('IDENTITY_DATABASE_URL, OPERATIONAL_DATABASE_URL ou DATABASE_URL doit être défini dans backend/.env')
+  const productionLike =
+    ['production', 'prod'].includes((process.env.NODE_ENV ?? '').toLowerCase()) ||
+    ['production', 'prod'].includes((process.env.APP_ENV ?? '').toLowerCase())
+  const url =
+    process.env.DPO_DATABASE_URL ||
+    (!productionLike
+      ? process.env.IDENTITY_DATABASE_URL ||
+        process.env.OPERATIONAL_DATABASE_URL ||
+        process.env.DATABASE_URL
+      : undefined)
+  if (!url) throw new Error('DPO_DATABASE_URL est obligatoire pour la console DPO en production.')
   return url
 }
 
 async function assertDatabaseTargetAllowed() {
-  const productionLike = ['production', 'prod'].includes((process.env.NODE_ENV ?? '').toLowerCase())
-    || ['production', 'prod'].includes((process.env.APP_ENV ?? '').toLowerCase())
+  const productionLike =
+    ['production', 'prod'].includes((process.env.NODE_ENV ?? '').toLowerCase()) ||
+    ['production', 'prod'].includes((process.env.APP_ENV ?? '').toLowerCase())
   if (productionLike && process.env.CHPM_DPO_CONSOLE_ALLOW_PRODUCTION !== 'true') {
-    throw new Error('Refusé : console DPO bloquée en production sauf CHPM_DPO_CONSOLE_ALLOW_PRODUCTION=true après validation formelle.')
+    throw new Error(
+      'Refusé : console DPO bloquée en production sauf CHPM_DPO_CONSOLE_ALLOW_PRODUCTION=true après validation formelle.',
+    )
   }
   if (!isLocalDatabaseUrl(databaseUrl)) {
-    console.log(`\nAttention : la base ciblée ne semble pas locale : ${redactDatabaseUrl(databaseUrl)}`)
-    await requireTypedConfirmation('Tapez "BASE DISTANTE DPO" pour continuer malgré ce risque', 'BASE DISTANTE DPO')
+    console.log(
+      `\nAttention : la base ciblée ne semble pas locale : ${redactDatabaseUrl(databaseUrl)}`,
+    )
+    await requireTypedConfirmation(
+      'Tapez "BASE DISTANTE DPO" pour continuer malgré ce risque',
+      'BASE DISTANTE DPO',
+    )
   }
 }
 
@@ -344,13 +495,16 @@ function isLocalDatabaseUrl(rawUrl: string) {
 function printBanner() {
   console.log('\nCHPM DPO Console')
   console.log('Console locale dédiée aux exports exceptionnels code-contact.')
-  console.log('Accès réservé à un compte DPO actif, avec justification, référence de procédure, codes explicites, chiffrement et audit.')
+  console.log(
+    'Accès réservé à un compte DPO actif, avec justification, référence de procédure, codes explicites, chiffrement et audit.',
+  )
   console.log('Recherche libre par email/téléphone et export massif non borné interdits.')
   console.log(`Base ciblée : ${redactDatabaseUrl(databaseUrl)}\n`)
 }
 
 function assertInteractiveTerminal() {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error('Cette console doit être lancée depuis un terminal interactif local.')
+  if (!process.stdin.isTTY || !process.stdout.isTTY)
+    throw new Error('Cette console doit être lancée depuis un terminal interactif local.')
 }
 
 function redactDatabaseUrl(rawUrl: string | undefined) {
@@ -381,7 +535,11 @@ function loadEnvFile(path: string) {
 
 function unquoteEnvValue(rawValue: string) {
   const value = rawValue.trim()
-  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) return value.slice(1, -1)
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  )
+    return value.slice(1, -1)
   return value
 }
 

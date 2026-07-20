@@ -144,6 +144,7 @@ async function createOrUpdateSensitiveUserWizard() {
           data: {
             displayName,
             passwordHash,
+            mustChangePassword: true,
             role,
             isActive: true,
             organizationId: scope.organizationId,
@@ -156,6 +157,7 @@ async function createOrUpdateSensitiveUserWizard() {
             email,
             displayName,
             passwordHash,
+            mustChangePassword: true,
             role,
             isActive: true,
             organizationId: scope.organizationId,
@@ -227,7 +229,10 @@ async function resetSensitivePasswordWizard() {
 
   const passwordHash = await hashPassword(passwordResult.password)
   await prisma.$transaction(async (tx: any) => {
-    await tx.user.update({ where: { id: user.id }, data: { passwordHash, isActive: true } })
+    await tx.user.update({
+      where: { id: user.id },
+      data: { passwordHash, isActive: true, mustChangePassword: true, failedLoginCount: 0, lockedUntil: null },
+    })
     const revoked = await tx.session.deleteMany({ where: { userId: user.id } })
     await writeConsoleAudit(tx, 'user.console.sensitive.resetPassword', user.id, {
       email: user.email,

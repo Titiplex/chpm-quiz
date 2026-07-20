@@ -25,7 +25,7 @@ export class IdentityProviderConfigService {
       audience: this.config.get<string>('AUTH_AUDIENCE') || undefined,
       metadataUrl: this.config.get<string>('AUTH_METADATA_URL') || undefined,
       callbackPath: this.config.get<string>('AUTH_CALLBACK_PATH', '/api/auth/callback'),
-      enabled: provider !== 'local',
+      enabled: provider === 'oidc',
     }
   }
 

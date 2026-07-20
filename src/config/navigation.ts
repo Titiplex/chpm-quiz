@@ -64,8 +64,14 @@ const navigationDefinitions: NavigationDefinition[] = [
   {
     labelKey: 'nav.rgpd',
     to: '/rgpd',
-    roles: ['admin', 'analyst', 'technical_admin', 'judicial_officer'],
+    roles: ['admin', 'analyst', 'dpo', 'technical_admin', 'judicial_officer'],
     descriptionKey: 'nav.rgpd.description',
+  },
+  {
+    labelKey: 'nav.identityVault',
+    to: '/coffre-email',
+    roles: ['dpo', 'judicial_officer'],
+    descriptionKey: 'nav.identityVault.description',
   },
 ]
 
@@ -77,8 +83,8 @@ export const defaultPathByRole: Record<UserRole, string> = {
   site_manager: '/moderation',
   questionnaire_admin: '/admin',
   analyst: '/stats',
-  dpo: '/',
-  judicial_officer: '/rgpd',
+  dpo: '/coffre-email',
+  judicial_officer: '/coffre-email',
   technical_admin: '/terminaux',
   service_account: '/',
   respondent: '/',

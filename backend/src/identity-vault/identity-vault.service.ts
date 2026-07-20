@@ -44,6 +44,13 @@ export interface JudicialIdentityExportRow {
   buildingId: string
 }
 
+export interface ClaimedOutboundJob<T> {
+  id: string
+  payload: T
+  attempt: number
+  maxAttempts: number
+}
+
 @Injectable()
 export class IdentityVaultService {
   constructor(
@@ -340,6 +347,107 @@ export class IdentityVaultService {
       questionnaireVersionId: identity.questionnaireVersionId,
       buildingId: identity.buildingId,
     }))
+  }
+
+  async purgeByRetention(identityCutoff: Date, auditCutoff: Date, now = new Date()) {
+    const [identities, deliveryEvents, deliveryJobs, auditLogs] = await this.identityPrisma.$transaction([
+      this.identityPrisma.identityVaultEntry.updateMany({
+        where: { createdAt: { lt: identityCutoff }, deletedAt: null },
+        data: {
+          encryptedEmail: null,
+          emailHash: null,
+          encryptedPhone: null,
+          phoneHash: null,
+          deletionScheduledAt: now,
+          deletedAt: now,
+        },
+      }),
+      this.identityPrisma.emailDeliveryEvent.deleteMany({
+        where: { occurredAt: { lt: identityCutoff } },
+      }),
+      this.identityPrisma.outboundDeliveryJob.deleteMany({
+        where: {
+          status: { in: ['succeeded', 'dead'] },
+          OR: [
+            { completedAt: { lt: identityCutoff } },
+            { createdAt: { lt: identityCutoff } },
+          ],
+        },
+      }),
+      this.identityPrisma.identityVaultAuditLog.deleteMany({
+        where: { occurredAt: { lt: auditCutoff } },
+      }),
+    ])
+
+    return {
+      anonymizedIdentityCount: identities.count,
+      deletedDeliveryEventCount: deliveryEvents.count,
+      deletedDeliveryJobCount: deliveryJobs.count,
+      deletedIdentityAuditCount: auditLogs.count,
+    }
+  }
+
+  async enqueueOutboundJob<T extends Record<string, unknown>>(channel: 'email' | 'sms', payload: T, maxAttempts: number): Promise<string> {
+    const job = await this.identityPrisma.outboundDeliveryJob.create({
+      data: {
+        channel,
+        encryptedPayload: this.emailCryptoService.encryptContact(JSON.stringify(payload)),
+        maxAttempts,
+      },
+    })
+    return job.id
+  }
+
+  async claimOutboundJob<T>(channel: 'email' | 'sms'): Promise<ClaimedOutboundJob<T> | null> {
+    const now = new Date()
+    await this.identityPrisma.outboundDeliveryJob.updateMany({
+      where: {
+        channel,
+        status: 'processing',
+        lockedAt: { lt: new Date(now.getTime() - 5 * 60_000) },
+      },
+      data: { status: 'retry', availableAt: now, lockedAt: null, lastError: 'worker_lock_recovered' },
+    })
+    const candidate = await this.identityPrisma.outboundDeliveryJob.findFirst({
+      where: { channel, status: { in: ['pending', 'retry'] }, availableAt: { lte: now } },
+      orderBy: [{ availableAt: 'asc' }, { createdAt: 'asc' }],
+    })
+    if (!candidate) return null
+
+    const claim = await this.identityPrisma.outboundDeliveryJob.updateMany({
+      where: { id: candidate.id, status: { in: ['pending', 'retry'] } },
+      data: { status: 'processing', lockedAt: now, attempt: { increment: 1 } },
+    })
+    if (claim.count !== 1) return null
+
+    const claimed = await this.identityPrisma.outboundDeliveryJob.findUnique({ where: { id: candidate.id } })
+    if (!claimed) return null
+    return {
+      id: claimed.id,
+      payload: JSON.parse(this.emailCryptoService.decryptContact(claimed.encryptedPayload)) as T,
+      attempt: claimed.attempt,
+      maxAttempts: claimed.maxAttempts,
+    }
+  }
+
+  async completeOutboundJob(id: string, providerMessageId?: string | null): Promise<void> {
+    await this.identityPrisma.outboundDeliveryJob.update({
+      where: { id },
+      data: { status: 'succeeded', completedAt: new Date(), lockedAt: null, providerMessageId: providerMessageId ?? null, lastError: null },
+    })
+  }
+
+  async retryOutboundJob(id: string, error: string, availableAt: Date, dead: boolean): Promise<void> {
+    await this.identityPrisma.outboundDeliveryJob.update({
+      where: { id },
+      data: {
+        status: dead ? 'dead' : 'retry',
+        availableAt,
+        lockedAt: null,
+        completedAt: dead ? new Date() : null,
+        lastError: error.slice(0, 2_000),
+      },
+    })
   }
 
   assertOperationalIdentityAccessDisabled(): void {

@@ -5,10 +5,12 @@ import { AuthModule } from '../auth/auth.module'
 import { ObservabilityModule } from '../observability/observability.module'
 import { ComplianceController } from './compliance.controller'
 import { ComplianceService } from './compliance.service'
+import { ComplianceMaintenanceService } from './compliance-maintenance.service'
+import { IdentityVaultModule } from '../identity-vault/identity-vault.module'
 
 @Module({
-  imports: [AuthModule, AuditModule, ObservabilityModule],
+  imports: [AuthModule, AuditModule, ObservabilityModule, IdentityVaultModule],
   controllers: [ComplianceController],
-  providers: [ComplianceService],
+  providers: [ComplianceService, ComplianceMaintenanceService],
 })
 export class ComplianceModule {}

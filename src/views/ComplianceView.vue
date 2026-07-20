@@ -20,18 +20,22 @@ const compliance = useComplianceStore()
 const session = useSessionStore()
 
 const selectedQuestionnaireId = computed(() => catalog.questionnaires[0]?.id ?? '')
-const canMaintain = computed(() => session.hasPermission('compliance:maintain'))
+const canMaintainScopedData = computed(() =>
+  ['admin', 'technical_admin'].includes(session.currentRole),
+)
+const canRunRetention = computed(() => session.currentRole === 'technical_admin')
+const canExport = computed(() => ['admin', 'analyst'].includes(session.currentRole))
 
-const complianceSections: PageSectionNavItem[] = [
+const complianceSections = computed<PageSectionNavItem[]>(() => [
   { id: 'compliance-register', label: 'Registre', hint: 'Traitements' },
   { id: 'compliance-retention', label: 'Conservation', hint: 'Maintenance' },
-  { id: 'compliance-export', label: 'Export', hint: 'Pseudonymisé' },
+  ...(canExport.value ? [{ id: 'compliance-export', label: 'Export', hint: 'Pseudonymisé' }] : []),
   { id: 'compliance-audit', label: 'Audit', hint: 'Événements' },
-]
+])
 
 onMounted(async () => {
   await Promise.all([
-    catalog.status === 'idle' ? catalog.fetchCatalog() : Promise.resolve(),
+    canExport.value && catalog.status === 'idle' ? catalog.fetchCatalog() : Promise.resolve(),
     compliance.fetchAll(),
   ])
 })
@@ -125,7 +129,7 @@ function formatDate(value: string | null | undefined): string {
                     <p class="small mb-0">{{ rule.action }}</p>
                   </div>
                 </div>
-                <div v-if="canMaintain" class="d-flex flex-wrap gap-2 mt-4">
+                <div v-if="canMaintainScopedData" class="d-flex flex-wrap gap-2 mt-4">
                   <button
                     class="btn btn-outline-primary rounded-pill"
                     type="button"
@@ -143,28 +147,13 @@ function formatDate(value: string | null | undefined): string {
                     Nettoyer les brouillons expirés
                   </button>
                   <button
+                    v-if="canRunRetention"
                     class="btn btn-outline-danger rounded-pill"
                     type="button"
                     :disabled="compliance.status === 'saving'"
-                    @click="compliance.purgeExpiredTokens"
+                    @click="compliance.runRetention"
                   >
-                    Purger les tokens expirés
-                  </button>
-                  <button
-                    class="btn btn-outline-danger rounded-pill"
-                    type="button"
-                    :disabled="compliance.status === 'saving'"
-                    @click="compliance.purgeExpiredExports"
-                  >
-                    Purger les exports expirés
-                  </button>
-                  <button
-                    class="btn btn-outline-danger rounded-pill"
-                    type="button"
-                    :disabled="compliance.status === 'saving'"
-                    @click="compliance.purgeOutOfRetentionData"
-                  >
-                    Purger les données hors conservation
+                    Exécuter le cycle complet de conservation
                   </button>
                 </div>
                 <p v-else class="small muted mt-4 mb-0">
@@ -174,7 +163,7 @@ function formatDate(value: string | null | undefined): string {
               </CollapsibleSection>
             </div>
 
-            <div id="compliance-export" class="page-section col-xl-5">
+            <div v-if="canExport" id="compliance-export" class="page-section col-xl-5">
               <CollapsibleSection
                 eyebrow="Export pseudonymisé"
                 title="Soumissions sans coffre email"

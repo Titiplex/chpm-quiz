@@ -8,20 +8,24 @@ import { RolesGuard } from '../common/guards/roles.guard'
 import { SessionAuthGuard } from '../common/guards/session-auth.guard'
 import { PseudonymizedExportQueryDto } from './dto/pseudonymized-export-query.dto'
 import { ComplianceService } from './compliance.service'
+import { ComplianceMaintenanceService } from './compliance-maintenance.service'
 
 @UseGuards(SessionAuthGuard, RolesGuard)
 @Controller('compliance')
 export class ComplianceController {
-  constructor(private readonly complianceService: ComplianceService) {}
+  constructor(
+    private readonly complianceService: ComplianceService,
+    private readonly maintenanceService: ComplianceMaintenanceService,
+  ) {}
 
   @Get('technical-register')
-  @Roles('admin', 'analyst', 'technical_admin', 'judicial_officer')
+  @Roles('admin', 'analyst', 'dpo', 'technical_admin', 'judicial_officer')
   technicalRegister(@CurrentUser() user: AuthenticatedUser) {
     return { register: this.complianceService.technicalRegister(user) }
   }
 
   @Get('retention-policy')
-  @Roles('admin', 'analyst', 'technical_admin', 'judicial_officer')
+  @Roles('admin', 'analyst', 'dpo', 'technical_admin', 'judicial_officer')
   retentionPolicy() {
     return { policy: this.complianceService.retentionPolicy() }
   }
@@ -40,6 +44,13 @@ export class ComplianceController {
     return { result }
   }
 
+  @Post('maintenance/run-retention')
+  @Roles('technical_admin')
+  async runRetention(@CurrentUser() user: AuthenticatedUser, @Req() request: Request) {
+    const result = await this.maintenanceService.runOnce(user, request)
+    return { result }
+  }
+
   @Get('exports/pseudonymized')
   @Roles('admin', 'analyst')
   async pseudonymizedExport(
@@ -47,7 +58,11 @@ export class ComplianceController {
     @CurrentUser() user: AuthenticatedUser,
     @Req() request: Request,
   ) {
-    const exportPayload = await this.complianceService.pseudonymizedExport(query.questionnaireId, user, request)
+    const exportPayload = await this.complianceService.pseudonymizedExport(
+      query.questionnaireId,
+      user,
+      request,
+    )
     return { export: exportPayload }
   }
 }

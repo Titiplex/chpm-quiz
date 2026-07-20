@@ -34,6 +34,7 @@ describe('router configuration and guards', () => {
 
     expect(routes.map((candidate) => candidate.path)).toEqual([
       '/login',
+      '/change-password',
       '/',
       '/administration-projet',
       '/admin',
@@ -43,6 +44,7 @@ describe('router configuration and guards', () => {
       '/terminaux',
       '/terminal/:terminalToken?',
       '/rgpd',
+      '/coffre-email',
       '/403',
       '/:pathMatch(.*)*',
     ])
@@ -124,6 +126,20 @@ describe('router configuration and guards', () => {
       path: '/403',
       query: { from: '/admin', role: 'moderator', fallback: '/moderation' },
     })
+  })
+
+  it('forces temporary local credentials through password rotation', async () => {
+    const session = useSessionStore()
+    session.user = { ...adminUserFixture, mustChangePassword: true }
+    session.status = 'authenticated'
+    session.isBootstrapped = true
+
+    await expect(
+      createAuthorizationGuard(false)(route({ path: '/admin', fullPath: '/admin' })),
+    ).resolves.toBe('/change-password')
+    await expect(
+      createAuthorizationGuard(false)(route({ name: 'change-password', path: '/change-password' })),
+    ).resolves.toBe(true)
   })
 
   it('allows forbidden page and authorized private navigation', async () => {

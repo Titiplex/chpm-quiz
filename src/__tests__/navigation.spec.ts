@@ -19,21 +19,21 @@ describe('navigation ACL matrix', () => {
     expect(moderatorTargets).not.toContain('/coffre-email')
   })
 
-  it('exposes project administration only to project admins and hides DPO business navigation', () => {
+  it('exposes project administration only to project admins and limits DPO navigation to compliance', () => {
     const adminTargets = getVisibleNavigation('admin').map((item) => item.to)
     const siteManagerTargets = getVisibleNavigation('site_manager').map((item) => item.to)
     const dpoTargets = getVisibleNavigation('dpo').map((item) => item.to)
 
     expect(adminTargets).toContain('/administration-projet')
     expect(siteManagerTargets).not.toContain('/administration-projet')
-    expect(dpoTargets).toEqual([])
+    expect(dpoTargets).toEqual(['/rgpd', '/coffre-email'])
   })
 
   it('sends specialized roles to their correct default landing pages', () => {
     expect(defaultPathByRole.questionnaire_admin).toBe('/admin')
     expect(defaultPathByRole.analyst).toBe('/stats')
-    expect(defaultPathByRole.dpo).toBe('/')
-    expect(defaultPathByRole.judicial_officer).toBe('/rgpd')
+    expect(defaultPathByRole.dpo).toBe('/coffre-email')
+    expect(defaultPathByRole.judicial_officer).toBe('/coffre-email')
     expect(defaultPathByRole.technical_admin).toBe('/terminaux')
   })
 })

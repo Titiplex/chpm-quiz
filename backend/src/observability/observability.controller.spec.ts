@@ -6,14 +6,26 @@ import { MetricsController } from './metrics.controller'
 
 describe('observability controllers', () => {
   it('returns liveness and readiness when both databases respond', async () => {
-    const controller = new HealthController({ $queryRaw: vi.fn(async () => 1) } as any, { $queryRaw: vi.fn(async () => 1) } as any)
+    const controller = new HealthController(
+      { $queryRaw: vi.fn(async () => 1) } as any,
+      {
+        $queryRaw: vi.fn(async () => 1),
+        outboundDeliveryJob: { findFirst: vi.fn(async () => null) },
+      } as any,
+    )
 
     expect(controller.live()).toMatchObject({ status: 'ok', service: 'chpm-api' })
     await expect(controller.ready()).resolves.toMatchObject({ status: 'ok', checks: { operationalDatabase: 'ok', identityDatabase: 'ok' } })
   })
 
   it('throws a degraded readiness payload when a database fails', async () => {
-    const controller = new HealthController({ $queryRaw: vi.fn(async () => 1) } as any, { $queryRaw: vi.fn(async () => { throw new Error('down') }) } as any)
+    const controller = new HealthController(
+      { $queryRaw: vi.fn(async () => 1) } as any,
+      {
+        $queryRaw: vi.fn(async () => { throw new Error('down') }),
+        outboundDeliveryJob: { findFirst: vi.fn(async () => null) },
+      } as any,
+    )
 
     await expect(controller.ready()).rejects.toBeInstanceOf(HttpException)
   })

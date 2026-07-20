@@ -56,6 +56,8 @@ describe('ComplianceService', () => {
       DRAFT_RETENTION_DAYS: '34',
       IDENTITY_RETENTION_DAYS: '56',
       AUDIT_RETENTION_DAYS: '78',
+      RESPONSE_RETENTION_DAYS: '90',
+      JUDICIAL_EXPORT_TTL_MINUTES: '15',
     })
 
     expect(service.technicalRegister(dpoUser)).toMatchObject({
@@ -67,10 +69,12 @@ describe('ComplianceService', () => {
 
     const policy = service.retentionPolicy()
     expect(policy.rules.map((rule) => rule.retention)).toEqual([
-      '12 jours par défaut',
-      '34 jours après dernière activité ou expiration',
-      '56 jours maximum ou suppression anticipée validée',
-      '78 jours',
+      '12 days by default',
+      '34 days after last activity and invitation expiry',
+      '90 days after submission',
+      '56 days maximum unless an approved earlier action applies',
+      '15 minutes after execution',
+      '78 days',
     ])
   })
 

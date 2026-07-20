@@ -49,7 +49,7 @@ export class SmsProviderService {
     const authToken = this.requiredSecret('TWILIO_AUTH_TOKEN')
     const from = this.requiredPhone('TWILIO_FROM')
     const auth = Buffer.from(`${accountSid}:${authToken}`, 'utf8').toString('base64')
-    const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(accountSid)}/Messages.json`, {
+    const response = await this.fetchProvider(`https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(accountSid)}/Messages.json`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${auth}`,
@@ -70,7 +70,7 @@ export class SmsProviderService {
   private async sendBrevo(payload: SmsJobPayload): Promise<SmsDeliveryResult> {
     const apiKey = this.requiredSecret('BREVO_API_KEY')
     const sender = this.config.get<string>('SMS_SENDER', 'CHPM').trim().slice(0, 11)
-    const response = await fetch('https://api.brevo.com/v3/transactionalSMS/sms', {
+    const response = await this.fetchProvider('https://api.brevo.com/v3/transactionalSMS/sms', {
       method: 'POST',
       headers: {
         Accept: 'application/json',
@@ -100,6 +100,11 @@ export class SmsProviderService {
       throw new ServiceUnavailableException(`${name} est obligatoire pour SMS_PROVIDER=${this.provider()}`)
     }
     return value
+  }
+
+  private fetchProvider(url: string, init: RequestInit): Promise<Response> {
+    const timeoutMs = Math.min(Math.max(Number(this.config.get<string>('PROVIDER_HTTP_TIMEOUT_MS', '10000')), 1_000), 60_000)
+    return fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) })
   }
 
   private requiredPhone(name: string): string {
