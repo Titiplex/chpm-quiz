@@ -8,10 +8,18 @@ const ALGORITHM = 'aes-256-gcm'
 const IV_LENGTH = 12
 const AUTH_TAG_LENGTH = 16
 
+/**
+ * Protects direct respondent contact values at the application boundary.
+ *
+ * Ciphertext uses a versioned AES-256-GCM envelope with the version authenticated as
+ * additional data. HMAC hashes use a separate pepper for controlled comparison. The
+ * encryption key and hash pepper are distinct secrets and require coordinated rotation.
+ */
 @Injectable()
 export class EmailCryptoService {
   constructor(private readonly config: ConfigService) {}
 
+  /** Normalizes and encrypts an email into the versioned authenticated envelope. */
   encryptEmail(email: string): string {
     const normalizedEmail = this.normalize(email)
     const iv = randomBytes(IV_LENGTH)
@@ -28,6 +36,7 @@ export class EmailCryptoService {
     ].join('.')
   }
 
+  /** Decrypts and authenticates a supported contact envelope. */
   decryptEmail(payload: string): string {
     const [version, ivB64, authTagB64, ciphertextB64] = payload.split('.')
 
@@ -47,6 +56,7 @@ export class EmailCryptoService {
     ]).toString('utf8')
   }
 
+  /** Encrypts a non-email contact value while preserving case/content after trimming. */
   encryptContact(value: string): string {
     const normalized = value.trim()
     const iv = randomBytes(IV_LENGTH)
@@ -67,6 +77,7 @@ export class EmailCryptoService {
     return this.decryptEmail(payload)
   }
 
+  /** Returns a peppered deterministic HMAC for controlled normalized-email matching. */
   hashEmail(email: string): string {
     return createHmac('sha256', this.hashPepper()).update(this.normalize(email)).digest('hex')
   }
@@ -85,6 +96,7 @@ export class EmailCryptoService {
     return compact
   }
 
+  /** Produces a display-only value that is not suitable for identity verification. */
   maskEmail(email: string): string {
     const normalizedEmail = this.normalize(email)
     const [local = '', domain] = normalizedEmail.split('@')

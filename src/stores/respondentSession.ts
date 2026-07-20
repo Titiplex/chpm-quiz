@@ -79,7 +79,7 @@ export const useRespondentSessionStore = defineStore('respondentSession', () => 
         body: { ...payload, token: token.value, terminalToken: terminalToken.value ?? undefined },
       })
     } catch {
-      // La télémétrie ne doit jamais casser le parcours répondant.
+      // Telemetry is deliberately best-effort and must never block the respondent workflow.
     }
   }
 

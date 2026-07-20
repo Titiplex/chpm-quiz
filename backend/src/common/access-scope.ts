@@ -2,6 +2,7 @@ import { ForbiddenException, NotFoundException } from '@nestjs/common'
 
 import type { AuthenticatedUser } from '../auth/auth.types'
 
+/** Minimal structural views accepted by scope checks to avoid coupling guards to Prisma models. */
 export type ScopedBuilding = {
   id: string
   siteId?: string | null
@@ -29,6 +30,7 @@ export type ScopedInvitation = {
 
 const organizationWideRoles = new Set(['admin', 'technical_admin', 'questionnaire_admin', 'analyst'])
 
+/** Returns whether the staff user's role and assigned scope include the building. */
 export function canAccessBuilding(user: AuthenticatedUser, building: ScopedBuilding): boolean {
   if (user.role === 'moderator') {
     return Boolean(user.buildingId) && user.buildingId === building.id
@@ -51,6 +53,10 @@ export function assertCanAccessBuilding(user: AuthenticatedUser, building: Scope
   }
 }
 
+/**
+ * Applies organization and ownership rules to questionnaire access. Services still
+ * enforce operation-specific lifecycle permissions in addition to this coarse scope.
+ */
 export function canAccessQuestionnaire(user: AuthenticatedUser, questionnaire: ScopedQuestionnaire): boolean {
   if (user.role === 'admin' || user.role === 'analyst') {
     return sameOrganizationOrUnscoped(user, questionnaire.organizationId)
@@ -91,6 +97,10 @@ export function assertCanAccessVersion(user: AuthenticatedUser, version: ScopedV
   }
 }
 
+/**
+ * Allows legacy/unscoped records only when they have no organization identifier;
+ * an identified organization never matches a user without organization scope.
+ */
 export function sameOrganizationOrUnscoped(user: AuthenticatedUser, organizationId?: string | null): boolean {
   if (!organizationId) {
     return true

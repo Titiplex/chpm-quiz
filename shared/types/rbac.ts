@@ -1,3 +1,4 @@
+/** Stable role identifiers persisted by the backend and exchanged through the API. */
 export const userRoles = [
   'admin',
   'site_manager',
@@ -16,6 +17,7 @@ export type UserRole = (typeof userRoles)[number]
 export const projectAdminRole = 'admin' as const
 export type ProjectAdminRole = typeof projectAdminRole
 
+/** Capability labels used for UI affordances and public staff profiles. */
 export type Permission =
   | 'questionnaire:configure'
   | 'questionnaire:publish'
@@ -49,6 +51,7 @@ export type Permission =
 export type RoleFamily = 'operational' | 'specialized' | 'system'
 export type RoleScope = 'global' | 'site' | 'building' | 'questionnaire' | 'analytics' | 'legal' | 'technical' | 'none'
 
+/** Human-facing role metadata; it does not replace backend authorization checks. */
 export interface RoleProfile {
   role: UserRole
   label: string
@@ -83,6 +86,7 @@ export const specializedStaffRoles = [
   'technical_admin',
 ] as const satisfies readonly UserRole[]
 
+/** Shared role catalog used by navigation and explanatory UI. */
 export const roleProfiles: Record<UserRole, RoleProfile> = {
   admin: {
     role: 'admin',
@@ -261,14 +265,17 @@ export function isActiveOperationalRole(role: UserRole): role is ActiveOperation
   return activeOperationalRoles.includes(role as ActiveOperationalRole)
 }
 
+/** Checks frontend route visibility only; server guards remain authoritative. */
 export function hasRoleAccess(role: UserRole, allowedRoles: readonly UserRole[]): boolean {
   return allowedRoles.includes(role)
 }
 
+/** Checks the shared capability catalog for UI behavior, not object-level scope. */
 export function hasPermission(role: UserRole, permission: Permission): boolean {
   return roleProfiles[role]?.permissions.includes(permission) ?? false
 }
 
+/** Returns whether ordinary role delegation allows `managerRole` to create/manage `targetRole`. */
 export function canDelegateRole(managerRole: UserRole, targetRole: UserRole): boolean {
   return roleProfiles[managerRole]?.canDelegateTo.includes(targetRole) ?? false
 }

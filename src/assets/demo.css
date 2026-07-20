@@ -1,11 +1,11 @@
 /* =============================================================================
    CHM QUIZ — Design System
-   CH Montfavet — Application interne personnel hospitalier
+   CH Montfavet — Internal application for hospital staff
    ============================================================================= */
 
 /* ---- Tokens ---------------------------------------------------------------- */
 :root {
-  /* Palette hospitalière */
+  /* Hospital color palette */
   --chm-navy:        #1a3a5c;
   --chm-navy-deep:   #122840;
   --chm-navy-soft:   #e8eef6;
@@ -13,14 +13,14 @@
   --chm-teal-soft:   #e0f4f3;
   --chm-teal-mid:    #00b4ad;
 
-  /* Neutres */
+  /* Neutral colors */
   --chm-bg:          #f4f6fa;
   --chm-surface:     #ffffff;
   --chm-text:        #1a2535;
   --chm-muted:       #5a6a82;
   --chm-line:        #dde3ee;
 
-  /* Sémantiques */
+  /* Semantic colors */
   --chm-success:     #1a7f5a;
   --chm-success-soft:#e3f5ed;
   --chm-warning:     #c47c00;
@@ -28,7 +28,7 @@
   --chm-danger:      #b8273a;
   --chm-danger-soft: #fdeef0;
 
-  /* Effets */
+  /* Effects */
   --chm-shadow-sm:   0 2px 8px rgba(26, 58, 92, 0.08);
   --chm-shadow-md:   0 8px 28px rgba(26, 58, 92, 0.12);
   --chm-shadow-lg:   0 20px 60px rgba(26, 58, 92, 0.10);
@@ -191,7 +191,7 @@ body {
   padding: 36px 0 64px;
 }
 
-/* rétrocompatibilité */
+/* Backward compatibility */
 .demo-page {
   padding: 36px 0 64px;
 }
@@ -1420,9 +1420,9 @@ details:not([open]) > .builder-disclosure-summary::after {
 }
 
 
-/* Les cartes de tableau combinent volontairement bordure et zone de défilement.
-   Cette règle doit rester après .table-card et .stats-table-card : sinon
-   overflow:hidden masque toutes les lignes situées sous la hauteur maximale. */
+/* Table cards deliberately combine a border and a scrollable area.
+   Keep this rule after .table-card and .stats-table-card; otherwise,
+   overflow:hidden hides every row below the maximum height. */
 .table-card.table-card-scroll,
 .table-card.table-card-scroll.stats-table-card {
   overflow: auto;

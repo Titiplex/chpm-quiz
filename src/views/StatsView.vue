@@ -91,7 +91,7 @@ function closeSubmissionDetail(): void {
       />
       <RoleGateInfo />
 
-      <!-- Sélecteur questionnaire -->
+      <!-- Questionnaire selector -->
       <div class="demo-card mb-4">
         <div class="row g-3 align-items-end">
           <div class="col-lg-8">
@@ -135,7 +135,7 @@ function closeSubmissionDetail(): void {
         <div class="page-workspace">
           <PageSectionNav title="Navigation statistiques" :sections="statsSections" />
           <div class="page-workspace-main">
-            <!-- Info seuil -->
+            <!-- Suppression-threshold information -->
             <div id="stats-overview" class="page-section d-flex align-items-center gap-2 mb-4">
               <span class="badge-soft warning">Seuil n ≥ {{ statsStore.stats.threshold }}</span>
               <span class="small" style="color: var(--chm-muted)"
@@ -143,7 +143,7 @@ function closeSubmissionDetail(): void {
               >
             </div>
 
-            <!-- KPIs principaux -->
+            <!-- Main KPIs -->
             <div class="row g-3 mb-4">
               <div class="col-md-3">
                 <KpiCard
@@ -303,7 +303,7 @@ function closeSubmissionDetail(): void {
                 </div>
               </div>
 
-              <!-- Canaux -->
+              <!-- Delivery channels -->
               <div class="col-xl-6">
                 <div class="demo-card h-100">
                   <h2 class="page-header-title mb-4" style="font-size: 1rem">
@@ -367,7 +367,7 @@ function closeSubmissionDetail(): void {
                 </div>
               </div>
 
-              <!-- Langues -->
+              <!-- Languages -->
               <div class="col-xl-6">
                 <div class="demo-card h-100">
                   <h2 class="page-header-title mb-4" style="font-size: 1rem">Langues</h2>
@@ -401,7 +401,7 @@ function closeSubmissionDetail(): void {
                 </div>
               </div>
 
-              <!-- Bâtiments -->
+              <!-- Buildings -->
               <div class="col-xl-6">
                 <div class="demo-card h-100">
                   <h2 class="page-header-title mb-4" style="font-size: 1rem">Bâtiments</h2>
@@ -451,7 +451,7 @@ function closeSubmissionDetail(): void {
                 </div>
               </div>
 
-              <!-- Groupes -->
+              <!-- Groups -->
               <div class="col-xl-6">
                 <div class="demo-card h-100">
                   <h2 class="page-header-title mb-4" style="font-size: 1rem">
@@ -482,7 +482,7 @@ function closeSubmissionDetail(): void {
                 </div>
               </div>
 
-              <!-- Soumissions pseudonymisées -->
+              <!-- Pseudonymized submissions -->
               <div id="stats-submissions" class="page-section col-12">
                 <CollapsibleSection
                   title="Soumissions pseudonymisées"
@@ -614,7 +614,7 @@ function closeSubmissionDetail(): void {
                 </CollapsibleSection>
               </div>
 
-              <!-- Questions détaillées -->
+              <!-- Detailed questions -->
               <div id="stats-questions" class="page-section col-12">
                 <CollapsibleSection
                   title="Signaux de compréhension par question"
@@ -743,7 +743,7 @@ function closeSubmissionDetail(): void {
               {{ statsStore.submissionError }}
             </div>
 
-            <!-- Soumission individuelle -->
+            <!-- Individual submission -->
             <ModalPanel
               :model-value="Boolean(statsStore.selectedSubmission)"
               :title="
