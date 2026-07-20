@@ -27,7 +27,9 @@ The preview command starts an interactive local API reference. `npm run docs:che
 
 ### Internal staff session
 
-Authenticate with `POST /auth/login`. The server returns a public user profile and sets the `chpm_session` HTTP-only cookie. Browsers send it automatically when `credentials: include` is enabled.
+Production clients read `GET /auth/config` and start OIDC with `GET /auth/oidc/start`. The callback validates PKCE, state/nonce, signed identity claims, verified email, and the configured MFA claim, then creates the opaque HTTP-only staff session. The email must map to a pre-provisioned active account and local authorization scope.
+
+`POST /auth/login` is the local-authentication route for development and expressly approved non-production use. It is disabled whenever `AUTH_PROVIDER=oidc`.
 
 PowerShell example:
 
@@ -97,7 +99,7 @@ Common status codes:
 | `403` | Authenticated but not permitted |
 | `404` | Missing object or an object intentionally hidden by scope |
 | `409` | State conflict, duplicate, already submitted, or immutable version |
-| `429` | Per-process rate limit exceeded |
+| `429` | Configured request/login rate limit exceeded |
 | `500` | Unexpected server failure |
 | `503` | Readiness dependency unavailable |
 
@@ -107,7 +109,7 @@ Common status codes:
 - Password-reset and terminal-token operations may return a secret once. Do not write it to logs or persistent browser storage.
 - Pseudonymized exports exclude the identity schema but are still sensitive and access-controlled.
 - Aggregate suppression fields must be honored by downstream clients; do not infer or reconstruct hidden small cells.
-- Identity-vault export is not a REST endpoint. Use the approved DPO procedure.
+- Exceptional identity export is available only to a DPO after independent DPO/legal validation. It returns encrypted ciphertext, is restricted to explicit public codes, expires, and remains subject to the approved DPO transfer/destruction procedure.
 
 ## Examples
 
@@ -147,10 +149,8 @@ Invoke-RestMethod -Uri "http://localhost:3000/api/respondent/session?token=$toke
 
 ## Compatibility and lifecycle
 
-The API is not yet declared stable for third-party consumers. Changes must update backend DTOs, shared TypeScript types, OpenAPI, contract tests, and user/developer documentation together.
+OpenAPI version 1.0 is the production handover contract. Changes must update backend DTOs, shared TypeScript types, OpenAPI, contract tests, release notes, and user/developer documentation together. Breaking changes require a reviewed version and upgrade plan.
 
 The `/users/site-*` operations are deprecated aliases for `/site/*`. New clients must use the `/site` routes.
 
-The frontend demo API implements `POST /site/buildings` and `POST /questionnaires/{id}/translations`, but the connected NestJS backend does not. These paths are deliberately absent from OpenAPI until implemented and tested server-side.
-
-Three implemented security-control routes are deliberately documented as error-only in the current build: identity-vault web access, judicial API execution, and the blocked DPO-validation route. The first two record/deny attempts by design. The DPO-validation operation has contradictory controller/service role requirements and requires a code fix before any client can use it successfully.
+Connected building creation and questionnaire translation-draft cloning are part of the 1.0 contract. The identity-vault web access-attempt route remains error-only by design: it records and rejects attempts and never returns contact data.

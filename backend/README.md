@@ -19,7 +19,7 @@ The API prefix is `/api` by default. The machine-readable contract is [docs/open
 From `backend/`:
 
 ```powershell
-npm install
+npm ci
 Copy-Item .env.example .env
 docker compose up -d
 npm run prisma:migrate
@@ -33,6 +33,7 @@ The sample configuration uses database `chpm_quiz`, local user/password `chpm`/`
 
 - `OPERATIONAL_DATABASE_URL` targets `public` for users, scoped operational records, questionnaires, responses, audit records, and workflows.
 - `IDENTITY_DATABASE_URL` targets `identity` for encrypted contact values and identity-vault audit records.
+- `DPO_DATABASE_URL` is used only by the disabled-by-default local DPO console and maps to the restricted `chpm_dpo` role; it must never be injected into the API container.
 
 Use separate database roles and strong passwords in production-like environments. Schema separation is a defense-in-depth boundary, not a substitute for separate credentials and least privilege.
 
@@ -40,16 +41,16 @@ Use separate database roles and strong passwords in production-like environments
 
 | Module | Responsibility |
 | --- | --- |
-| `auth` | Login, session restoration, logout, public staff profile |
+| `auth` | OIDC/local login, password rotation, lockout, session restoration/revocation |
 | `users` | Project-to-site and site-to-moderator delegation |
 | `questionnaires` / `versions` | Questionnaire builder, conditional rules, publication checks, immutable publication |
 | `moderation` | Scoped invitations, resend, paper entry, terminal assignment |
 | `respondent` | Token resolution, autosave, telemetry, final submission |
 | `terminal` / `terminal-admin` | On-site device registration and token-bound invitation opening |
 | `stats` | Threshold-protected aggregates and analyst-only pseudonymized submission detail |
-| `compliance` | Technical register, retention policy, maintenance jobs, pseudonymized export |
-| `identity-vault` | Technical status and denied-access evidence; no direct identity export endpoint |
-| `judicial` | Exceptional legal-request state machine and secure-document metadata |
+| `compliance` | Technical register, scheduled/manual retention, maintenance, pseudonymized export |
+| `identity-vault` | Encrypted contacts, durable delivery queue, retention, and dual audit boundary |
+| `judicial` | Double-controlled exceptional request state machine and encrypted export |
 | `notifications` | User subscriptions and scheduled digest processing |
 | `audit` | Append-only application audit reads for authorized roles |
 | `observability` | Liveness, readiness, JSON metrics, and Prometheus exposition |
@@ -58,7 +59,7 @@ For service and boundary details, see the [codebase reference](../docs/developme
 
 ## Authentication and authorization
 
-Internal users authenticate with email and password. Successful login creates a random opaque session token; only its SHA-256 hash is stored. The browser receives `chpm_session` as an HTTP-only cookie.
+Production staff authenticate through OIDC Authorization Code with PKCE and a required institutional MFA claim. Only pre-provisioned active accounts are mapped by verified email to a local role and scope. Controlled development/preproduction may explicitly enable local email/password login, including database-backed lockout and forced temporary-password rotation. Successful login creates a random opaque session token; only its SHA-256 hash is stored. The browser receives the session as an HTTP-only cookie.
 
 Authorization has two layers:
 
@@ -81,26 +82,26 @@ Supported actions include creating approved sensitive roles, resetting passwords
 
 The technical role value `admin` means project administrator/researcher. It does not grant access to respondent contact values or DPO exports.
 
-## DPO console
+## Exceptional DPO execution
 
-Exceptional code-to-contact exports are deliberately outside the SPA and normal REST API:
+The judicial workflow requires independent legal and DPO validation. A DPO can then use the dedicated `/coffre-email` screen/API to download an encrypted envelope containing only organization-owned, explicitly approved public codes, or use the local console to produce a restricted encrypted file:
 
 ```powershell
 npm run dpo:console
 ```
 
-The procedure requires a named DPO login, justification, a procedure reference, and an explicit list of public codes. It forbids free email search, encrypts the output, records a SHA-256 fingerprint, and writes operational and identity-vault audit evidence. Follow [Exceptional identity access](../docs/production/judicial-access.md).
+The console requires a named DPO login and an existing organization-scoped request already validated by both roles. Both execution paths forbid free contact search, enforce a maximum of 50 explicit codes, encrypt output, record a SHA-256 fingerprint and expiry, advance request state, and write operational plus identity-vault audit evidence. Follow [Exceptional identity access](../docs/production/judicial-access.md).
 
 ## Delivery providers
 
 Local development may use simulation providers:
 
 ```env
-MAIL_PROVIDER=simulation
+EMAIL_PROVIDER=simulation
 SMS_PROVIDER=simulation
 ```
 
-Production-like environments must use `disabled` or an approved real provider with valid credentials. SMS currently supports Twilio and Brevo configuration. Phone numbers and email addresses are normalized, encrypted with AES-256-GCM, and separately HMAC-hashed for controlled lookup/deduplication.
+Production-like environments require an approved real email provider; SMS may be `disabled` or use Twilio/Brevo. Jobs are stored durably with encrypted payloads, recovered after worker interruption, retried with bounded attempts, and retained under policy. Phone numbers and email addresses are normalized, encrypted with AES-256-GCM, and separately HMAC-hashed for controlled lookup/deduplication.
 
 ## Database and Prisma commands
 
@@ -135,7 +136,7 @@ From the repository root, `npm run docs:check` verifies that all controller oper
 - Clients may send `X-Correlation-ID` or `X-Request-ID` using 8–128 safe characters.
 - Responses echo the accepted/generated identifier as `X-Request-Id` and `X-Correlation-ID`.
 - CORS allows configured frontend origins and credentials only.
-- The current rate limiter is per process, IP, method, and path.
+- The generic request limiter is per process, IP, method, and path; account lockout is database-backed. Scale-out requires a trusted-edge/shared limiter.
 
 See [API conventions](../docs/api/README.md) for examples and status-code semantics.
 

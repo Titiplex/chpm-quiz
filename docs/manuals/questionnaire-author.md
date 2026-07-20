@@ -70,7 +70,7 @@ Record the test cases in the version's approval evidence.
 
 Create a new version when wording, structure, scoring inputs, conditions, dates, or language content changes. Choose an unambiguous version label and opening/closing dates if applicable.
 
-The demo UI can simulate creating a language draft. The connected backend does not currently expose the translation endpoint, so confirm the deployment's supported workflow before planning production translation work. Never assume that changing the interface language translates questionnaire content.
+The connected application can clone an existing questionnaire into a separate French, English, or Spanish draft. It preserves structure and conditional references, but it does not translate editorial text automatically. A qualified reviewer must translate every title, instruction, option, popup, notice, and conditional path, then preview and publish the language version independently.
 
 ## Preview and publication
 

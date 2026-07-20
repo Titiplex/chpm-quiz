@@ -89,7 +89,7 @@ Never suggest an answer, explain a question beyond approved help text, or ask th
 
 ## Current limitation
 
-The local demo can simulate creating buildings. The connected backend currently lists existing buildings but does not implement building creation. Ask the project/technical administrator to provision the required building through the approved backend process.
+Site managers can create buildings inside their assigned site from the connected administration screen. The server verifies the site/organization scope, rejects duplicate codes, and audits the creation. Ask a project administrator to create a new site first when the required site does not yet exist.
 
 ## Report immediately
 

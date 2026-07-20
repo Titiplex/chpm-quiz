@@ -9,7 +9,7 @@ This is a technical screening aid, not legal advice and not a completed DPIA. Th
 | Is systematic monitoring or behavioral telemetry used? | Limited navigation/help/time telemetry exists | Justify each event, minimize payload/lifetime, and explain it in the notice |
 | Can indirect reidentification occur? | Yes through small cells, free text, timestamps, building, and rare patterns | Set/validate thresholds, limit dimensions, review free text, test linkage risk |
 | Does code-to-contact correspondence exist? | Yes in a separate encrypted identity schema | Treat data as pseudonymized, not anonymous; restrict and audit access |
-| Is identity access exceptional and proportionate? | Dedicated DPO console and workflow exist | Rehearse complete authorization/export/transfer/destruction procedure |
+| Is identity access exceptional and proportionate? | Dedicated DPO screen/API and local-console workflow exist | Rehearse complete authorization/export/transfer/destruction procedure |
 | Are processors/providers involved? | Email/SMS/hosting/monitoring may be used | Approve contracts, locations, subprocessors, transfer safeguards, and minimization |
 | Are retention periods final? | Defaults are configuration placeholders | Approve per object/purpose and verify automated/manual deletion evidence |
 | Are security measures tested? | Code and checklists exist | Complete penetration/security testing and close findings |

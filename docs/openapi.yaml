@@ -1,20 +1,23 @@
 openapi: 3.1.0
 info:
   title: CHPM Survey API
-  version: 0.2.0-preproduction
+  version: 1.0.0
   summary: Role- and scope-aware questionnaire collection API
   description: |
     REST API for internal staff authentication, scoped administration, questionnaire
     authoring/versioning, invitation delivery, token-based respondent sessions, managed
     terminals, pseudonymized statistics, compliance operations, notifications, audit,
-    and exceptional legal-workflow metadata.
+    and the controlled exceptional legal-access workflow.
 
     The specification describes implemented NestJS controller operations only. Direct
     respondent contact data is not available through normal business endpoints. The
-    exceptional DPO identity export is performed through a dedicated local console and
-    is intentionally absent from this API.
+    exceptional DPO export is allowed only after independent DPO and legal validation,
+    is restricted to explicit public codes, returns an AES-256-GCM encrypted envelope,
+    expires automatically, and is fully audited. The local DPO console enforces the same
+    approved-request prerequisite.
 
-    The API is preproduction and has no external compatibility guarantee yet.
+    Version 1.0 is the production handover contract. Compatibility changes follow the
+    release and upgrade procedure in `docs/production/installation.md`.
   contact:
     name: CHPM Survey maintainers
   license:
@@ -77,6 +80,11 @@ components:
       in: query
       name: token
       description: Secret managed-device token used by the public terminal session endpoint.
+    metricsBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: Dedicated monitoring token supplied through `METRICS_TOKEN`; not a staff session.
   parameters:
     Id:
       name: id
@@ -139,6 +147,7 @@ components:
       schema:
         type: integer
         minimum: 1
+        maximum: 200
     QuestionnaireIdQuery:
       name: questionnaireId
       in: query
@@ -306,12 +315,15 @@ components:
         checks:
           type: object
           additionalProperties: false
-          required: [operationalDatabase, identityDatabase]
+          required: [operationalDatabase, identityDatabase, deliveryQueue]
           properties:
             operationalDatabase:
               type: string
               enum: [ok, failed]
             identityDatabase:
+              type: string
+              enum: [ok, failed]
+            deliveryQueue:
               type: string
               enum: [ok, failed]
         timestamp:
@@ -332,9 +344,39 @@ components:
           minLength: 8
           maxLength: 256
           writeOnly: true
+    ChangePasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          format: password
+          minLength: 1
+          maxLength: 200
+          writeOnly: true
+        newPassword:
+          type: string
+          format: password
+          minLength: 12
+          maxLength: 200
+          writeOnly: true
+          description: Must satisfy the server password policy and differ from the current password.
+    AuthConfigResponse:
+      type: object
+      additionalProperties: false
+      required: [provider, localLoginEnabled, oidcEnabled]
+      properties:
+        provider:
+          type: string
+          enum: [local, oidc, saml]
+        localLoginEnabled:
+          type: boolean
+        oidcEnabled:
+          type: boolean
     PublicUser:
       type: object
-      required: [id, email, displayName, role, permissions, building]
+      required: [id, email, displayName, role, permissions, building, mustChangePassword]
       properties:
         id:
           type: string
@@ -352,6 +394,9 @@ components:
           uniqueItems: true
           items:
             $ref: '#/components/schemas/Permission'
+        mustChangePassword:
+          type: boolean
+          description: Forces local-authentication users through password rotation before other protected pages.
         building:
           oneOf:
             - $ref: '#/components/schemas/Building'
@@ -403,6 +448,39 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Building'
+    CreateBuildingRequest:
+      type: object
+      additionalProperties: false
+      required: [code, label, city, country, timezone]
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 40
+          pattern: '^[A-Za-z0-9][A-Za-z0-9_-]*$'
+        label:
+          type: string
+          minLength: 2
+          maxLength: 160
+        city:
+          type: string
+          minLength: 2
+          maxLength: 100
+        country:
+          type: string
+          minLength: 2
+          maxLength: 100
+        timezone:
+          type: string
+          minLength: 3
+          maxLength: 100
+    BuildingResponse:
+      type: object
+      additionalProperties: false
+      required: [building]
+      properties:
+        building:
+          $ref: '#/components/schemas/Building'
     OrganizationSummary:
       type: object
       required: [id, code, name]
@@ -445,6 +523,33 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Site'
+    CreateSiteRequest:
+      type: object
+      additionalProperties: false
+      required: [code, name]
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 40
+          pattern: '^[A-Za-z0-9][A-Za-z0-9_-]*$'
+        name:
+          type: string
+          minLength: 2
+          maxLength: 160
+        country:
+          type: string
+          maxLength: 100
+        timezone:
+          type: string
+          maxLength: 100
+    SiteResponse:
+      type: object
+      additionalProperties: false
+      required: [site]
+      properties:
+        site:
+          $ref: '#/components/schemas/Site'
     SiteTeamUser:
       type: object
       required: [id, email, displayName, role, isActive, organizationId, siteId, buildingId, createdAt, updatedAt]
@@ -721,6 +826,25 @@ components:
         finality:
           type: string
           maxLength: 2000
+    CreateTranslationRequest:
+      type: object
+      additionalProperties: false
+      required: [language]
+      properties:
+        language:
+          type: string
+          enum: [fr, en, es]
+        title:
+          type: string
+          minLength: 3
+          maxLength: 160
+        description:
+          type: string
+          maxLength: 2000
+        finality:
+          type: string
+          maxLength: 2000
+      description: Creates a separate draft questionnaire by cloning structure and conditional references from the source language.
     UpdateQuestionnaireRequest:
       type: object
       additionalProperties: false
@@ -1501,9 +1625,11 @@ components:
             totals:
               type: object
               additionalProperties: true
+              description: Counts and rates are null with `effectifSufficient=false` below the configured threshold.
             fieldTracking:
               type: object
               additionalProperties: true
+              description: Field-tracking counts are suppressed when too few people were approached.
             versions:
               type: array
               items:
@@ -1644,6 +1770,9 @@ components:
           type: string
           format: uuid
         actorUserId:
+          type: [string, 'null']
+          format: uuid
+        organizationId:
           type: [string, 'null']
           format: uuid
         actorRole:
@@ -1809,7 +1938,7 @@ components:
         requestedPublicCodes:
           type: array
           minItems: 1
-          maxItems: 500
+          maxItems: 50
           items:
             type: string
             maxLength: 64
@@ -1845,6 +1974,9 @@ components:
         id:
           type: string
           format: uuid
+        organizationId:
+          type: [string, 'null']
+          format: uuid
         requestReference:
           type: string
         legalBasisDescription:
@@ -1862,6 +1994,18 @@ components:
           enum: [received, validated, rejected, executed, closed]
         exportFingerprint:
           type: [string, 'null']
+        exportExpiresAt:
+          type: [string, 'null']
+          format: date-time
+        exportDeletedAt:
+          type: [string, 'null']
+          format: date-time
+        dpoValidationUserId:
+          type: [string, 'null']
+          format: uuid
+        legalValidationUserId:
+          type: [string, 'null']
+          format: uuid
         comments:
           type: [string, 'null']
       additionalProperties: true
@@ -1880,9 +2024,45 @@ components:
       properties:
         judicialRequest:
           $ref: '#/components/schemas/JudicialRequest'
-        secureDocument:
+    JudicialExecutionResponse:
+      type: object
+      additionalProperties: false
+      required: [judicialRequest, export]
+      properties:
+        judicialRequest:
+          $ref: '#/components/schemas/JudicialRequest'
+        export:
           type: object
-          additionalProperties: true
+          additionalProperties: false
+          required: [fingerprint, expiresAt, rowCount, envelope]
+          properties:
+            fingerprint:
+              type: string
+              pattern: '^[a-f0-9]{64}$'
+            expiresAt:
+              type: string
+              format: date-time
+            rowCount:
+              type: integer
+              minimum: 0
+              maximum: 50
+            envelope:
+              type: object
+              additionalProperties: false
+              required: [algorithm, keyRef, iv, authTag, ciphertext]
+              properties:
+                algorithm:
+                  const: aes-256-gcm
+                keyRef:
+                  type: string
+                  description: Approved decryption-key reference; never the key itself.
+                iv:
+                  type: string
+                authTag:
+                  type: string
+                ciphertext:
+                  type: string
+                  description: Encrypted minimal code-to-contact export. Handle as highly sensitive data.
 paths:
   /health/live:
     get:
@@ -1903,11 +2083,11 @@ paths:
     get:
       tags: [Health]
       operationId: getReadiness
-      summary: Check operational and identity database readiness
+      summary: Check database and durable-queue readiness
       security: []
       responses:
         '200':
-          description: Both database domains are reachable.
+          description: Both database domains and the durable outbound queue model are reachable.
           content:
             application/json:
               schema:
@@ -1943,7 +2123,9 @@ paths:
       tags: [Observability]
       operationId: getPrometheusMetrics
       summary: Read Prometheus metrics exposition
-      x-required-roles: [technical_admin]
+      description: Uses a dedicated bearer token and does not accept the staff session cookie.
+      security:
+        - metricsBearer: []
       responses:
         '200':
           description: Prometheus text exposition.
@@ -1953,8 +2135,81 @@ paths:
                 type: string
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
+  /auth/config:
+    get:
+      tags: [Authentication]
+      operationId: getAuthenticationConfiguration
+      summary: Read the public staff authentication mode
+      security: []
+      responses:
+        '200':
+          description: Public login-provider configuration used by the login page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthConfigResponse'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /auth/oidc/start:
+    get:
+      tags: [Authentication]
+      operationId: startOidcAuthorization
+      summary: Start OIDC Authorization Code with PKCE
+      security: []
+      parameters:
+        - name: returnTo
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 500
+            pattern: '^/(?!/).*$'
+      responses:
+        '302':
+          description: Redirect to the configured OIDC provider authorization endpoint.
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /auth/oidc/callback:
+    get:
+      tags: [Authentication]
+      operationId: completeOidcAuthorization
+      summary: Validate the OIDC callback and create a staff session
+      description: Validates state, nonce, PKCE, signature, issuer, audience, expiry, verified email, and configured MFA claims before redirecting to the frontend.
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '302':
+          description: Staff session created and redirected to the validated same-origin frontend path.
+          headers:
+            Location:
+              schema:
+                type: string
+            Set-Cookie:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   /auth/login:
     post:
       tags: [Authentication]
@@ -1991,6 +2246,29 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '429':
           $ref: '#/components/responses/RateLimited'
+  /auth/change-password:
+    post:
+      tags: [Authentication]
+      operationId: changeCurrentUserPassword
+      summary: Rotate the current local-account password
+      description: Revokes all other staff sessions, clears the forced-rotation flag, and records an audit event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '201':
+          description: Password rotated; the current session remains active.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /auth/me:
     get:
       tags: [Authentication]
@@ -2070,6 +2348,32 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Project administration]
+      operationId: createProjectSite
+      summary: Create a site in the administrator's organization
+      x-required-roles: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSiteRequest'
+      responses:
+        '201':
+          description: Site created in the caller's organization and audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /admin/site-admins:
     get:
       tags: [Project administration]
@@ -2185,6 +2489,33 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /site/buildings:
+    post:
+      tags: [Site administration]
+      operationId: createSiteBuilding
+      summary: Create a building in the site manager's assigned site
+      x-required-roles: [site_manager]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBuildingRequest'
+      responses:
+        '201':
+          description: Building created in the assigned site and organization and audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildingResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /site/team:
     get:
       tags: [Site administration]
@@ -2505,6 +2836,38 @@ paths:
       responses:
         '200':
           description: Draft questionnaire metadata updated and audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionnaireResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /questionnaires/{id}/translations:
+    post:
+      tags: [Questionnaires]
+      operationId: createQuestionnaireTranslationDraft
+      summary: Clone a questionnaire into a new language draft
+      description: Creates a distinct questionnaire and draft version, preserves structure, rewrites internal conditional references, and records an audit event.
+      x-required-roles: [admin, questionnaire_admin]
+      parameters:
+        - $ref: '#/components/parameters/QuestionnaireId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTranslationRequest'
+      responses:
+        '201':
+          description: Translation draft created from the source questionnaire.
           content:
             application/json:
               schema:
@@ -3507,7 +3870,7 @@ paths:
       operationId: getTechnicalProcessingRegister
       summary: Read the generated technical processing register
       description: Technical inventory only; it does not replace the controller's approved Article 30 record or DPIA.
-      x-required-roles: [admin, analyst, technical_admin, judicial_officer]
+      x-required-roles: [admin, analyst, dpo, technical_admin, judicial_officer]
       responses:
         '200':
           description: Technical processing register for the current role.
@@ -3524,7 +3887,7 @@ paths:
       tags: [Compliance]
       operationId: getRetentionPolicy
       summary: Read configured retention and cleanup rules
-      x-required-roles: [admin, analyst, technical_admin, judicial_officer]
+      x-required-roles: [admin, analyst, dpo, technical_admin, judicial_officer]
       responses:
         '200':
           description: Current technical retention rules, parameters, and known limitations.
@@ -3564,6 +3927,24 @@ paths:
       responses:
         '201':
           description: Draft cleanup completed with cutoffs/counts and execution time.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /compliance/maintenance/run-retention:
+    post:
+      tags: [Compliance]
+      operationId: runCompleteRetentionCycle
+      summary: Run the complete configured retention cycle immediately
+      description: Expires invitations, removes stale drafts and expired submitted records, scrubs identity mappings, expires judicial exports, and prunes audit records. The same cycle runs on the configured production schedule.
+      x-required-roles: [technical_admin]
+      responses:
+        '201':
+          description: Retention cycle completed or reported that another cycle is already running.
           content:
             application/json:
               schema:
@@ -3619,7 +4000,7 @@ paths:
       tags: [Identity boundary]
       operationId: recordIdentityVaultAccessAttempt
       summary: Record a web identity-access attempt without disclosing identity data
-      description: This endpoint is evidence/control behavior, not an identity lookup. Actual approved export uses the DPO console.
+      description: This endpoint is evidence/control behavior, not an identity lookup. Actual approved export uses the double-validated DPO workflow.
       x-error-only: true
       x-required-roles: [technical_admin]
       requestBody:
@@ -3641,7 +4022,7 @@ paths:
       operationId: listJudicialRequests
       summary: List exceptional legal-access workflow records
       description: Records contain authorization/secure-document metadata, not unrestricted contact mappings.
-      x-required-roles: [judicial_officer]
+      x-required-roles: [judicial_officer, dpo]
       responses:
         '200':
           description: Judicial request workflow records.
@@ -3684,14 +4065,8 @@ paths:
       tags: [Judicial workflow]
       operationId: validateJudicialRequestByDpoStage
       summary: Record the DPO validation stage for a request
-      description: |
-        Current preproduction implementation is blocked: the controller admits only
-        `judicial_officer`, while the service accepts only `dpo`. Every caller is therefore
-        rejected. This operation must not be relied on until the role contract is corrected
-        and tested.
-      x-error-only: true
-      x-implementation-status: blocked-role-contract
-      x-required-roles: [judicial_officer]
+      description: Independent DPO approval. The DPO and legal validation stages must both exist before execution.
+      x-required-roles: [dpo]
       parameters:
         - $ref: '#/components/parameters/Id'
       requestBody:
@@ -3701,6 +4076,12 @@ paths:
             schema:
               $ref: '#/components/schemas/JudicialWorkflowComment'
       responses:
+        '201':
+          description: DPO validation stage recorded and audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudicialRequestResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -3747,7 +4128,7 @@ paths:
       tags: [Judicial workflow]
       operationId: rejectJudicialRequest
       summary: Reject an exceptional legal-access request
-      x-required-roles: [judicial_officer]
+      x-required-roles: [judicial_officer, dpo]
       parameters:
         - $ref: '#/components/parameters/Id'
       requestBody:
@@ -3777,13 +4158,18 @@ paths:
     post:
       tags: [Judicial workflow]
       operationId: executeJudicialRequest
-      summary: Execute the approved judicial workflow and create secure-document metadata
-      description: The current implementation always records and rejects this action. Actual minimal identity extraction remains a DPO-console procedure.
-      x-error-only: true
-      x-required-roles: [judicial_officer]
+      summary: Produce an encrypted minimal export after double validation
+      description: DPO-only execution after both DPO and legal validation. The response contains no plaintext contact data and expires under the configured export TTL.
+      x-required-roles: [dpo]
       parameters:
         - $ref: '#/components/parameters/Id'
       responses:
+        '201':
+          description: Encrypted export envelope produced, fingerprinted, expiry-stamped, and audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudicialExecutionResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -3798,7 +4184,7 @@ paths:
     post:
       tags: [Judicial workflow]
       operationId: closeJudicialRequest
-      summary: Close an executed/rejected judicial workflow with final comments
+      summary: Close an executed judicial workflow with final comments
       x-required-roles: [judicial_officer]
       parameters:
         - $ref: '#/components/parameters/Id'
@@ -3830,7 +4216,7 @@ paths:
       tags: [Audit]
       operationId: listAuditLogs
       summary: List recent operational audit records
-      description: The service limits rows and the response must never be treated as an unrestricted secret/contact/answer search.
+      description: Returns at most 200 recent rows and always restricts results to the caller's organization. The response must never be treated as an unrestricted secret/contact/answer search.
       x-required-roles: [admin, dpo, judicial_officer, technical_admin]
       parameters:
         - $ref: '#/components/parameters/AuditLimit'

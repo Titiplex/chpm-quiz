@@ -75,7 +75,7 @@ Project administrators cannot use the web interface to reveal respondent email a
 
 ## Current limitation
 
-The local demo can simulate creating a new site/building and a questionnaire translation draft. The connected backend does not currently implement building creation or translation-draft endpoints. Do not promise these actions in a connected deployment until operations confirms a later implementation.
+Project administrators can create sites inside their organization. The assigned site manager can then create buildings inside that site. Questionnaire administrators can clone a questionnaire into a separate language draft. Every action is server-scoped and audited; duplicate codes are rejected.
 
 ## End-of-task checklist
 

@@ -19,7 +19,7 @@ This guide covers local development and the rules for changing behavior safely. 
 Use the Node and npm versions declared by the repository. From the root:
 
 ```powershell
-npm install
+npm ci
 Copy-Item backend/.env.example backend/.env
 npm run db:up
 npm run prisma:migrate
@@ -118,6 +118,6 @@ Request explicit security/privacy review for any change involving:
 
 The seed contains French clinical questionnaire fixtures and fabricated operational records. This localized content is application data, not source-code documentation. Do not translate validated instrument wording casually, and do not treat seed credentials or simulated access links as production defaults.
 
-## Known implementation gap
+## Connected/demo parity
 
-The local demo API supports site building creation and questionnaire translation drafts, while the connected backend currently does not. Do not copy demo routes into OpenAPI or production manuals until equivalent NestJS controllers, authorization, DTOs, services, persistence, and tests exist.
+Site/building creation and questionnaire translation drafts are implemented in both connected and demo modes. When extending demo behavior, keep it visibly non-authoritative and add the real scoped backend contract first whenever the feature is promised for connected use.

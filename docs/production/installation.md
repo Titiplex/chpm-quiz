@@ -1,77 +1,169 @@
-# Preproduction installation guide
+# Production installation and handover guide
 
-This procedure recreates the supplied preproduction stack from repository source, environment values, Prisma migrations, and TLS certificate files.
+This guide installs CHPM Survey 1.0 from a reviewed source release. The supplied production Compose file is a hardened single-node reference topology. For high availability, deploy the same frontend and API images behind the institution's load balancer and use managed PostgreSQL, secret storage, monitoring, and backup services.
 
-## Prerequisites
+The software can be deployed to production once the technical checks below pass. Go-live still requires the client to approve its DPIA, processing register, respondent notice, retention periods, identity provider, provider contracts, accessibility evidence, recovery objectives, and residual risks.
 
-- Reviewed release commit/tag and trusted build host.
-- Docker Engine and Docker Compose v2.
-- DNS name pointing to the reverse proxy.
-- Valid certificate directory (`TLS_CERT_DIR`) containing `fullchain.pem` and `privkey.pem` with restricted permissions.
-- Approved secret injection for database passwords, session/respondent secrets, AES keys, HMAC pepper, provider credentials, judicial-export key, and backup passphrase.
-- Approved email/SMS provider modes and sender identities.
-- Isolated preproduction data; never clone real production personal data without explicit authorization and minimization.
+## 1. Prerequisites
 
-## Prepare configuration
+- A reviewed release commit/tag and its SHA-256 manifest.
+- Docker Engine 26+ and Docker Compose v2.27+, or an equivalent orchestrator.
+- Node.js `22.18.x` and npm `10.9.x` on the validation host.
+- A production DNS name and a valid TLS certificate. `TLS_CERT_DIR` must contain `fullchain.pem` and `privkey.pem` with restricted permissions.
+- An OIDC client using Authorization Code flow, PKCE, and institutional MFA. Register the exact callback `https://<host>/api/auth/oidc/callback`.
+- An empty PostgreSQL database or a managed PostgreSQL 17 database where an owner can create the migration and runtime roles.
+- Approved email/SMS providers, sender identities, and data-processing terms. SMS may remain `disabled`.
+- A secret manager, encrypted backup target, centralized logs, monitoring, and a tested alert route.
+- Separate named owners for deployment, database, security, DPO/legal approval, and rollback authority.
 
-From the repository root in PowerShell:
+Never copy real personal data into a test environment. Do not put secrets in the repository, image layers, tickets, chat, shell history, or build output.
 
-```powershell
-Copy-Item .env.preprod.example .env.preprod
-Select-String -Path .env.preprod -Pattern 'replace-with-|example|simulation'
-```
+## 2. Verify and test the release
 
-Replace every placeholder and review every URL/origin/provider. Generate secrets using an approved cryptographic secret manager. Example commands for a controlled POSIX shell are:
+From the release root:
 
 ```sh
-openssl rand -base64 32  # EMAIL_ENCRYPTION_KEY_B64
-openssl rand -base64 32  # JUDICIAL_EXPORT_KEY_B64
-openssl rand -base64 48  # RESPONDENT_TOKEN_SECRET / EMAIL_HASH_PEPPER
+node --version
+npm --version
+npm ci
+npm run check
+npm run build
+npm run prisma:validate
+npm run openapi:lint
 ```
 
-Do not copy command output into tickets, shell history, chat, or repository files. Do not reuse a value across purposes.
+`npm ci` uses both committed lockfiles. Do not substitute `npm install` during a controlled release. Archive the test output, release commit, lockfile hashes, and reviewer identity.
 
-## Deploy
+Run software-composition and image scanning in the client's approved tooling. At minimum, retain the results of:
 
-```powershell
-npm run preprod:up
+```sh
+npm audit --audit-level=high
+npm --prefix backend audit --audit-level=high
+npm sbom --sbom-format=cyclonedx > frontend-sbom.cdx.json
+npm --prefix backend sbom --sbom-format=cyclonedx > backend-sbom.cdx.json
 ```
 
-Compose runs the Prisma migrator before the API, frontend, and TLS reverse proxy. Deployment uses `prisma migrate deploy`, never development migration commands.
+Any unresolved critical/high finding needs a documented decision by the security owner before go-live.
 
-## Verify
+## 3. Create production configuration
 
-```powershell
-curl.exe -k https://<host>/healthz
-curl.exe -k https://<host>/api/health/ready
-npm run preprod:logs
+```sh
+cp .env.production.example .env.production
+chmod 600 .env.production
 ```
 
-Preproduction is accepted only when:
+Replace every `CHANGEME` and every `example.org` value. Pin `POSTGRES_IMAGE`, `NGINX_IMAGE`, and `NODE_IMAGE` to approved immutable `@sha256:<64 hex characters>` digests. Generate independent random values for every password—including the restricted DPO database role—token secret, encryption key, HMAC pepper, monitoring token, and backup passphrase.
 
-1. `reverse-proxy`, `frontend`, `backend`, and `postgres` report healthy.
-2. Readiness reports both database domains as `ok`.
-3. Migration status matches the reviewed release.
-4. Backend/proxy logs are structured and include a correlation identifier without secrets/contact/answer bodies.
-5. Staff session cookies are `HttpOnly`, `Secure`, and use the approved `SameSite` value.
-6. CORS accepts only final HTTPS frontend origins.
-7. TLS/protocol/certificate/HSTS checks pass from an independent client.
-8. No secret appears in built frontend assets; only explicitly public `VITE_*` values are present.
-9. Simulation delivery providers are disabled in production-like mode.
-10. Representative RBAC/ABAC, invitation, respondent autosave/submit, terminal, statistics suppression, audit, backup, and monitoring checks pass with fabricated data.
+For the two 32-byte AES keys:
 
-Record the release, configuration/change reference, image digests, migration output, health results, certificate result, test evidence, approvers, and time.
+```sh
+openssl rand -base64 32
+```
 
-## Secret rotation constraints
+Inject secrets from the approved secret manager in the final platform. The `.env.production` file is only the Compose reference mechanism; delete or securely archive it after migration to managed injection.
 
-- `RESPONDENT_TOKEN_SECRET`: current implementation has no multi-key verification. Rotation invalidates existing respondent/terminal-style signatures that depend on it; plan invitation handling and communication.
-- `EMAIL_ENCRYPTION_KEY_B64`: rotate through controlled re-encryption with verified rollback/backup. Replacing it directly makes existing ciphertext unreadable.
-- `EMAIL_HASH_PEPPER`: rotation requires recomputing hashes while authorized access to the old pepper/data remains.
-- `JUDICIAL_EXPORT_KEY_B64`: verify active export decryptability/retention before retiring the old key.
-- Session/database/provider credentials: revoke/rotate with staged health checks and documented dependency impact.
+Validate the final values and rendered Compose model:
 
-Keys and peppers require versioned custody, access review, recovery, and destruction procedures outside this repository.
+```sh
+npm run prod:config
+```
 
-## Rollback
+The preflight rejects placeholders, mutable infrastructure-image tags, local authentication, simulation providers, missing MFA requirements, and identical runtime database URLs. The API performs additional validation at startup, including provider credentials, HTTPS origins, cryptographic key sizes, and distinct operational/identity database accounts.
 
-Define rollback before deploying. Application rollback may be unsafe after a non-backward-compatible database migration. Prefer forward fixes and expand/contract migrations. If rollback is authorized, preserve evidence, confirm schema compatibility, use a reviewed image digest, verify both database domains, and repeat the acceptance checks.
+## 4. Configure OIDC and staff access
+
+Production requires `AUTH_PROVIDER=oidc`. Configure issuer, client ID/secret, exact HTTPS redirect URI, scopes, and either `AUTH_OIDC_REQUIRED_ACR` or `AUTH_OIDC_REQUIRED_AMR` to enforce the institution's MFA claim.
+
+The implementation validates discovery endpoints, state, nonce, PKCE, RSA signature, issuer, audience/authorized party, timestamps, verified email, and the configured MFA claim. It provisions no account from IdP claims: every staff email must already exist as an active, scoped local authorization record. This prevents an authenticated but unapproved institutional account from entering the application.
+
+Test login, logout, session revocation, inactive-account rejection, wrong organization/site/building access, and MFA failure using dedicated acceptance accounts. `ALLOW_LOCAL_AUTH_IN_PRODUCTION` must remain `false`.
+
+## 5. Initialize database privileges
+
+On a fresh Compose volume, `ops/postgres/init-production.sh` creates:
+
+| Role | Purpose | Access |
+| --- | --- | --- |
+| `chpm_migrator` | One-shot Prisma migrations | Owns `public` and `identity` schemas |
+| `chpm_operational` | API operational Prisma client | DML only in `public` |
+| `chpm_identity` | API identity-vault Prisma client | DML only in `identity` |
+| `chpm_dpo` | Disabled-by-default local DPO console | Column-limited reads/updates and append-only audit writes needed by that console |
+
+Public database connection and schema privileges are revoked. After each migration, `db:apply-dpo-grants` recreates the filtered DPO-account view and reapplies the narrow console grants. The API receives only the operational and identity runtime URLs; Compose does not inject the PostgreSQL owner, migrator, DPO-console, backup, or bootstrap secrets into the backend container.
+
+Initialization scripts run only when the PostgreSQL data directory is empty. For an existing or managed database, have the database owner review and run the SQL in `ops/postgres/init-production.sh` before migrations; set the standard `PGHOST`, `PGPORT`, `PGUSER`, and `PGDATABASE` connection variables for that execution. Verify grants independently after migration.
+
+Do not point production at the local development role or use one runtime credential for both schemas.
+
+## 6. Build, migrate, and start
+
+```sh
+npm run prod:build
+npm run prod:up
+npm run prod:logs
+```
+
+Compose starts PostgreSQL, applies `prisma migrate deploy` through the one-shot migrator, checks migration status, starts the read-only API/frontend containers, and finally starts the TLS reverse proxy. Development migrations and `prisma db push` are forbidden in production.
+
+For an orchestrator, run the migrator image once before rolling API instances. Never run multiple migrations concurrently.
+
+## 7. Bootstrap the first scoped administrator
+
+Set the `BOOTSTRAP_*` values for the initial organization, site, building, and project administrator. Run once:
+
+```sh
+npm run prod:bootstrap
+```
+
+The command creates or updates only the declared scoped records, audits the action, and marks the temporary local password for rotation. With OIDC, the administrator's email must exactly match the pre-approved IdP email; the first valid federated login replaces local-password use. Remove the bootstrap password and profile values from active secret injection after verification.
+
+Create DPO, judicial officer, technical administrator, questionnaire administrator, analyst, and service accounts only through the approved named-account procedure. Do not share accounts.
+
+## 8. Verify the running system
+
+```sh
+curl --fail https://<host>/healthz
+curl --fail https://<host>/api/health/live
+curl --fail https://<host>/api/health/ready
+curl --fail -H "Authorization: Bearer <monitoring-token>" \
+  https://<host>/api/metrics/prometheus
+```
+
+Readiness must report `operationalDatabase`, `identityDatabase`, and `deliveryQueue` as `ok`. Also verify:
+
+1. TLS 1.2/1.3, certificate chain/hostname, HTTP-to-HTTPS redirect, HSTS, CSP, and secure cookie attributes from an independent client.
+2. OIDC login with MFA, pre-provisioning denial, logout, forced revocation, and no local-login form.
+3. Negative cross-organization, cross-site, and cross-building access with fabricated data.
+4. Site/building creation, translation draft cloning, publication immutability, and collection-window enforcement.
+5. One email delivery and, if enabled, one SMS delivery through provider sandbox/production acceptance recipients; retry a controlled transient failure.
+6. Respondent open, autosave, resume, submit, replay rejection, expired-link rejection, terminal, and paper workflows.
+7. Small-cell suppression for totals and every segment; pseudonymized export contains no direct contact.
+8. DPO/legal double validation, encrypted judicial export, audit evidence, expiry, and deletion using fabricated codes.
+9. Automatic and manual retention runs with approved cutoffs and legal-hold procedure.
+10. Encrypted backup and isolated restore test meeting approved RPO/RTO.
+11. Central logs, dashboards, alerts, clock synchronization, certificate/provider/queue/backup alerts, and absence of secrets/contact/answers in logs.
+12. Secret scan of built frontend assets; known demonstration passwords and `VITE_DEMO_MODE` data must be absent.
+
+Record commands, timestamps, release/image digests, migration output, test identities/data set, results, defects, approvers, and evidence locations.
+
+## 9. Scale-out requirements
+
+Database login lockout is shared, but the generic HTTP rate limiter is process-local. Before running multiple API replicas, enforce the documented request and login limits at a trusted ingress or shared limiter and test client-IP handling with `TRUST_PROXY_HOPS`.
+
+The supplied Compose database and reverse proxy are single-node. Client production requiring high availability must provide replicated PostgreSQL/PITR, redundant ingress, multiple stateless API/frontend instances, distributed monitoring, and an orchestrator-managed rolling strategy. These are infrastructure responsibilities, not application flags.
+
+## 10. Upgrade and rollback
+
+Before every upgrade:
+
+1. Review release notes, OpenAPI changes, migrations, retention impact, and key/provider changes.
+2. Take and verify an encrypted backup; complete a restore rehearsal when migrations are sensitive.
+3. Confirm backward compatibility between the current database and both old/new application versions.
+4. Run the complete acceptance subset in preproduction using the exact image digests.
+5. Agree the rollback authority and observation window.
+
+Prefer forward fixes and expand/contract migrations. Never roll an application image back across an incompatible schema. If rollback is approved, preserve incident/change evidence, use the reviewed previous digest, verify all three readiness checks, repeat authentication/scope/respondent/delivery tests, and document the outcome.
+
+## 11. Final go-live decision
+
+The technical release is ready only when all repository checks pass and the target installation evidence above is complete. The client—not the software vendor—must sign the DPIA/legal basis, respondent information, retention, provider/transfer terms, accessibility assessment, penetration/security results, disaster-recovery evidence, incident contacts, and accepted residual risks. Open critical findings or missing mandatory evidence mean no-go.

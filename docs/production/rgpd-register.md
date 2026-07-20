@@ -30,7 +30,7 @@ This is an engineering inventory for the data controller's Article 30 record and
 - Project administrators/researchers are not recipients of code-to-contact mappings.
 - Site managers and moderators do not receive clear respondent contacts from normal APIs.
 - Analysts receive only authorized aggregate/pseudonymized data, never the identity domain.
-- The DPO does not use the normal SPA for protected identity access.
+- The DPO does not use ordinary business screens for protected identity access; only the dedicated `/coffre-email` module/API or approved break-glass console may execute a validated request.
 - The normal operational API returns neither clear respondent contact, identity ciphertext/hash, nor DPO export.
 
 Review this record and the DPIA whenever purpose, questionnaire, population, site, provider, data field, telemetry, threshold, export, retention, or identity-access behavior changes.

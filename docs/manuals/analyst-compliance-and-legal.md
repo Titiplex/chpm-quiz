@@ -34,7 +34,7 @@ After export, record the generated fingerprint and row/suppression metadata. The
 
 The compliance view describes processing purposes, lawful bases, data categories, recipients, storage, safeguards, jobs, and configured retention rules. These values are a technical representation and must be reconciled with the organization's approved register and DPIA.
 
-Maintenance actions can expire invitations and remove stale drafts. Authorized operators should run them according to schedule, retain counts/correlation IDs, and investigate unexpected deviations.
+The scheduled retention cycle expires invitations, removes stale drafts and submitted data past approved cutoffs, scrubs identity mappings, expires judicial exports, and prunes audit/delivery records. Authorized operators should review each run, retain counts/correlation IDs, and investigate unexpected deviations or active legal holds.
 
 ## Audit logs
 
@@ -46,19 +46,19 @@ Do not add direct respondent contact data, passwords, tokens, keys, or answer co
 
 The judicial officer records a request reference, legal basis, requester, explicit public codes, and supporting reference. The workflow then records required DPO/legal validation, rejection or execution, and closure.
 
-The web workflow manages authorization state and secure-document metadata. It does not provide unrestricted identity-vault search.
+The dedicated **Email vault** screen at `/coffre-email` manages authorization state and downloads only the short-lived encrypted envelope returned after execution. It never provides unrestricted identity-vault search or plaintext contact data.
 
-The current preproduction workflow is not end-to-end operational: the DPO-validation web route has incompatible role checks, API execution is intentionally denied, and the DPO console does not currently advance the linked request through execution/closure. Until that integration is corrected and tested, keep the authoritative approval/closure record in the organization's approved external legal/DPO process.
+The application enforces an organization-scoped chain: the judicial officer records the request and legal validation; a DPO independently validates it; only the DPO can produce the encrypted minimal export; and the judicial officer closes the executed workflow. The organization's official legal/DPO record remains authoritative and must retain recipient, transfer, expiry, and destruction evidence.
 
 ## DPO exceptional identity access
 
-Actual code-to-contact access uses the dedicated local DPO console, not the browser:
+After both approvals, the DPO may use the dedicated web screen/API export or the local console:
 
 1. Verify the approved request and explicit public-code list.
-2. Use a named DPO account in the controlled console environment.
+2. Use a named DPO account with MFA in the controlled DPO environment.
 3. Enter the required justification and procedure reference.
 4. Export only the approved codes.
-5. Encrypt the output using the authorized key procedure.
+5. For the web/API path, verify and store the already encrypted envelope; for the local-console path, follow its authorized encryption-key procedure.
 6. Record the fingerprint, recipients, expiry, transfer, and destruction evidence.
 7. Close the legal workflow when evidence is complete.
 

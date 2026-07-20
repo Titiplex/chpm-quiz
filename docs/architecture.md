@@ -13,11 +13,12 @@ flowchart TB
   API --> Operational[("Operational schema")]
   API --> Identity[("Identity schema")]
   API --> Providers["Approved email/SMS providers"]
-  Operator["Local operator/DPO consoles"] --> Operational
+  IdP["Institutional OIDC IdP"] --> API
+  Operator["Controlled operator/DPO console"] --> Operational
   Operator --> Identity
 ```
 
-In preproduction, Nginx terminates TLS and routes frontend, API, and health traffic. The Vue application contains no trusted authorization logic. The NestJS API authenticates staff, validates token-based respondent access, enforces roles and scopes, and performs all persistent mutations.
+In connected deployments, Nginx terminates TLS and routes frontend, API, and health traffic. Production staff authentication uses institutional OIDC with MFA. The Vue application contains no trusted authorization logic. The NestJS API validates staff sessions and respondent tokens, enforces roles/scopes, and performs all persistent mutations.
 
 ## Trust boundaries
 
@@ -28,7 +29,7 @@ In preproduction, Nginx terminates TLS and routes frontend, API, and health traf
 | Respondent link | HMAC signature, stored token hash, invitation/session state, expiry | A public code alone authorizes access |
 | Operational to identity schema | Explicit service access and encrypted contact values | Pseudonymization makes all operational data anonymous |
 | API to provider | Approved configuration, minimal recipient/payload, transport security | Simulation providers are acceptable in production |
-| DPO export | Local console, named user, explicit codes, justification, encrypted output, dual audit | A web administrator may browse or search direct contact data |
+| DPO export | Independent DPO/legal validation, named DPO, explicit codes, encrypted output, expiry, dual audit | A business or technical administrator may browse/search direct contact data |
 
 ## Data domains
 
@@ -40,9 +41,9 @@ Although respondent records are pseudonymized, public codes, free text, timestam
 
 ### Identity domain
 
-The identity schema stores direct contact values such as email addresses and phone numbers as AES-256-GCM ciphertext, together with HMAC hashes used for controlled comparison. It also records identity-vault access evidence.
+The identity schema stores direct contact values as AES-256-GCM ciphertext, HMAC hashes used for controlled comparison, encrypted durable outbound-delivery jobs, provider-delivery events, and identity-vault audit evidence.
 
-Application roles do not receive decrypted values through normal API responses. The exceptional DPO console is the intended identity-export path.
+Application roles do not receive decrypted values through normal business API responses. Only a DPO may execute a double-validated judicial request; the output is an encrypted envelope or an encrypted local-console file, never a general contact search.
 
 ### Client-side demo domain
 
@@ -52,19 +53,20 @@ Application roles do not receive decrypted values through normal API responses. 
 
 ### Staff authentication
 
-1. The user posts email and password to `/api/auth/login`.
-2. The API verifies the bcrypt hash and account state.
-3. The API stores a hash of a random session token and sets `chpm_session` as an HTTP-only cookie.
-4. Each protected request resolves the session, user, role, and scope before entering the controller.
-5. Logout or sensitive account changes revoke sessions server-side.
+1. The login page reads `/api/auth/config` and starts OIDC Authorization Code with PKCE.
+2. The API validates state, nonce, PKCE, RSA signature, issuer/audience, timestamps, verified email, and the configured MFA claim.
+3. The verified email must match a pre-provisioned active account with a local role and scope.
+4. The API stores a hash of a random session token and sets the HTTP-only secure session cookie.
+5. Each protected request reloads session, user, role, and scope; logout and sensitive account changes revoke sessions server-side.
 
 ### Invitation and response
 
 1. A moderator or site manager selects a published questionnaire version and an authorized building.
 2. The API creates an invitation, public code, and signed respondent token.
-3. Direct contact data is encrypted in the identity domain; operational views receive masked contact data only.
-4. The respondent resolves the token, autosaves answers, optionally emits limited telemetry, and submits.
-5. Final submission locks the response session and answers. Resubmission is rejected.
+3. Direct contact data and the durable provider job payload are encrypted in the identity domain; operational views receive masked contact only.
+4. Queue workers claim/retry jobs across restarts and call the configured provider with bounded timeouts.
+5. The respondent resolves the token during the published collection window, autosaves answers, optionally emits limited telemetry, and submits.
+6. Final submission locks the response session and answers. Resubmission is rejected.
 
 ### On-site terminal
 
@@ -85,11 +87,11 @@ A `refusal_record` is field-tracking data only. It never creates a response sess
 
 ### Statistics and export
 
-Aggregate statistics apply a configured minimum-cell threshold. Insufficient groups return suppression indicators rather than granular values. Analyst-only submission detail and pseudonymized exports exclude the identity schema and direct contact data, but remain controlled personal data.
+Aggregate statistics apply a configured minimum-cell threshold to totals and every version/site/building/language/delivery/question segment. Insufficient cells return suppression indicators rather than counts or rates. Analyst-only submission detail and pseudonymized exports exclude the identity schema and direct contact data, but remain controlled personal data.
 
 ### Exceptional identity access
 
-The judicial web workflow records authorization stages and secure-document metadata. Actual code-to-contact extraction occurs through the DPO console with explicit public codes, justification, procedure reference, encrypted output, fingerprinting, expiry metadata, and audit evidence.
+The judicial workflow is organization-scoped and requires independent legal and DPO validation. A DPO may execute only the approved list of up to 50 public codes. The API returns an AES-256-GCM envelope; the local console is an alternative controlled file path bound to the same validated request. Both paths fingerprint, expire, and audit the output.
 
 ## Authorization model
 
@@ -99,7 +101,7 @@ The current role-to-permission mapping is described in [Permissions and scope](r
 
 ## Security controls implemented in code
 
-- Bcrypt password verification.
+- OIDC Authorization Code/PKCE with RSA-token and MFA-claim validation; database-backed local lockout for approved non-production use.
 - Opaque staff sessions stored by hash.
 - HMAC-signed respondent and terminal tokens stored by hash.
 - AES-256-GCM contact encryption with authenticated metadata.
@@ -109,11 +111,13 @@ The current role-to-permission mapping is described in [Permissions and scope](r
 - Configured-origin CORS with credentials.
 - Correlation identifiers and structured request logs.
 - Browser-oriented security headers.
-- Application and identity-vault audit evidence.
+- Durable encrypted email/SMS queues with retry, stale-lock recovery, and provider timeouts.
+- Scheduled retention across responses, identity mappings, delivery records, audits, and export expiry.
+- Organization-scoped application and identity-vault audit evidence.
 - Production-like environment validation for secrets, TLS origins, and provider modes.
 
 ## Deployment responsibilities and limitations
 
 The application does not by itself provide network segmentation, host hardening, centralized secrets, shared multi-instance rate limiting, database high availability, log retention, SIEM alerting, key custody, provider contracts, disaster-recovery evidence, or legal approval. These are deployment controls.
 
-The connected backend also lacks the demo-only building-creation and questionnaire-translation endpoints. See the root README for the current limitation list.
+The single-node Compose reference and process-local generic request limiter are deployment constraints. See the root README and production installation guide for scale-out requirements.

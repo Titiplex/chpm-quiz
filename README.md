@@ -4,7 +4,7 @@ CHPM Survey is a role-based platform for designing adaptive questionnaires, invi
 
 The repository contains a connected application, a local demo mode, and a restricted static GitHub Pages demonstration. It also includes operational, privacy, accessibility, and acceptance-test documentation.
 
-> **Deployment status:** the repository is suitable for development and controlled preproduction evaluation. Production use remains conditional on organization-specific security review, a DPIA, accessibility acceptance, provider configuration, backup restoration tests, and resolution of the limitations listed in [Known limitations](#known-limitations).
+> **Deployment status:** version 1.0 contains a production deployment reference and the application-level controls required for client handover. It is technically deployable after the documented validation succeeds. Actual go-live remains conditional on the client's DPIA/legal approvals, accessibility and security acceptance, provider/IdP configuration, monitored infrastructure, and a successful backup restoration test.
 
 ## What the platform does
 
@@ -28,7 +28,7 @@ CHPM Survey is a data-collection tool. It does not provide medical advice, diagn
 | Moderator (`moderator`) | Creates and follows invitations, prints forms, and enters paper responses | Assigned building |
 | Questionnaire administrator (`questionnaire_admin`) | Designs, versions, previews, and publishes questionnaires | Authorized questionnaires |
 | Analyst (`analyst`) | Reviews aggregate statistics and explicitly pseudonymized records/exports | Analytics scope |
-| DPO (`dpo`) | Performs exceptional, justified identity exports through the dedicated local console | Identity vault procedure only |
+| DPO (`dpo`) | Independently validates and executes exceptional encrypted identity exports | Organization-scoped judicial procedure only |
 | Judicial officer (`judicial_officer`) | Records and advances exceptional legal-access workflows | Legal workflow, not unrestricted identity data |
 | Technical administrator (`technical_admin`) | Operates infrastructure, health, metrics, retention jobs, and terminal devices | Technical scope |
 | Respondent | Completes one questionnaire through a signed token | Token-bound session |
@@ -39,7 +39,7 @@ See [Permissions and scope](docs/recette/permissions-matrix.md) for the authorit
 
 | Mode | Purpose | Data source | Important constraint |
 | --- | --- | --- | --- |
-| Connected application | Development, preproduction, and future production | NestJS API and PostgreSQL | Requires configured backend and data stores |
+| Connected application | Development, preproduction, and production | NestJS API and PostgreSQL | Requires the environment-specific controls in the production guide |
 | Local demo (`VITE_DEMO_MODE=true`) | UI exploration and frontend testing | Browser-local simulated API | Never use for real or sensitive data |
 | Static Pages demo (`VITE_STATIC_PAGES_DEMO=true`) | Public, non-connected showcase | Bundled static fixtures | Publishes only the static moderation and patient questionnaire screens |
 
@@ -68,7 +68,7 @@ The required Node version is also recorded in `.node-version` and `.nvmrc`. On W
 From the repository root:
 
 ```powershell
-npm install
+npm ci
 Copy-Item backend/.env.example backend/.env
 npm run db:up
 npm run prisma:migrate
@@ -146,6 +146,23 @@ Start with the [documentation hub](docs/README.md).
 - [Production and preproduction runbooks](docs/production/README.md)
 - [Acceptance, security, privacy, and accessibility checks](docs/recette/README.md)
 
+## Production installation
+
+The production reference uses immutable base-image digests, separate migration/operational/identity database roles, OIDC with MFA, durable encrypted delivery queues, automatic retention, read-only runtime containers, TLS reverse proxying, authenticated monitoring, and encrypted backup/restore tooling.
+
+Start with [Production installation and handover](docs/production/installation.md):
+
+```sh
+cp .env.production.example .env.production
+# Replace every placeholder and configure TLS, OIDC, providers, database roles, and secrets.
+npm run prod:config
+npm run prod:build
+npm run prod:up
+npm run prod:bootstrap
+```
+
+Do not use these commands until `npm run prod:config` passes and the target owners have approved the go-live plan.
+
 ## Preproduction
 
 Copy the preproduction template, replace every placeholder, and start the stack:
@@ -159,14 +176,14 @@ curl.exe -k https://localhost/healthz
 
 The stack includes PostgreSQL, a Prisma migrator, the NestJS API, the built frontend, an Nginx reverse proxy, and the encrypted-backup job. Follow [Preproduction installation](docs/production/installation.md) and complete every go/no-go check before exposing the service.
 
-## Known limitations
+## Deployment constraints
 
-- The connected NestJS backend does not currently implement `POST /api/site/buildings` or `POST /api/questionnaires/{id}/translations`. The frontend demo API supports these flows, but connected deployments must not present them as operational until backend endpoints and tests are added.
-- The in-process rate limiter is single-instance and memory-backed. A multi-instance deployment needs a shared, trusted-edge rate limiter.
-- Email and SMS delivery require organization-approved providers and production credentials. Simulation providers are rejected in production-like environments.
-- The identity-vault export is intentionally unavailable through the web API. It is performed through the dedicated, audited DPO console.
-- The web judicial workflow is incomplete: the DPO-validation route has contradictory controller/service role requirements, API execution is intentionally denied, and the console does not currently advance the linked request to an executable/closable state. Do not use it as production legal-workflow evidence until the state/role integration is corrected and end-to-end tested.
-- Static GitHub Pages mode is a demonstration, not an authenticated or data-collecting deployment.
+- The supplied production Compose topology is single-node. High availability, PostgreSQL replication/PITR, redundant ingress, centralized secret storage, and immutable log/SIEM retention are client infrastructure responsibilities.
+- The generic HTTP rate limiter is process-local. Multi-replica deployments must enforce equivalent limits at a trusted ingress or shared limiter; database-backed account lockout remains shared.
+- Production staff federation supports OIDC Authorization Code with PKCE and MFA claim enforcement. Native SAML is not implemented; use an approved SAML-to-OIDC gateway if required.
+- Email/SMS delivery requires client-approved providers, credentials, sender validation, and live acceptance tests. Simulation providers are rejected in production-like environments.
+- Automated retention follows configured cutoffs, but legal holds, provider/paper/recipient copies, and destruction evidence remain procedural controls outside the application.
+- Static GitHub Pages and local demo modes are demonstrations, not authenticated or data-collecting deployments.
 
 ## Security reporting
 

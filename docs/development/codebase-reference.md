@@ -44,22 +44,22 @@ Public respondent and terminal controllers instead verify signed tokens inside t
 
 | Module | Controller operations | Key invariant |
 | --- | --- | --- |
-| `auth` | Login, current profile, logout | Clear session token is never stored server-side |
-| `users` | Project/site delegation and deprecated aliases | A manager cannot create a peer or superior role |
+| `auth` | OIDC start/callback, local login, password rotation, profile, logout | Verified IdP email maps only to a pre-provisioned account; clear session token is never stored server-side |
+| `users` | Scoped site/building creation, project/site delegation, deprecated aliases | A manager cannot escape organization/site scope or create a peer/superior role |
 | `buildings` | Scoped building list | Moderator sees one building; manager sees one site |
-| `questionnaires` | Read/build questionnaire structure | Published versions cannot be edited |
+| `questionnaires` | Read/build/translate questionnaire structure | Published versions cannot be edited; translated drafts receive independent IDs and rewritten references |
 | `versions` | Versions, rules, publication check/publish | Publication is validated, audited, and immutable |
 | `moderation` | Invitations, resend, paper entry, terminal registration alias | Contact data is separated; all objects must be in scope |
-| `respondent` | Resolve, autosave, telemetry, submit | Token, expiry, invitation state, and lock state are checked on every mutation |
+| `respondent` | Resolve, autosave, telemetry, submit | Token, collection window, expiry, invitation state, and lock state are checked on every mutation |
 | `terminal-admin` | List/create/update/revoke/regenerate | Clear terminal token is returned only on create/regeneration |
 | `terminal` | Resolve terminal and open assigned invitation | Terminal can open only its assigned eligible invitations |
 | `stats` | Aggregate/question/submission statistics | Small cells are suppressed; detail is role restricted and audited |
-| `compliance` | Register, policy, purge jobs, export | Pseudonymized export never reads identity data |
-| `identity-vault` | Boundary status and denied-attempt evidence | Web API does not expose decrypted contact values |
-| `judicial` | Request workflow | State transitions are explicit and audited; export metadata is not unrestricted data access |
+| `compliance` | Register, policy, scheduled/manual retention, pseudonymized export | Pseudonymized export never reads identity data; retention uses explicit cutoffs |
+| `identity-vault` | Encrypted contacts, delivery jobs/events, boundary status, dual audit | Business API never exposes decrypted contact values or queue payloads |
+| `judicial` | Organization-scoped double-validation request workflow | Only DPO execution after both named validations returns an encrypted minimal envelope |
 | `notifications` | Subscriptions and digest processing | Recipient and object scope are rechecked |
 | `audit` | Authorized audit listing | Logs must not become a secret or direct-contact leakage channel |
-| `observability` | Health and metrics | Liveness is process-only; readiness checks both database domains |
+| `observability` | Health and metrics | Liveness is process-only; readiness checks both database domains and the durable queue |
 
 ## Shared security helpers
 

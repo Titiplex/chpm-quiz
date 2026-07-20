@@ -6,8 +6,9 @@ Define organization-approved recovery point (RPO), recovery time (RTO), retentio
 
 From the repository root in the configured preproduction/production maintenance environment:
 
-```powershell
-npm run backup:encrypted
+```sh
+npm run prod:backup
+# Preproduction only: npm run backup:encrypted
 ```
 
 The job exports the `public` and `identity` schemas separately, writes a manifest, archives the set, and encrypts it with OpenSSL AES-256-CBC using PBKDF2. `BACKUP_ENCRYPTION_PASSPHRASE` must be injected from an approved secret manager and must not appear in command history or logs.
@@ -38,10 +39,13 @@ In a POSIX maintenance shell (the supplied script is Bash):
 
 ```sh
 BACKUP_ENCRYPTION_PASSPHRASE='from-approved-secret-injection' \
-RESTORE_TEST_OPERATIONAL_DATABASE_URL='postgresql://.../restore_test?schema=public' \
-RESTORE_TEST_IDENTITY_DATABASE_URL='postgresql://.../restore_test?schema=identity' \
+RESTORE_TEST_CONFIRMATION='RESTORE INTO DISPOSABLE DATABASES' \
+RESTORE_TEST_OPERATIONAL_DATABASE_URL='postgresql://.../chpm_operational_restore_test?schema=public' \
+RESTORE_TEST_IDENTITY_DATABASE_URL='postgresql://.../chpm_identity_restore_test?schema=identity' \
 ops/scripts/restore_test.sh backups/chpm-backup-<timestamp>.tar.enc
 ```
+
+The script refuses production-looking URLs, requires both target database names to contain `_restore_test`, requires the exact confirmation phrase, and refuses an archive without its checksum file. It performs a destructive clean restore only inside those disposable targets.
 
 Success criteria:
 

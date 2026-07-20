@@ -39,11 +39,11 @@ for (const [operation, metadata] of documentedOperations) {
   }
 
   if (metadata.errorOnly && metadata.hasSuccessResponse) {
-    failures.push(`Error-only OpenAPI operation unexpectedly documents a 2xx response: ${operation}`)
+    failures.push(`Error-only OpenAPI operation unexpectedly documents a success or redirect response: ${operation}`)
   }
 
   if (!metadata.errorOnly && !metadata.hasSuccessResponse) {
-    failures.push(`OpenAPI operation has no 2xx response and is not marked x-error-only: ${operation}`)
+    failures.push(`OpenAPI operation has no 2xx/3xx response and is not marked x-error-only: ${operation}`)
   }
 }
 
@@ -146,7 +146,7 @@ function readOpenApiOperations() {
       operations.get(currentOperation).errorOnly = true
     }
 
-    if (/^        ['"]?2\d\d['"]?:\s*$/.test(line)) {
+    if (/^        ['"]?[23]\d\d['"]?:\s*$/.test(line)) {
       operations.get(currentOperation).hasSuccessResponse = true
     }
   }

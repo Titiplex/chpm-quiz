@@ -11,9 +11,9 @@ Run against a migrated preproduction environment with fabricated data and real p
 
 ## Authentication and delegation
 
-1. Test valid/invalid login, inactive user, logout, expiry, and session revocation.
-2. Project administrator lists sites and creates/updates/disables a site manager.
-3. Site manager creates/updates/disables a moderator in an in-site building.
+1. Test OIDC Authorization Code/PKCE with the required MFA claim, invalid state/nonce/audience, an unprovisioned email, inactive user, logout, expiry, and session revocation.
+2. Project administrator creates/lists sites and creates/updates/disables a site manager.
+3. Site manager creates a building and creates/updates/disables a moderator in an in-site building.
 4. Attempt cross-site building assignment and superior/specialized role creation; the API must reject.
 5. Verify one-time temporary password handling and audit evidence.
 
@@ -25,6 +25,7 @@ Run against a migrated preproduction environment with fabricated data and real p
 4. Test matching/non-matching conditional paths and resumed sessions.
 5. Run publication check, correct errors, publish, and verify immutability.
 6. Verify staff without builder roles cannot mutate content.
+7. Clone a language draft, verify its independent identifiers and rewritten conditions, translate content, preview it, and publish it independently.
 
 Evidence: UI captures without secrets, relevant API results, publication audit, version identifiers, negative-access results.
 
@@ -38,6 +39,8 @@ For email, SMS, terminal, paper, and refusal modes as configured:
 4. Test resend eligibility and submitted/expired conflicts.
 5. Test status transitions and scoped list visibility.
 6. Verify a refusal never creates a response session/submission.
+7. Verify invitations cannot exceed the collection close time and that respondents cannot start before `openFrom` or after `openUntil`.
+8. Stop/restart a delivery worker between enqueue and send; verify durable claim/retry, bounded attempts, provider timeout, and no plaintext payload in the operational database/logs.
 
 ## Respondent workflow
 
@@ -77,15 +80,15 @@ For email, SMS, terminal, paper, and refusal modes as configured:
 ## Compliance, notification, and operations
 
 1. Review technical register and retention output against approved values.
-2. Run expiry and draft cleanup on disposable test records; verify counts/invariants.
+2. Run expiry/draft cleanup and the complete retention cycle on disposable records around every cutoff; verify counts, identity scrubbing, queue/audit cleanup, export expiry, final-response deletion, and hold procedure.
 3. Create/update notification subscriptions and process a digest with authorized recipients only.
 4. Verify health, authenticated metrics, structured logs, correlation IDs, and alert generation.
 5. Execute encrypted backup and isolated restoration.
 6. Run incident and exceptional-access tabletop/technical exercises.
 
-## Known-gap acceptance
+## Deployment-constraint acceptance
 
-Confirm the connected deployment does not advertise demo-only building creation or questionnaire translation-draft actions. If those UI controls remain visible, record a release-blocking product decision or implement the missing backend behavior before production.
+Confirm OIDC/provider/TLS/database integrations in the real target environment. For multiple API replicas, prove trusted-ingress/shared rate limiting and proxy-IP handling. For high availability, prove database replication/PITR, redundant ingress, rolling deployment, centralized logs/secrets, and failover independently of the single-node Compose reference.
 
 ## Exit criteria
 

@@ -9,8 +9,8 @@ The persisted technical role `admin` means **project administrator/researcher**,
 | Complete token-assigned questionnaire | Yes, token scope | No | No | No | No | No | No | No | No |
 | Create/resend/list invitations | No | Yes, building | Yes, site | No | No | No | No | No | No |
 | Enter paper responses | No | Yes, building | Yes, site | No | No | No | No | No | No |
-| View clear respondent contact | No | No | No | No | No | No | Conditional, DPO console | No | No |
-| View code-to-contact mapping | No | No | No | No | No | No | Conditional, DPO console | No | No |
+| View clear respondent contact | No | No | No | No | No | No | Conditional, approved decryption environment | No | No |
+| View code-to-contact mapping | No | No | No | No | No | No | Conditional, encrypted API/console execution | No | No |
 | Read published questionnaires | Token version | Yes | Yes | Yes | Yes | Yes | No | No | No |
 | Create/edit draft questionnaires | No | No | No | Yes | No | Yes | No | No | No |
 | Publish questionnaire version | No | No | No | Yes | No | Yes | No | No | No |
@@ -24,9 +24,9 @@ The persisted technical role `admin` means **project administrator/researcher**,
 | Administer terminal devices | No | Read scoped list | Yes, site | No | No | Yes, organization | No | No | Yes, organization |
 | Read operational audit logs | No | No | No | No | No | Yes | Yes | Yes | Yes |
 | Read technical metrics | No | No | No | No | No | No | No | No | Yes |
-| Read technical register/retention | No | No | No | No | Yes | Yes | No | Yes | Yes |
-| Run retention maintenance | No | No | No | No | No | Yes | No | No | Yes |
-| Create/advance judicial request | No | No | No | No | No | No | No | Yes | No |
+| Read technical register/retention | No | No | No | No | Yes | Yes | Yes | Yes | Yes |
+| Run retention maintenance | No | No | No | No | No | Expiry/drafts only | No | No | Scoped actions + full cycle |
+| Create/advance judicial request | No | No | No | No | No | No | Validate/reject/execute | Create/legal validate/reject/close | No |
 | Export code-to-contact | No | No | No | No | No | No | Conditional: explicit codes + authority + justification + encryption + dual audit | No | No |
 
 ## Scope rules
@@ -38,7 +38,7 @@ The persisted technical role `admin` means **project administrator/researcher**,
 - Analysts receive authorized analytics scope and are the only role with individual pseudonymized submission detail.
 - Technical administrators operate infrastructure/terminals/maintenance without clear respondent contact access.
 - Judicial officers manage request state but do not independently decrypt identity data.
-- DPO identity access occurs outside the SPA through the dedicated console and approved procedure.
+- DPO identity access uses only the approved double-validation procedure through the dedicated `/coffre-email` screen/API or a controlled local-console file.
 
 Out-of-scope objects may return `404` to avoid confirming existence. A frontend page/menu is never an authorization boundary.
 
