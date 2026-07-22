@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main, dev]
+    branches: [ main, dev ]
 
 jobs:
   quality:
@@ -54,8 +54,14 @@ jobs:
         run: npm --prefix backend run prisma:validate
 
       - name: Migration dry-run status
+        env:
+          PGPASSWORD: postgres
         run: |
-          createdb postgresql://postgres:postgres@localhost:5432/chpm_ci_shadow || true
+          createdb \
+            --host=127.0.0.1 \
+            --port=5432 \
+            --username=postgres \
+            chpm_ci_shadow
           npm --prefix backend run prisma:migrate:dry-run > /tmp/chpm-migration-dry-run.sql
           npm --prefix backend run prisma:migrate:deploy
           npm --prefix backend run prisma:migrate:status
