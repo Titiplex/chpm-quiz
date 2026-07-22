@@ -6,11 +6,15 @@ import type {
   ApiBuilding,
   ApiQuestionnaire,
   BuildingsResponse,
+  BuildingMutationResponse,
+  CreateBuildingRequest,
+  AddQuestionnaireLanguageRequest,
   CreateQuestionGroupRequest,
   CreateQuestionnaireRequest,
   CreateQuestionRequest,
   PublicationCheckResponse,
   QuestionnaireResponse,
+  AddQuestionnaireLanguageResponse,
   QuestionnairesResponse,
   VersionResponse,
   UpdateQuestionGroupRequest,
@@ -49,6 +53,26 @@ export const useCatalogStore = defineStore('catalog', () => {
     }
   }
 
+
+  async function createBuilding(payload: CreateBuildingRequest): Promise<ApiBuilding> {
+    status.value = 'saving'
+    error.value = null
+
+    try {
+      const response = await apiRequest<BuildingMutationResponse>('/site/buildings', {
+        method: 'POST',
+        body: payload,
+      })
+      upsertBuilding(response.building)
+      status.value = 'ready'
+      return response.building
+    } catch (caught) {
+      status.value = 'error'
+      error.value = caught instanceof Error ? caught.message : 'Création du bâtiment impossible.'
+      throw caught
+    }
+  }
+
   async function createQuestionnaire(payload: CreateQuestionnaireRequest): Promise<ApiQuestionnaire> {
     return saveMutation(() =>
       apiRequest<QuestionnaireResponse>('/questionnaires', {
@@ -56,6 +80,29 @@ export const useCatalogStore = defineStore('catalog', () => {
         body: payload,
       }),
     )
+  }
+
+
+  async function addQuestionnaireLanguage(
+    questionnaireId: string,
+    payload: AddQuestionnaireLanguageRequest,
+  ): Promise<ApiQuestionnaire> {
+    status.value = 'saving'
+    error.value = null
+
+    try {
+      const response = await apiRequest<AddQuestionnaireLanguageResponse>(`/questionnaires/${questionnaireId}/translations`, {
+        method: 'POST',
+        body: payload,
+      })
+      upsertQuestionnaire(response.questionnaire)
+      status.value = 'ready'
+      return response.questionnaire
+    } catch (caught) {
+      status.value = 'error'
+      error.value = caught instanceof Error ? caught.message : 'Création de la traduction impossible.'
+      throw caught
+    }
   }
 
   async function updateQuestionnaire(
@@ -165,6 +212,17 @@ export const useCatalogStore = defineStore('catalog', () => {
     }
   }
 
+
+  function upsertBuilding(building: ApiBuilding): void {
+    const index = buildings.value.findIndex((candidate) => candidate.id === building.id)
+    if (index >= 0) {
+      buildings.value.splice(index, 1, building)
+      return
+    }
+
+    buildings.value = [...buildings.value, building].sort((left, right) => left.label.localeCompare(right.label, 'fr'))
+  }
+
   function upsertQuestionnaire(questionnaire: ApiQuestionnaire): void {
     const index = questionnaires.value.findIndex((candidate) => candidate.id === questionnaire.id)
 
@@ -183,7 +241,9 @@ export const useCatalogStore = defineStore('catalog', () => {
     status,
     error,
     fetchCatalog,
+    createBuilding,
     createQuestionnaire,
+    addQuestionnaireLanguage,
     updateQuestionnaire,
     createGroup,
     updateGroup,

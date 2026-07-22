@@ -1,5 +1,6 @@
 import { appConfig } from '@/config/env'
 
+/** Normalized non-successful API response exposed to Pinia stores and views. */
 export class ApiError extends Error {
   readonly status: number
   readonly payload: unknown
@@ -18,6 +19,13 @@ export interface ApiRequestOptions extends Omit<RequestInit, 'body'> {
   body?: JsonBody
 }
 
+/**
+ * Executes a JSON request through the application's single network boundary.
+ *
+ * Staff credentials are carried only by the HTTP-only cookie. A fresh correlation
+ * identifier is added for support/audit tracing. In explicit local demo mode the
+ * same typed contract is routed to the browser-local simulator.
+ */
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
   if (import.meta.env.DEV && appConfig.demoMode) {
     const { demoApiRequest } = await import('@/services/demoApi')

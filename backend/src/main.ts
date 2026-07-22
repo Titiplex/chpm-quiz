@@ -21,6 +21,8 @@ async function bootstrap() {
   })
   const config = app.get(ConfigService)
   const observability = app.get(ObservabilityService)
+  const trustProxyHops = Number(config.get<string>('TRUST_PROXY_HOPS', '1'))
+  app.getHttpAdapter().getInstance().set('trust proxy', Math.min(Math.max(trustProxyHops, 0), 10))
 
   const frontendOrigins = resolveFrontendOrigins(config)
 
@@ -35,11 +37,15 @@ async function bootstrap() {
 
   const rateLimitWindowMs = Math.max(1, Number(config.get<string>('RATE_LIMIT_WINDOW_SECONDS', '60'))) * 1000
   const rateLimitMax = Math.max(10, Number(config.get<string>('RATE_LIMIT_MAX_REQUESTS', '240')))
+  const loginRateLimitMax = Math.max(3, Number(config.get<string>('RATE_LIMIT_LOGIN_MAX_REQUESTS', '10')))
   const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>()
 
   app.use((request: Request, response: Response, next: NextFunction) => {
     const now = Date.now()
     const key = `${request.ip}:${request.method}:${request.path}`
+    const requestLimit = request.method === 'POST' && request.path.endsWith('/auth/login')
+      ? loginRateLimitMax
+      : rateLimitMax
     const bucket = rateLimitBuckets.get(key)
 
     if (!bucket || bucket.resetAt <= now) {
@@ -49,7 +55,7 @@ async function bootstrap() {
     }
 
     bucket.count += 1
-    if (bucket.count > rateLimitMax) {
+    if (bucket.count > requestLimit) {
       response.status(429).json({
         message: 'Trop de requêtes. Réessayez dans quelques instants.',
         error: 'Rate limit',
@@ -72,6 +78,11 @@ async function bootstrap() {
     response.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
     response.setHeader('Cross-Origin-Opener-Policy', 'same-origin')
     response.setHeader('Cross-Origin-Resource-Policy', 'same-site')
+    response.setHeader('X-Frame-Options', 'DENY')
+    response.setHeader(
+      'Content-Security-Policy',
+      "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+    )
 
     response.on('finish', () => {
       const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000

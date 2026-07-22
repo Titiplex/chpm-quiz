@@ -75,9 +75,15 @@ function makeService(overrides: Record<string, unknown> = {}) {
     popupDefinition: { create: vi.fn(async () => undefined), deleteMany: vi.fn(async () => undefined) },
     glossaryTerm: { upsert: vi.fn(async () => ({ id: 'term-1' })) },
     questionnaireVersion: { create: vi.fn(async () => ({ id: 'draft-clone' })) },
-    questionGroup: { create: vi.fn(async (args: any) => ({ id: `${args.data.questionnaireVersionId}-group`, ...args.data })) },
+    questionGroup: {
+      create: vi.fn(async (args: any) => ({ id: `${args.data.questionnaireVersionId}-group`, ...args.data })),
+      update: vi.fn(async () => undefined),
+    },
     conditionalRule: { create: vi.fn(async () => undefined) },
-    questionnaire: { update: vi.fn(async () => undefined) },
+    questionnaire: {
+      create: vi.fn(async (args: any) => ({ id: 'translated-questionnaire', ...args.data })),
+      update: vi.fn(async () => undefined),
+    },
   }
   const prisma = {
     questionnaire: {
@@ -261,5 +267,63 @@ describe('QuestionnairesService', () => {
     expect(tx.questionGroup.create).toHaveBeenCalled()
     expect(tx.question.create).toHaveBeenCalled()
     expect(tx.conditionalRule.create).toHaveBeenCalledWith({ data: expect.objectContaining({ trigger: expect.not.objectContaining({ groupId: oldGroupId }), effect: expect.not.arrayContaining([oldQuestionId]) }) })
+  })
+
+  it('creates an independent translation draft and rewrites all conditional references', async () => {
+    const source = {
+      ...questionnaire,
+      versions: [{
+        ...draftVersion,
+        groups: [{
+          ...draftVersion.groups[0]!,
+          conditionExpression: { questionId: 'question-1' },
+          questions: [{
+            ...draftVersion.groups[0]!.questions[0]!,
+            conditionExpression: { groupId: 'group-1' },
+          }],
+        }],
+        conditionalRules: [{
+          code: 'RULE-1',
+          trigger: { questionId: 'question-1' },
+          effect: { groupId: 'group-1' },
+          priority: 1,
+          isActive: true,
+        }],
+      }],
+    }
+    const { service, tx } = makeService({
+      questionnaire: {
+        findMany: vi.fn(async () => [questionnaire]),
+        findFirst: vi.fn(async () => questionnaire),
+        findUnique: vi.fn(async (args: any) => args.where.id ? source : null),
+        create: vi.fn(),
+        update: vi.fn(async () => undefined),
+      },
+    })
+
+    await service.createTranslationDraft('q1', { language: 'en', title: 'English title' }, adminUser)
+
+    expect(tx.questionnaire.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      code: 'ITQ-EN',
+      defaultLanguage: 'en',
+      organizationId: 'org-1',
+    }) })
+    expect(tx.questionnaireVersion.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      questionnaireId: 'translated-questionnaire',
+      language: 'en',
+      status: 'draft',
+    }) })
+    expect(tx.questionGroup.update).toHaveBeenCalledWith({
+      where: { id: 'draft-clone-group' },
+      data: { conditionExpression: { questionId: 'question-created' } },
+    })
+    expect(tx.question.update).toHaveBeenCalledWith({
+      where: { id: 'question-created' },
+      data: { conditionExpression: { groupId: 'draft-clone-group' } },
+    })
+    expect(tx.conditionalRule.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      trigger: { questionId: 'question-created' },
+      effect: { groupId: 'draft-clone-group' },
+    }) })
   })
 })

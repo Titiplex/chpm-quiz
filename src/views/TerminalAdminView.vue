@@ -6,7 +6,6 @@ import KpiCard from '@/components/common/KpiCard.vue'
 import ModalPanel from '@/components/common/ModalPanel.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
-import { appConfig } from '@/config/env'
 import { useCatalogStore } from '@/stores/catalog'
 import { useSessionStore } from '@/stores/session'
 import { useTerminalAdminStore } from '@/stores/terminalAdmin'
@@ -25,9 +24,23 @@ const form = reactive({
   label: 'Tablette accueil Montréal A',
 })
 
-const activeDevices = computed(() => terminalAdmin.terminalDevices.filter((device) => device.status === 'active'))
-const inactiveDevices = computed(() => terminalAdmin.terminalDevices.filter((device) => device.status !== 'active'))
+const activeDevices = computed(() =>
+  terminalAdmin.terminalDevices.filter((device) => device.status === 'active'),
+)
+const inactiveDevices = computed(() =>
+  terminalAdmin.terminalDevices.filter((device) => device.status !== 'active'),
+)
 const canAdministerTerminals = computed(() => session.hasPermission('terminal:administer'))
+const lastLaunchLinkTitle = computed(() =>
+  terminalAdmin.lastLaunchLinkAction === 'regenerated'
+    ? 'Nouveau lien terminal généré.'
+    : 'Lien terminal généré.',
+)
+const lastLaunchLinkDescription = computed(() =>
+  terminalAdmin.lastLaunchLinkAction === 'regenerated'
+    ? 'L’ancien lien est maintenant invalide. Ouvre ce nouveau lien une seule fois sur l’appareil hospitalier cible.'
+    : 'Ouvre ce lien une seule fois sur l’appareil hospitalier cible, puis mets le navigateur en plein écran ou en mode kiosque.',
+)
 
 onMounted(async () => {
   await Promise.all([catalog.fetchCatalog(), terminalAdmin.fetchTerminalDevices()])
@@ -53,7 +66,10 @@ async function updateLabel(device: ApiTerminalDevice): Promise<void> {
   await terminalAdmin.updateTerminalDevice(device.id, { label })
 }
 
-async function updateStatus(device: ApiTerminalDevice, status: TerminalDeviceStatus): Promise<void> {
+async function updateStatus(
+  device: ApiTerminalDevice,
+  status: TerminalDeviceStatus,
+): Promise<void> {
   await terminalAdmin.updateTerminalDevice(device.id, { status })
 }
 
@@ -70,6 +86,11 @@ async function copyLastLaunchLink(): Promise<void> {
   if (!terminalAdmin.lastLaunchLink) return
   await navigator.clipboard?.writeText(terminalAdmin.lastLaunchLink)
   copiedLink.value = true
+}
+
+function clearLastLaunchLink(): void {
+  copiedLink.value = false
+  terminalAdmin.clearLastLaunchLink()
 }
 
 function statusLabel(status: TerminalDeviceStatus): string {
@@ -99,22 +120,74 @@ function formatDate(value?: string | null): string {
       <PageHeader
         eyebrow="Terminaux par périmètre"
         title="Gérer les terminaux hospitaliers de réponse"
-        :description="appConfig.demoMode ? 'La démo simule la création, la suspension, la révocation et la régénération des liens terminaux.' : 'Les terminaux sont enregistrés par bâtiment, disposent d’un jeton secret non récupérable et ne donnent accès qu’à leur file d’attente répondant.'"
+        description="Les terminaux sont enregistrés par bâtiment et donnent accès uniquement à leur file d’attente répondant."
         badge="Terminaux par bâtiment"
       >
         <template #actions>
-          <button v-if="canAdministerTerminals" class="btn btn-primary" type="button" @click="showCreateTerminalModal = true">
+          <button
+            v-if="canAdministerTerminals"
+            class="btn btn-primary"
+            type="button"
+            @click="showCreateTerminalModal = true"
+          >
             + Créer un terminal
           </button>
         </template>
       </PageHeader>
       <RoleGateInfo class="mb-4" />
 
-      <div v-if="terminalAdmin.status === 'error'" class="alert alert-danger rounded-4" role="alert">
+      <div
+        v-if="terminalAdmin.status === 'error'"
+        class="alert alert-danger rounded-4"
+        role="alert"
+      >
         {{ terminalAdmin.error }}
       </div>
       <div v-else class="alert alert-info rounded-4" role="status">
-        Un terminal n’est pas un compte staff. Il s’agit d’un appareil appairé à un bâtiment, utilisable uniquement pour ouvrir les questionnaires qui lui sont explicitement affectés. Les modérateurs consultent leur inventaire ; les gestionnaires de site et administrateurs peuvent administrer les terminaux dans leur périmètre.
+        Un terminal n’est pas un compte staff. Il s’agit d’un appareil appairé à un bâtiment,
+        utilisable uniquement pour ouvrir les questionnaires qui lui sont explicitement affectés.
+        Les modérateurs consultent leur inventaire ; les gestionnaires de site et administrateurs
+        peuvent administrer les terminaux dans leur périmètre.
+      </div>
+
+      <div v-if="terminalAdmin.lastLaunchLink" class="alert alert-success rounded-4" role="status">
+        <div class="d-flex flex-wrap justify-content-between gap-3 align-items-start">
+          <div class="flex-grow-1">
+            <strong>{{ lastLaunchLinkTitle }}</strong>
+            <p class="small muted mt-1 mb-2">{{ lastLaunchLinkDescription }}</p>
+            <p v-if="terminalAdmin.lastLaunchLinkDevice" class="small mb-2">
+              Terminal : <strong>{{ terminalAdmin.lastLaunchLinkDevice.label }}</strong>
+              <span class="muted">
+                · {{ terminalAdmin.lastLaunchLinkDevice.code }} ·
+                {{ terminalAdmin.lastLaunchLinkDevice.building.label }}</span
+              >
+            </p>
+            <a
+              class="d-block text-break"
+              :href="terminalAdmin.lastLaunchLink"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {{ terminalAdmin.lastLaunchLink }}
+            </a>
+          </div>
+          <div class="d-flex flex-wrap gap-2">
+            <button
+              class="btn btn-sm btn-outline-primary"
+              type="button"
+              @click="copyLastLaunchLink"
+            >
+              {{ copiedLink ? 'Lien copié' : 'Copier le lien' }}
+            </button>
+            <button
+              class="btn btn-sm btn-outline-secondary"
+              type="button"
+              @click="clearLastLaunchLink"
+            >
+              Masquer
+            </button>
+          </div>
+        </div>
       </div>
 
       <ModalPanel
@@ -127,7 +200,12 @@ function formatDate(value?: string | null): string {
       >
         <form @submit.prevent="createTerminal">
           <label class="form-label fw-bold" for="terminal-building">Bâtiment</label>
-          <select id="terminal-building" v-model="form.buildingId" class="form-select mb-3" required>
+          <select
+            id="terminal-building"
+            v-model="form.buildingId"
+            class="form-select mb-3"
+            required
+          >
             <option value="" disabled>Choisir un bâtiment</option>
             <option v-for="building in catalog.buildings" :key="building.id" :value="building.id">
               {{ building.label }} · {{ building.city }}
@@ -135,24 +213,48 @@ function formatDate(value?: string | null): string {
           </select>
 
           <label class="form-label fw-bold" for="terminal-label">Nom visible de l’appareil</label>
-          <input id="terminal-label" v-model="form.label" class="form-control mb-3" required minlength="2" maxlength="120" />
+          <input
+            id="terminal-label"
+            v-model="form.label"
+            class="form-control mb-3"
+            required
+            minlength="2"
+            maxlength="120"
+          />
           <p class="small muted mb-4">
-            Exemple : “Tablette accueil Montréal A”, “Borne salle d’attente Paris C” ou “PC kiosque unité H”.
+            Exemple : “Tablette accueil Montréal A”, “Borne salle d’attente Paris C” ou “PC kiosque
+            unité H”.
           </p>
 
-          <button class="btn btn-primary w-100 btn-lg" type="submit" :disabled="terminalAdmin.status === 'saving' || !form.buildingId">
-            {{ terminalAdmin.status === 'saving' ? 'Création…' : 'Créer et générer le lien terminal' }}
+          <button
+            class="btn btn-primary w-100 btn-lg"
+            type="submit"
+            :disabled="terminalAdmin.status === 'saving' || !form.buildingId"
+          >
+            {{
+              terminalAdmin.status === 'saving' ? 'Création…' : 'Créer et générer le lien terminal'
+            }}
           </button>
 
-          <div v-if="terminalAdmin.lastLaunchLink" class="alert alert-success rounded-4 mt-3 mb-0">
-            <strong>Lien terminal généré.</strong>
-            <p class="small muted mt-1 mb-2">
-              Ouvre ce lien une seule fois sur l’appareil hospitalier cible, puis mets le navigateur en plein écran ou en mode kiosque.
-            </p>
-            <a class="d-block text-break" :href="terminalAdmin.lastLaunchLink" target="_blank" rel="noreferrer">
+          <div
+            v-if="terminalAdmin.lastLaunchLink && terminalAdmin.lastLaunchLinkAction === 'created'"
+            class="alert alert-success rounded-4 mt-3 mb-0"
+          >
+            <strong>{{ lastLaunchLinkTitle }}</strong>
+            <p class="small muted mt-1 mb-2">{{ lastLaunchLinkDescription }}</p>
+            <a
+              class="d-block text-break"
+              :href="terminalAdmin.lastLaunchLink"
+              target="_blank"
+              rel="noreferrer"
+            >
               {{ terminalAdmin.lastLaunchLink }}
             </a>
-            <button class="btn btn-sm btn-outline-primary mt-2" type="button" @click="copyLastLaunchLink">
+            <button
+              class="btn btn-sm btn-outline-primary mt-2"
+              type="button"
+              @click="copyLastLaunchLink"
+            >
               {{ copiedLink ? 'Lien copié' : 'Copier le lien terminal' }}
             </button>
           </div>
@@ -160,10 +262,18 @@ function formatDate(value?: string | null): string {
       </ModalPanel>
 
       <div class="row g-3 mb-4">
-        <div class="col-md-3"><KpiCard label="Terminaux" :value="String(terminalAdmin.totals.total)" /></div>
-        <div class="col-md-3"><KpiCard label="Actifs" :value="String(terminalAdmin.totals.active)" tone="success" /></div>
-        <div class="col-md-3"><KpiCard label="Suspendus" :value="String(terminalAdmin.totals.paused)" tone="warning" /></div>
-        <div class="col-md-3"><KpiCard label="En attente" :value="String(terminalAdmin.totals.pendingInvitations)" /></div>
+        <div class="col-md-3">
+          <KpiCard label="Terminaux" :value="String(terminalAdmin.totals.total)" />
+        </div>
+        <div class="col-md-3">
+          <KpiCard label="Actifs" :value="String(terminalAdmin.totals.active)" tone="success" />
+        </div>
+        <div class="col-md-3">
+          <KpiCard label="Suspendus" :value="String(terminalAdmin.totals.paused)" tone="warning" />
+        </div>
+        <div class="col-md-3">
+          <KpiCard label="En attente" :value="String(terminalAdmin.totals.pendingInvitations)" />
+        </div>
       </div>
 
       <div class="action-strip mb-4">
@@ -171,10 +281,16 @@ function formatDate(value?: string | null): string {
           <p class="section-eyebrow mb-1">Appairage</p>
           <h2 class="action-strip-title">Créer seulement quand un appareil doit être configuré</h2>
           <p class="action-strip-description">
-            La liste active reste prioritaire ; le formulaire de création passe dans une fenêtre dédiée pour ne pas polluer l’exploitation.
+            La liste active reste prioritaire ; le formulaire de création passe dans une fenêtre
+            dédiée pour ne pas polluer l’exploitation.
           </p>
         </div>
-        <button v-if="canAdministerTerminals" class="btn btn-primary" type="button" @click="showCreateTerminalModal = true">
+        <button
+          v-if="canAdministerTerminals"
+          class="btn btn-primary"
+          type="button"
+          @click="showCreateTerminalModal = true"
+        >
           + Créer un terminal
         </button>
         <p v-else class="muted mb-0">
@@ -190,12 +306,22 @@ function formatDate(value?: string | null): string {
         body-class="compact"
       >
         <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
-          <p class="muted mb-0">Vue prioritaire des appareils utilisables maintenant, avec actions d’administration si le rôle le permet.</p>
-          <button class="btn btn-outline-primary" type="button" @click="terminalAdmin.fetchTerminalDevices">Actualiser</button>
+          <p class="muted mb-0">
+            Vue prioritaire des appareils utilisables maintenant, avec actions d’administration si
+            le rôle le permet.
+          </p>
+          <button
+            class="btn btn-outline-primary"
+            type="button"
+            @click="terminalAdmin.fetchTerminalDevices"
+          >
+            Actualiser
+          </button>
         </div>
 
         <div v-if="!activeDevices.length" class="alert alert-light border rounded-4">
-          Aucun terminal actif. Crée un terminal puis ouvre son lien sur l’appareil hospitalier cible.
+          Aucun terminal actif. Crée un terminal puis ouvre son lien sur l’appareil hospitalier
+          cible.
         </div>
 
         <div v-else class="content-scroll content-scroll-lg">
@@ -203,22 +329,51 @@ function formatDate(value?: string | null): string {
             <div class="d-flex flex-wrap justify-content-between gap-3 align-items-start">
               <div class="flex-grow-1">
                 <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
-                  <span class="badge-soft" :class="statusTone(device.status)">{{ statusLabel(device.status) }}</span>
+                  <span class="badge-soft" :class="statusTone(device.status)">{{
+                    statusLabel(device.status)
+                  }}</span>
                   <span class="small muted">{{ device.code }}</span>
                 </div>
                 <label class="form-label fw-bold small" :for="`label-${device.id}`">Libellé</label>
                 <div class="input-group mb-2">
-                  <input :id="`label-${device.id}`" v-model="editedLabels[device.id]" class="form-control" :readonly="!canAdministerTerminals" />
-                  <button v-if="canAdministerTerminals" class="btn btn-outline-primary" type="button" @click="updateLabel(device)">Renommer</button>
+                  <input
+                    :id="`label-${device.id}`"
+                    v-model="editedLabels[device.id]"
+                    class="form-control"
+                    :readonly="!canAdministerTerminals"
+                  />
+                  <button
+                    v-if="canAdministerTerminals"
+                    class="btn btn-outline-primary"
+                    type="button"
+                    @click="updateLabel(device)"
+                  >
+                    Renommer
+                  </button>
                 </div>
                 <p class="muted mb-0">
-                  {{ device.building.label }} · {{ device.pendingInvitationCount }} invitation(s) en attente · dernière activité : {{ formatDate(device.lastSeenAt) }}
+                  {{ device.building.label }} · {{ device.pendingInvitationCount }} invitation(s) en
+                  attente · dernière activité : {{ formatDate(device.lastSeenAt) }}
                 </p>
               </div>
               <div v-if="canAdministerTerminals" class="d-flex flex-column gap-2">
-                <button class="btn btn-sm btn-outline-secondary" type="button" @click="regenerate(device)">Régénérer le lien</button>
-                <button class="btn btn-sm btn-outline-warning" type="button" @click="updateStatus(device, 'paused')">Suspendre</button>
-                <button class="btn btn-sm btn-outline-danger" type="button" @click="revoke(device)">Révoquer</button>
+                <button
+                  class="btn btn-sm btn-outline-secondary"
+                  type="button"
+                  @click="regenerate(device)"
+                >
+                  Régénérer le lien
+                </button>
+                <button
+                  class="btn btn-sm btn-outline-warning"
+                  type="button"
+                  @click="updateStatus(device, 'paused')"
+                >
+                  Suspendre
+                </button>
+                <button class="btn btn-sm btn-outline-danger" type="button" @click="revoke(device)">
+                  Révoquer
+                </button>
               </div>
             </div>
           </div>
@@ -247,24 +402,48 @@ function formatDate(value?: string | null): string {
             </thead>
             <tbody>
               <tr v-for="device in inactiveDevices" :key="device.id">
-                <td><strong>{{ device.label }}</strong><br /><span class="small muted">{{ device.code }}</span></td>
+                <td>
+                  <strong>{{ device.label }}</strong
+                  ><br /><span class="small muted">{{ device.code }}</span>
+                </td>
                 <td>{{ device.building.label }}</td>
-                <td><span class="badge-soft" :class="statusTone(device.status)">{{ statusLabel(device.status) }}</span></td>
+                <td>
+                  <span class="badge-soft" :class="statusTone(device.status)">{{
+                    statusLabel(device.status)
+                  }}</span>
+                </td>
                 <td>{{ device.pendingInvitationCount }}</td>
                 <td>{{ formatDate(device.lastSeenAt) }}</td>
                 <td class="text-end">
-                  <button v-if="canAdministerTerminals && device.status === 'paused'" class="btn btn-sm btn-outline-success me-2" type="button" @click="updateStatus(device, 'active')">Réactiver</button>
-                  <button v-if="canAdministerTerminals" class="btn btn-sm btn-outline-primary" type="button" @click="regenerate(device)">Nouveau lien</button>
+                  <button
+                    v-if="canAdministerTerminals && device.status === 'paused'"
+                    class="btn btn-sm btn-outline-success me-2"
+                    type="button"
+                    @click="updateStatus(device, 'active')"
+                  >
+                    Réactiver
+                  </button>
+                  <button
+                    v-if="canAdministerTerminals"
+                    class="btn btn-sm btn-outline-primary"
+                    type="button"
+                    @click="regenerate(device)"
+                  >
+                    Nouveau lien
+                  </button>
                 </td>
               </tr>
               <tr v-if="!inactiveDevices.length">
-                <td colspan="6" class="text-center muted py-4">Aucun terminal suspendu ou révoqué.</td>
+                <td colspan="6" class="text-center muted py-4">
+                  Aucun terminal suspendu ou révoqué.
+                </td>
               </tr>
             </tbody>
           </table>
         </div>
         <p class="small muted mt-3 mb-0">
-          Le lien terminal n’est pas stocké en clair. S’il est perdu ou exposé, il faut régénérer un nouveau lien et rouvrir la page sur l’appareil cible.
+          Le lien terminal n’est pas stocké en clair. S’il est perdu ou exposé, il faut régénérer un
+          nouveau lien et rouvrir la page sur l’appareil cible.
         </p>
       </CollapsibleSection>
     </div>

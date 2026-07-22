@@ -1,16 +1,18 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { RouterLink, RouterView } from 'vue-router'
 
 import { appConfig } from '@/config/env'
 import { t } from '@/i18n'
 import { useSessionStore } from '@/stores/session'
+import LanguageSwitcher from './LanguageSwitcher.vue'
 import UserMenu from './UserMenu.vue'
 
 const session = useSessionStore()
-const staticPagesNavigation = [
+const staticPagesNavigation = computed(() => [
   { label: t('nav.static.moderator'), to: '/moderation' },
   { label: t('nav.static.questionnaire'), to: '/questionnaire' },
-]
+])
 </script>
 
 <template>
@@ -23,10 +25,9 @@ const staticPagesNavigation = [
             :to="appConfig.staticPagesDemo ? '/moderation' : '/'"
           >
             <span class="brand-dot">CH</span>
-            <span>
-              <strong style="font-size:0.95rem; letter-spacing:-0.01em;">{{ appConfig.appName }}</strong>
-              <small>{{ appConfig.staticPagesDemo ? t('app.mode.static') : t('app.mode.connected') }}</small>
-            </span>
+            <strong style="font-size: 0.95rem; letter-spacing: -0.01em">{{
+              appConfig.appName
+            }}</strong>
           </RouterLink>
 
           <div class="topbar-actions ms-xl-auto">
@@ -50,8 +51,8 @@ const staticPagesNavigation = [
                 </RouterLink>
               </li>
             </ul>
-            <span v-if="appConfig.staticPagesDemo" class="badge-soft success">{{ t('app.githubPages') }}</span>
-            <UserMenu v-else />
+            <LanguageSwitcher />
+            <UserMenu v-if="!appConfig.staticPagesDemo" />
           </div>
         </div>
       </nav>

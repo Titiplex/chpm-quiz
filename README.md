@@ -1,150 +1,190 @@
 # CHPM Survey
 
-Application Vue 3 + Vite + API NestJS pour une plateforme de questionnaires adaptatifs, pseudonymisés et administrables sans compétence informatique.
+CHPM Survey is a role-based platform for designing adaptive questionnaires, inviting respondents, collecting pseudonymized answers, and reviewing threshold-protected statistics. It combines a Vue 3 single-page application with a NestJS API and PostgreSQL.
 
-## Backend minimal, authentification et base de données
+The repository contains a connected application, a local demo mode, and a restricted static GitHub Pages demonstration. It also includes operational, privacy, accessibility, and acceptance-test documentation.
 
-Cette itération remplace la simulation locale de rôle par une vraie session serveur :
+> **Deployment status:** version 1.0 contains a production deployment reference and the application-level controls required for client handover. It is technically deployable after the documented validation succeeds. Actual go-live remains conditional on the client's DPIA/legal approvals, accessibility and security acceptance, provider/IdP configuration, monitored infrastructure, and a successful backup restoration test.
 
-- API NestJS TypeScript dans `backend/` ;
-- PostgreSQL via Docker Compose ;
-- Prisma comme ORM ;
-- modèles initiaux : utilisateurs, rôles, bâtiments, questionnaires, groupes, questions et sessions ;
-- authentification email/mot de passe pour les comptes internes ;
-- cookie HTTP-only `chpm_session` ;
-- guards NestJS pour bloquer les routes selon le rôle ;
-- écran `/login` côté front ;
-- récupération du profil connecté via `/api/auth/me` ;
-- menus et pages conditionnels selon les permissions backend ;
-- listes de bâtiments et questionnaires chargées depuis PostgreSQL.
+## What the platform does
 
-## Données de démonstration
+- Builds draft questionnaires with groups, question types, help text, pop-ups, conditional rules, and immutable published versions.
+- Creates invitations by email, SMS, on-site terminal, or paper workflow.
+- Gives respondents token-based access without an internal staff account.
+- Autosaves answers, records limited interaction telemetry, and locks final submissions.
+- Shows aggregate and pseudonymized statistics subject to anti-reidentification thresholds.
+- Separates direct contact data into an identity schema and encrypts it at rest.
+- Enforces role and organization/site/building scope on the server.
+- Audits administrative, compliance, statistical, terminal, and exceptional-access actions.
 
-Les comptes et jeux de données de démonstration sont réservés au développement local avec `VITE_DEMO_MODE=true`. Ils ne doivent pas être documentés comme identifiants de recette ou de production. En préproduction et production, les comptes internes sont créés côté backend via la console d’administration locale et les secrets restent hors front.
+CHPM Survey is a data-collection tool. It does not provide medical advice, diagnosis, or automated clinical interpretation.
 
-## Prérequis Node.js
+## Roles and responsibilities
 
-Le projet est verrouillé sur Node `22.18.x` et npm `10.9.x`. Vérifier la version active avant d’installer les dépendances :
+| Role | Main responsibility | Normal scope |
+| --- | --- | --- |
+| Project administrator / researcher (`admin`) | Oversees the project, questionnaires, site managers, aggregate statistics, and pseudonymized exports | Organization/project, excluding the identity vault |
+| Site manager (`site_manager`) | Manages moderators, invitations, terminals, and aggregate statistics for one site | Assigned site |
+| Moderator (`moderator`) | Creates and follows invitations, prints forms, and enters paper responses | Assigned building |
+| Questionnaire administrator (`questionnaire_admin`) | Designs, versions, previews, and publishes questionnaires | Authorized questionnaires |
+| Analyst (`analyst`) | Reviews aggregate statistics and explicitly pseudonymized records/exports | Analytics scope |
+| DPO (`dpo`) | Independently validates and executes exceptional encrypted identity exports | Organization-scoped judicial procedure only |
+| Judicial officer (`judicial_officer`) | Records and advances exceptional legal-access workflows | Legal workflow, not unrestricted identity data |
+| Technical administrator (`technical_admin`) | Operates infrastructure, health, metrics, retention jobs, and terminal devices | Technical scope |
+| Respondent | Completes one questionnaire through a signed token | Token-bound session |
 
-```sh
-node -v
-npm -v
+See [Permissions and scope](docs/recette/permissions-matrix.md) for the authoritative human-readable matrix. Backend guards remain the enforcement source of truth.
+
+## Application modes
+
+| Mode | Purpose | Data source | Important constraint |
+| --- | --- | --- | --- |
+| Connected application | Development, preproduction, and production | NestJS API and PostgreSQL | Requires the environment-specific controls in the production guide |
+| Local demo (`VITE_DEMO_MODE=true`) | UI exploration and frontend testing | Browser-local simulated API | Never use for real or sensitive data |
+| Static Pages demo (`VITE_STATIC_PAGES_DEMO=true`) | Public, non-connected showcase | Bundled static fixtures | Publishes only the static moderation and patient questionnaire screens |
+
+Demo accounts and fixtures are development-only. They must never be reused as acceptance or production credentials.
+
+## Prerequisites
+
+- Node.js `22.18.x`
+- npm `10.9.x`
+- Docker with Docker Compose for PostgreSQL and the preproduction stack
+- PowerShell 7+ on Windows, or a POSIX-compatible shell on Linux/macOS
+
+Check the active versions:
+
+```powershell
+node --version
+npm --version
+docker version
+docker compose version
 ```
 
-Sous Windows, la commande `nvm` n’existe que si `nvm-windows` a été installé séparément. Sans gestionnaire de versions, installer directement Node.js `22.18.0` depuis l’installateur Windows officiel, puis rouvrir PowerShell. Avec un gestionnaire, sélectionner la version indiquée par `.node-version` / `.nvmrc`.
+The required Node version is also recorded in `.node-version` and `.nvmrc`. On Windows, either install Node.js 22.18 directly, use Volta, or install `nvm-windows`; the `nvm` command is not included with Node.js itself.
 
-## Installation
+## Quick start
 
-Front :
+From the repository root:
 
-```sh
-npm install
-```
-
-Backend :
-
-```sh
-cd backend
-npm install
-cp .env.example .env
-```
-
-La configuration locale fournie dans `backend/.env.example` est alignée avec `backend/docker-compose.yml` : PostgreSQL démarre avec la base `chpm_quiz` et l’utilisateur `chpm` / `chpm`. Les variables `OPERATIONAL_DATABASE_URL` et `IDENTITY_DATABASE_URL` utilisent donc ces mêmes identifiants en développement, avec une séparation par schéma PostgreSQL (`public` et `identity`). En production, remplacer ces URLs par des comptes séparés et des mots de passe forts.
-
-## Base PostgreSQL
-
-Depuis la racine :
-
-```sh
+```powershell
+npm ci
+Copy-Item backend/.env.example backend/.env
 npm run db:up
-```
-
-Puis depuis `backend/` :
-
-```sh
 npm run prisma:migrate
 npm run db:seed
 ```
 
-## Développement
+Start the backend in one terminal:
 
-Terminal 1, backend :
-
-```sh
+```powershell
 npm run dev:backend
 ```
 
-Terminal 2, frontend :
+Start the frontend in another terminal:
 
-```sh
+```powershell
 npm run dev:frontend
 ```
 
-Le front appelle par défaut `http://localhost:3000/api` avec `credentials: include` pour transmettre le cookie
-HTTP-only.
+Open `http://localhost:5173`. The API listens on `http://localhost:3000/api` by default. The frontend sends the `chpm_session` HTTP-only cookie with same-origin/CORS-authorized requests.
 
-## Textes et i18n éditables
+The sample environment uses a local PostgreSQL database named `chpm_quiz` with separate `public` and `identity` schemas. These local credentials are intentionally weak and must be replaced outside development.
 
-Les libellés mutualisés du front sont dans `public/content/i18n/fr.json` et `public/content/i18n/en.json`. Ces fichiers JSON peuvent être relus par un métier ou traducteur sans modifier les composants Vue.
+## Validation
 
-Validation :
+Run the normal repository checks:
 
-```sh
-npm run content:i18n:check
-```
-
-La procédure d’édition est documentée dans `docs/content/i18n-editing.md`.
-
-## Build
-
-```sh
+```powershell
+npm run check
 npm run build
-npm run build:backend
+npm run prisma:validate
 ```
 
-## Endpoints API livrés
+Validate the documentation and OpenAPI contract:
 
-- `POST /api/auth/login` : connexion et pose du cookie HTTP-only.
-- `GET /api/auth/me` : profil connecté et permissions.
-- `POST /api/auth/logout` : suppression de session.
-- `GET /api/buildings` : liste des bâtiments, filtrée pour les modérateurs.
-- `GET /api/questionnaires` : questionnaires, groupes et questions ; les non-admins ne voient que les questionnaires
-  publiés.
+```powershell
+npm run docs:check
+npm run openapi:lint
+```
 
-## Critères d’acceptation couverts
+Preview the interactive API reference locally:
 
-- un utilisateur non authentifié est redirigé vers `/login` ;
-- un modérateur ne voit pas les fonctions admin dans le menu ni dans l’accueil ;
-- un modérateur reçoit un `403` côté API s’il tente une route admin ;
-- les bâtiments et questionnaires affichés viennent de PostgreSQL ;
-- les erreurs API sont affichées côté front via des alertes et le store de session/catalogue.
+```powershell
+npm run openapi:preview
+```
 
-## Build GitHub Pages statique
+The OpenAPI coverage check extracts routes from every NestJS controller and fails when an operation is missing from `docs/openapi.yaml` or when the specification documents a nonexistent controller route.
 
-Le workflow `.github/workflows/deploy.yml` active `VITE_STATIC_PAGES_DEMO=true`. Dans ce mode, le routeur ne publie que deux écrans publics :
+## Configuration
 
-- `/moderation` : point de vue modérateur figé, avec invitation simulée et suivi statique ;
-- `/questionnaire` : ITQ patient autonome, sans jeton serveur, sans authentification et sans appel API.
+The frontend application name and browser metadata are controlled by:
 
-Le questionnaire statique publié est l’International Trauma Questionnaire (ITQ), version `1.0-cn2r`, avec les 2 questions de contexte et les 18 items cotés en pages séparées. Les autres modules applicatifs restent présents dans le code pour le build connecté, mais ils sont exclus du routeur GitHub Pages. Le mode statique utilise aussi `VITE_ROUTER_MODE=hash` pour éviter les erreurs 404 au rechargement d’une URL Pages.
+```env
+VITE_APP_NAME="Institutional Questionnaires"
+VITE_APP_DESCRIPTION="Secure questionnaire, invitation, response, and pseudonymized statistics platform."
+```
 
-## Préproduction containerisée
+Editable interface translations live in `public/content/i18n/*.json`. The language selector reads the generated `public/content/i18n/locales.json` manifest. To add a language, copy an existing locale file, translate values without changing keys, then run:
 
-Les passes production ajoutent une stack reproductible :
+```powershell
+npm run content:i18n:check
+npm run content:i18n:manifest
+```
+
+The full editorial workflow is in [Editing interface translations](docs/content/i18n-editing.md).
+
+## Documentation
+
+Start with the [documentation hub](docs/README.md).
+
+- [Non-technical user manuals](docs/manuals/README.md)
+- [System architecture and security boundaries](docs/architecture.md)
+- [Developer guide and codebase reference](docs/development/README.md)
+- [API guide](docs/api/README.md)
+- [OpenAPI 3.1 specification](docs/openapi.yaml)
+- [Production and preproduction runbooks](docs/production/README.md)
+- [Acceptance, security, privacy, and accessibility checks](docs/recette/README.md)
+
+## Production installation
+
+The production reference uses immutable base-image digests, separate migration/operational/identity database roles, OIDC with MFA, durable encrypted delivery queues, automatic retention, read-only runtime containers, TLS reverse proxying, authenticated monitoring, and encrypted backup/restore tooling.
+
+Start with [Production installation and handover](docs/production/installation.md):
 
 ```sh
-cp .env.preprod.example .env.preprod
-# renseigner secrets, TLS_CERT_DIR, URLs DB et provider email
-npm run preprod:up
-curl -k https://<host>/healthz
+cp .env.production.example .env.production
+# Replace every placeholder and configure TLS, OIDC, providers, database roles, and secrets.
+npm run prod:config
+npm run prod:build
+npm run prod:up
+npm run prod:bootstrap
 ```
 
-Fichiers clés :
+Do not use these commands until `npm run prod:config` passes and the target owners have approved the go-live plan.
 
-- `backend/Dockerfile` : image API NestJS avec healthcheck ;
-- `Dockerfile.frontend` : build statique Vue servi par Nginx ;
-- `docker-compose.preprod.yml` : Postgres, migrator Prisma, backend, frontend, reverse proxy TLS ;
-- `ops/nginx/reverse-proxy.conf` : terminaison TLS, HSTS, logs JSON ;
-- `docs/production/` et `docs/recette/` : procédures et matrices go/no-go.
+## Preproduction
 
-Le go production réel reste conditionné à la validation DPO, au test de restauration, à la recette sécurité/accessibilité et à l'authentification interne définitive.
+Copy the preproduction template, replace every placeholder, and start the stack:
+
+```powershell
+Copy-Item .env.preprod.example .env.preprod
+# Edit .env.preprod before continuing.
+npm run preprod:up
+curl.exe -k https://localhost/healthz
+```
+
+The stack includes PostgreSQL, a Prisma migrator, the NestJS API, the built frontend, an Nginx reverse proxy, and the encrypted-backup job. Follow [Preproduction installation](docs/production/installation.md) and complete every go/no-go check before exposing the service.
+
+## Deployment constraints
+
+- The supplied production Compose topology is single-node. High availability, PostgreSQL replication/PITR, redundant ingress, centralized secret storage, and immutable log/SIEM retention are client infrastructure responsibilities.
+- The generic HTTP rate limiter is process-local. Multi-replica deployments must enforce equivalent limits at a trusted ingress or shared limiter; database-backed account lockout remains shared.
+- Production staff federation supports OIDC Authorization Code with PKCE and MFA claim enforcement. Native SAML is not implemented; use an approved SAML-to-OIDC gateway if required.
+- Email/SMS delivery requires client-approved providers, credentials, sender validation, and live acceptance tests. Simulation providers are rejected in production-like environments.
+- Automated retention follows configured cutoffs, but legal holds, provider/paper/recipient copies, and destruction evidence remain procedural controls outside the application.
+- Static GitHub Pages and local demo modes are demonstrations, not authenticated or data-collecting deployments.
+
+## Security reporting
+
+Do not include personal data, credentials, respondent tokens, encryption keys, or production URLs in an issue. Follow the owning organization's private security-reporting channel and the [incident response procedure](docs/production/incident-response.md).

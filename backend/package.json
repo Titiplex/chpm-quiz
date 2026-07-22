@@ -1,8 +1,8 @@
 {
   "name": "quiz-backend",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "API centrale NestJS pour Quiz.",
+  "description": "NestJS API for the CHPM Survey platform.",
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
@@ -10,8 +10,8 @@
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "start:prod": "node dist/main.js",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "tsc --noEmit -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.scripts.json",
+    "lint": "tsc --noEmit -p tsconfig.build.json && tsc -p tsconfig.scripts.json",
     "test": "vitest run --config vitest.config.ts",
     "test:unit": "vitest run --config vitest.config.ts --exclude \"**/*.functional.spec.ts\"",
     "test:functional": "vitest run --config vitest.config.ts src/respondent/respondent.service.functional.spec.ts",
@@ -25,7 +25,12 @@
     "postinstall": "npm run prisma:generate",
     "prisma:migrate:deploy": "node scripts/prisma.mjs migrate deploy",
     "prisma:migrate:status": "node scripts/prisma.mjs migrate status",
-    "prisma:migrate:dry-run": "node scripts/prisma.mjs migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url \"$SHADOW_DATABASE_URL\" --script"
+    "db:apply-dpo-grants": "tsx scripts/apply-dpo-grants.ts",
+    "prisma:migrate:dry-run": "node scripts/prisma.mjs migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url \"$SHADOW_DATABASE_URL\" --script",
+    "user:console": "tsx scripts/user-console.ts",
+    "dpo:console": "tsx scripts/dpo-console.ts",
+    "identity-vault:console": "tsx scripts/dpo-console.ts",
+    "bootstrap:production": "tsx scripts/bootstrap-production.ts"
   },
   "dependencies": {
     "@nestjs/common": "11.1.26",

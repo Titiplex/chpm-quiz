@@ -1,5 +1,6 @@
 import type { UserRole } from './role-permissions'
 
+/** Building scope materialized onto an authenticated staff profile. */
 export interface AuthBuilding {
   id: string
   code: string
@@ -23,11 +24,18 @@ export interface AuthUserRecord {
   displayName: string
   role: UserRole
   isActive: boolean
+  mustChangePassword?: boolean
+  failedLoginCount?: number
+  lockedUntil?: Date | null
   building: AuthBuilding | null
   createdAt: Date
   updatedAt: Date
 }
 
+/**
+ * Persistent session representation. `tokenHash` is safe to compare server-side;
+ * the corresponding clear token exists only in the HTTP-only browser cookie.
+ */
 export interface AuthSessionRecord {
   id: string
   tokenHash: string
@@ -41,6 +49,7 @@ export interface AuthSessionRecord {
 
 export type AuthenticatedUser = Omit<AuthUserRecord, 'passwordHash'>
 
+/** Request-scoped session and user attached by `SessionAuthGuard`. */
 export type AuthenticatedSession = AuthSessionRecord & {
   user: AuthenticatedUser
 }

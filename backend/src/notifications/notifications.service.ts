@@ -34,12 +34,12 @@ type QueuedDigestMetadata = {
 }
 
 const notificationEventPolicy: Record<string, string[]> = {
-  submission_received: ['admin', 'moderator', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo'],
-  difficult_question: ['admin', 'questionnaire_admin', 'analyst', 'dpo'],
-  invitation_expired: ['admin', 'moderator', 'site_manager', 'dpo'],
-  campaign_finished: ['admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo'],
-  double_submission_attempt: ['admin', 'technical_admin', 'dpo'],
-  judicial_access_executed: ['admin', 'dpo', 'judicial_officer', 'technical_admin'],
+  submission_received: ['admin', 'moderator', 'site_manager', 'questionnaire_admin', 'analyst'],
+  difficult_question: ['admin', 'questionnaire_admin', 'analyst'],
+  invitation_expired: ['admin', 'moderator', 'site_manager'],
+  campaign_finished: ['admin', 'site_manager', 'questionnaire_admin', 'analyst'],
+  double_submission_attempt: ['technical_admin'],
+  judicial_access_executed: ['judicial_officer', 'technical_admin'],
 }
 
 @Injectable()
@@ -197,7 +197,7 @@ export class NotificationsService implements OnModuleInit {
       const emailChannel = subscription.channel === 'email' || subscription.channel === 'simulation'
       const auditAction = daily ? 'notification.digest_queued' : 'notification.submission_queued'
       const emailJobId = !daily && emailChannel
-        ? this.mailQueue.enqueue({
+        ? await this.mailQueue.enqueue({
             template: 'submission_notification',
             to: { email: subscription.user.email, name: subscription.user.displayName },
             subject: 'Nouvelle soumission questionnaire CHPM',
@@ -220,6 +220,7 @@ export class NotificationsService implements OnModuleInit {
       await this.prisma.auditLog.create({
         data: {
           actorUserId: subscription.userId,
+          organizationId: subscription.user.organizationId,
           action: auditAction,
           entityType: 'NotificationSubscription',
           entityId: subscription.id,
@@ -313,7 +314,7 @@ export class NotificationsService implements OnModuleInit {
       }
 
       const emailJobId = subscription.channel === 'email' || subscription.channel === 'simulation'
-        ? this.mailQueue.enqueue({
+        ? await this.mailQueue.enqueue({
             template: 'daily_digest',
             to: { email: subscription.user.email, name: subscription.user.displayName },
             subject: 'Résumé quotidien CHPM — soumissions questionnaires',
@@ -335,6 +336,7 @@ export class NotificationsService implements OnModuleInit {
       await this.prisma.auditLog.create({
         data: {
           actorUserId: subscription.userId,
+          organizationId: subscription.user.organizationId,
           action: 'notification.digest_sent',
           entityType: 'NotificationSubscription',
           entityId: subscription.id,
@@ -374,7 +376,7 @@ export class NotificationsService implements OnModuleInit {
       return
     }
 
-    const jobId = this.mailQueue.enqueue({
+    const jobId = await this.mailQueue.enqueue({
       template: 'submission_confirmation',
       to: { email: identity.email },
       subject: 'Confirmation de réception de votre questionnaire',

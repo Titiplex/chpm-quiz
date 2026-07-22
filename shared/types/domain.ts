@@ -1,3 +1,4 @@
+/** Questionnaire input/rendering types shared by frontend API contracts. */
 export type QuestionType =
   | 'single_choice'
   | 'multiple_choice'
@@ -9,6 +10,7 @@ export type QuestionType =
   | 'date'
   | 'information'
 
+/** Lifecycle state; `locked` is terminal for ordinary respondent mutations. */
 export type SubmissionStatus = 'draft' | 'submitted' | 'locked' | 'abandoned'
 export type InvitationStatus =
   | 'pending'
@@ -21,10 +23,11 @@ export type InvitationStatus =
   | 'blocked'
   | 'cancelled'
 export type LanguageCode = 'fr' | 'en' | 'es'
-export type InvitationDeliveryMode = 'email' | 'email_simulation' | 'onsite_terminal'
+export type InvitationDeliveryMode = 'email' | 'email_simulation' | 'onsite_terminal' | 'paper_form' | 'refusal_record' | 'sms' | 'sms_simulation'
 export type AssistanceMode = 'none' | 'technical_help' | 'full_assisted_entry'
 export type TerminalDeviceStatus = 'active' | 'paused' | 'revoked'
 
+/** Minimal human-readable building scope attached to operational records. */
 export interface BuildingScope {
   id: string
   label: string
@@ -32,6 +35,7 @@ export interface BuildingScope {
   city: string
 }
 
+/** Lightweight version reference used where the complete questionnaire is unnecessary. */
 export interface QuestionnaireVersion {
   id: string
   title: string
@@ -54,6 +58,7 @@ export interface QuestionDefinition {
   popupBody?: string | null
 }
 
+/** Pseudonymized invitation reference; clear contact values are deliberately absent. */
 export interface InvitationRecord {
   id: string
   questionnaireVersionId: string
@@ -63,6 +68,10 @@ export interface InvitationRecord {
   status: InvitationStatus
 }
 
+/**
+ * Legacy name for a pseudonymized submission summary. A public code and contextual
+ * attributes may remain linkable, so consumers must not treat this shape as anonymous.
+ */
 export interface AnonymousSubmission {
   id: string
   publicCode: string

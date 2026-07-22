@@ -4,7 +4,7 @@ import { defineStore } from 'pinia'
 import { getVisibleNavigation } from '@/config/navigation'
 import { apiRequest, ApiError } from '@/services/api'
 import { roleProfiles, type Permission, type UserRole } from '@shared/types/rbac'
-import type { AuthResponse, AuthUserProfile, LoginRequest } from '@shared/types/api'
+import type { AuthResponse, AuthUserProfile, ChangePasswordRequest, LoginRequest } from '@shared/types/api'
 
 type SessionStatus = 'idle' | 'loading' | 'authenticated' | 'anonymous'
 
@@ -84,6 +84,15 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  async function changePassword(payload: ChangePasswordRequest): Promise<void> {
+    error.value = null
+    const response = await apiRequest<AuthResponse>('/auth/change-password', {
+      method: 'POST',
+      body: payload,
+    })
+    user.value = response.user
+  }
+
   function hasPermission(permission: Permission): boolean {
     return permissionLabels.value.includes(permission)
   }
@@ -101,6 +110,7 @@ export const useSessionStore = defineStore('session', () => {
     restore,
     login,
     logout,
+    changePassword,
     hasPermission,
   }
 })

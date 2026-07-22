@@ -1,6 +1,12 @@
 import { createCipheriv, createHash, randomBytes } from 'node:crypto'
 
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import type { Request } from 'express'
 
@@ -9,7 +15,10 @@ import type { AuthenticatedUser } from '../auth/auth.types'
 import { IdentityVaultService } from '../identity-vault/identity-vault.service'
 import { PrismaService } from '../prisma/prisma.service'
 import type { CreateJudicialRequestDto } from './dto/create-judicial-request.dto'
-import type { JudicialWorkflowCommentDto, RejectJudicialRequestDto } from './dto/judicial-workflow.dto'
+import type {
+  JudicialWorkflowCommentDto,
+  RejectJudicialRequestDto,
+} from './dto/judicial-workflow.dto'
 
 @Injectable()
 export class JudicialService {
@@ -20,16 +29,24 @@ export class JudicialService {
     private readonly config: ConfigService,
   ) {}
 
-  async list() {
+  async list(user: AuthenticatedUser) {
+    this.assertOrganizationScope(user)
     return this.prisma.judicialAccessRequest.findMany({
+      where: { organizationId: user.organizationId },
       orderBy: { receivedAt: 'desc' },
-      take: 100,
     })
   }
 
   async create(dto: CreateJudicialRequestDto, user: AuthenticatedUser, request: Request) {
-    const existing = await this.prisma.judicialAccessRequest.findUnique({
-      where: { requestReference: dto.requestReference },
+    if (user.role !== 'judicial_officer') {
+      throw new ForbiddenException('Création réservée au responsable accès judiciaire')
+    }
+    this.assertOrganizationScope(user)
+    const existing = await this.prisma.judicialAccessRequest.findFirst({
+      where: {
+        organizationId: user.organizationId,
+        requestReference: dto.requestReference,
+      },
     })
 
     if (existing) {
@@ -37,9 +54,11 @@ export class JudicialService {
     }
 
     const requestedPublicCodes = this.normalizePublicCodes(dto.requestedPublicCodes)
+    await this.assertCodesBelongToOrganization(requestedPublicCodes, user.organizationId)
 
     const created = await this.prisma.judicialAccessRequest.create({
       data: {
+        organizationId: user.organizationId,
         requestReference: dto.requestReference,
         legalBasisDescription: dto.legalBasisDescription,
         courtOrderReference: dto.courtOrderReference,
@@ -47,7 +66,6 @@ export class JudicialService {
         requestedBy: dto.requestedBy,
         comments: dto.comments,
         status: 'received',
-        dpoValidationUserId: user.role === 'dpo' ? user.id : undefined,
       },
     })
 
@@ -77,7 +95,12 @@ export class JudicialService {
     return created
   }
 
-  async validateDpo(id: string, user: AuthenticatedUser, dto: JudicialWorkflowCommentDto, request: Request) {
+  async validateDpo(
+    id: string,
+    user: AuthenticatedUser,
+    dto: JudicialWorkflowCommentDto,
+    request: Request,
+  ) {
     if (user.role !== 'dpo') {
       throw new ForbiddenException('Validation DPO réservée au DPO')
     }
@@ -85,7 +108,12 @@ export class JudicialService {
     return this.validate(id, user, dto, request, 'dpo')
   }
 
-  async validateLegal(id: string, user: AuthenticatedUser, dto: JudicialWorkflowCommentDto, request: Request) {
+  async validateLegal(
+    id: string,
+    user: AuthenticatedUser,
+    dto: JudicialWorkflowCommentDto,
+    request: Request,
+  ) {
     if (user.role !== 'judicial_officer') {
       throw new ForbiddenException('Validation juridique réservée au responsable accès judiciaire')
     }
@@ -93,8 +121,13 @@ export class JudicialService {
     return this.validate(id, user, dto, request, 'legal')
   }
 
-  async reject(id: string, user: AuthenticatedUser, dto: RejectJudicialRequestDto, request: Request) {
-    const judicialRequest = await this.getRequest(id)
+  async reject(
+    id: string,
+    user: AuthenticatedUser,
+    dto: RejectJudicialRequestDto,
+    request: Request,
+  ) {
+    const judicialRequest = await this.getRequest(id, user)
 
     if (judicialRequest.status === 'executed' || judicialRequest.status === 'closed') {
       throw new BadRequestException('Une demande exécutée ou clôturée ne peut plus être rejetée')
@@ -104,7 +137,11 @@ export class JudicialService {
       where: { id },
       data: {
         status: 'rejected',
-        comments: this.appendComment(judicialRequest.comments, user, dto.reason || dto.comments || 'Rejet sans motif détaillé'),
+        comments: this.appendComment(
+          judicialRequest.comments,
+          user,
+          dto.reason || dto.comments || 'Rejet sans motif détaillé',
+        ),
       },
     })
 
@@ -129,52 +166,49 @@ export class JudicialService {
   }
 
   async execute(id: string, user: AuthenticatedUser, request: Request) {
-    if (user.role !== 'judicial_officer') {
-      throw new ForbiddenException('Exécution réservée au responsable accès judiciaire')
+    if (user.role !== 'dpo') {
+      throw new ForbiddenException('Exécution réservée au DPO')
+    }
+    this.assertOrganizationScope(user)
+    const judicialRequest = await this.getRequest(id, user)
+    if (
+      judicialRequest.status !== 'validated' ||
+      !judicialRequest.dpoValidationUserId ||
+      !judicialRequest.legalValidationUserId
+    ) {
+      throw new BadRequestException(
+        'La double validation DPO et juridique est obligatoire avant exécution',
+      )
     }
 
-    const judicialRequest = await this.getRequest(id)
-
-    if (judicialRequest.status !== 'validated') {
-      throw new BadRequestException('La demande doit avoir une validation DPO et une validation juridique avant exécution')
-    }
-
-    if (!judicialRequest.dpoValidationUserId || !judicialRequest.legalValidationUserId) {
-      throw new BadRequestException('Double validation incomplète : DPO et juridique sont obligatoires')
-    }
-
-    const rows = await this.identityVaultService.loadJudicialIdentityRows(judicialRequest.requestedPublicCodes)
-
-    const exportPayload = {
+    await this.assertCodesBelongToOrganization(
+      judicialRequest.requestedPublicCodes,
+      user.organizationId,
+    )
+    const rows = await this.identityVaultService.loadJudicialIdentityRows(
+      judicialRequest.requestedPublicCodes,
+    )
+    const expiresAt = new Date(Date.now() + this.exportTtlMinutes() * 60_000)
+    const exportEnvelope = this.encryptExport({
+      requestId: judicialRequest.id,
       requestReference: judicialRequest.requestReference,
-      exportedAt: new Date().toISOString(),
-      rowCount: rows.length,
+      generatedAt: new Date().toISOString(),
+      expiresAt: expiresAt.toISOString(),
+      requestedPublicCodes: judicialRequest.requestedPublicCodes,
       rows,
-    }
-    const encryptedExport = this.encryptExport(exportPayload)
-    const exportFingerprint = createHash('sha256').update(encryptedExport.ciphertext).digest('hex')
-
+    })
+    const exportFingerprint = createHash('sha256')
+      .update(JSON.stringify(exportEnvelope))
+      .digest('hex')
     const updated = await this.prisma.judicialAccessRequest.update({
       where: { id },
       data: {
         status: 'executed',
-        executedAt: new Date(),
         executedByUserId: user.id,
+        executedAt: new Date(),
         exportFingerprint,
-        comments: this.appendComment(judicialRequest.comments, user, `Export minimal chiffré exécuté (${rows.length} ligne(s)).`),
-      },
-    })
-
-    await this.identityVaultService.recordVaultAudit({
-      actorUserId: user.id,
-      action: 'judicial_access.execute',
-      requestId: id,
-      ipAddress: request.ip,
-      metadata: {
-        requestReference: judicialRequest.requestReference,
-        requestedPublicCodeCount: judicialRequest.requestedPublicCodes.length,
-        exportedRowCount: rows.length,
-        exportFingerprint,
+        exportExpiresAt: expiresAt,
+        exportDeletedAt: null,
       },
     })
 
@@ -186,25 +220,37 @@ export class JudicialService {
       request,
       metadata: {
         requestReference: judicialRequest.requestReference,
-        requestedPublicCodeCount: judicialRequest.requestedPublicCodes.length,
-        exportedRowCount: rows.length,
+        rowCount: rows.length,
         exportFingerprint,
+        expiresAt,
       },
+    })
+    await this.identityVaultService.recordVaultAudit({
+      actorUserId: user.id,
+      action: 'judicial_access.execute',
+      requestId: id,
+      ipAddress: request.ip,
+      metadata: { rowCount: rows.length, exportFingerprint, expiresAt: expiresAt.toISOString() },
     })
 
     return {
       judicialRequest: updated,
-      encryptedExport: {
-        ...encryptedExport,
+      export: {
         fingerprint: exportFingerprint,
-        expiresInMinutes: 15,
-        warning: 'Exporter immédiatement vers le coffre documentaire. Le serveur ne conserve pas le contenu de l’export.',
+        expiresAt,
+        rowCount: rows.length,
+        envelope: exportEnvelope,
       },
     }
   }
 
-  async close(id: string, user: AuthenticatedUser, dto: JudicialWorkflowCommentDto, request: Request) {
-    const judicialRequest = await this.getRequest(id)
+  async close(
+    id: string,
+    user: AuthenticatedUser,
+    dto: JudicialWorkflowCommentDto,
+    request: Request,
+  ) {
+    const judicialRequest = await this.getRequest(id, user)
 
     if (judicialRequest.status !== 'executed') {
       throw new BadRequestException('Seule une demande exécutée peut être clôturée')
@@ -214,7 +260,11 @@ export class JudicialService {
       where: { id },
       data: {
         status: 'closed',
-        comments: this.appendComment(judicialRequest.comments, user, dto.comments || 'Clôture de la procédure.'),
+        comments: this.appendComment(
+          judicialRequest.comments,
+          user,
+          dto.comments || 'Clôture de la procédure.',
+        ),
       },
     })
 
@@ -245,15 +295,16 @@ export class JudicialService {
     request: Request,
     validationType: 'dpo' | 'legal',
   ) {
-    const judicialRequest = await this.getRequest(id)
+    const judicialRequest = await this.getRequest(id, user)
 
     if (judicialRequest.status !== 'received' && judicialRequest.status !== 'validated') {
       throw new BadRequestException('Seule une demande reçue peut être validée')
     }
 
-    const data = validationType === 'dpo'
-      ? { dpoValidationUserId: user.id }
-      : { legalValidationUserId: user.id }
+    const data =
+      validationType === 'dpo'
+        ? { dpoValidationUserId: user.id }
+        : { legalValidationUserId: user.id }
 
     const nextDpoId = validationType === 'dpo' ? user.id : judicialRequest.dpoValidationUserId
     const nextLegalId = validationType === 'legal' ? user.id : judicialRequest.legalValidationUserId
@@ -264,7 +315,11 @@ export class JudicialService {
       data: {
         ...data,
         status: nextStatus,
-        comments: this.appendComment(judicialRequest.comments, user, dto.comments || `Validation ${validationType}.`),
+        comments: this.appendComment(
+          judicialRequest.comments,
+          user,
+          dto.comments || `Validation ${validationType}.`,
+        ),
       },
     })
 
@@ -288,10 +343,15 @@ export class JudicialService {
     return updated
   }
 
-  private async getRequest(id: string) {
+  private async getRequest(id: string, user: AuthenticatedUser) {
+    this.assertOrganizationScope(user)
     const judicialRequest = await this.prisma.judicialAccessRequest.findUnique({ where: { id } })
 
     if (!judicialRequest) {
+      throw new NotFoundException('Demande judiciaire introuvable')
+    }
+
+    if (judicialRequest.organizationId !== user.organizationId) {
       throw new NotFoundException('Demande judiciaire introuvable')
     }
 
@@ -300,6 +360,28 @@ export class JudicialService {
 
   private normalizePublicCodes(publicCodes: string[]): string[] {
     return Array.from(new Set(publicCodes.map((code) => code.trim().toUpperCase()).filter(Boolean)))
+  }
+
+  private async assertCodesBelongToOrganization(
+    publicCodes: string[],
+    organizationId: string,
+  ): Promise<void> {
+    const scopedInvitations = await this.prisma.invitation.findMany({
+      where: {
+        publicCode: { in: publicCodes },
+        building: { organizationId },
+      },
+      select: { publicCode: true },
+    })
+    const scopedCodes = new Set(
+      scopedInvitations.map((invitation: { publicCode: string }) => invitation.publicCode),
+    )
+
+    if (publicCodes.some((publicCode) => !scopedCodes.has(publicCode))) {
+      throw new BadRequestException(
+        'Un ou plusieurs codes publics sont absents ou hors du périmètre de l’organisation',
+      )
+    }
   }
 
   private appendComment(current: string | null, user: AuthenticatedUser, comment: string): string {
@@ -325,12 +407,16 @@ export class JudicialService {
   }
 
   private exportKey(): Buffer {
-    const rawKey = this.config.get<string>('JUDICIAL_EXPORT_KEY_B64') || this.config.get<string>('EMAIL_ENCRYPTION_KEY_B64')
+    const rawKey =
+      this.config.get<string>('JUDICIAL_EXPORT_KEY_B64') ||
+      this.config.get<string>('EMAIL_ENCRYPTION_KEY_B64')
 
     if (rawKey) {
       const key = Buffer.from(rawKey, 'base64')
       if (key.length !== 32) {
-        throw new BadRequestException('JUDICIAL_EXPORT_KEY_B64 doit contenir 32 octets encodés en base64')
+        throw new BadRequestException(
+          'JUDICIAL_EXPORT_KEY_B64 doit contenir 32 octets encodés en base64',
+        )
       }
       return key
     }
@@ -340,7 +426,23 @@ export class JudicialService {
     }
 
     return createHash('sha256')
-      .update(this.config.get<string>('DEV_JUDICIAL_EXPORT_SECRET') ?? 'development-judicial-export-key-change-me')
+      .update(
+        this.config.get<string>('DEV_JUDICIAL_EXPORT_SECRET') ??
+          'development-judicial-export-key-change-me',
+      )
       .digest()
+  }
+
+  private exportTtlMinutes(): number {
+    const value = Number(this.config.get<string>('JUDICIAL_EXPORT_TTL_MINUTES', '60'))
+    return Number.isFinite(value) ? Math.min(Math.max(Math.floor(value), 5), 1_440) : 60
+  }
+
+  private assertOrganizationScope(
+    user: AuthenticatedUser,
+  ): asserts user is AuthenticatedUser & { organizationId: string } {
+    if (!user.organizationId) {
+      throw new ForbiddenException('Compte sans organisation affectée')
+    }
   }
 }

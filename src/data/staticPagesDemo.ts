@@ -354,7 +354,7 @@ export const staticInvitations: StaticInvitation[] = [
   {
     publicCode: 'ITQ-0001',
     destination: 'i••••••@exemple.org',
-    channel: 'Email simulé',
+    channel: 'Email',
     questionnaireTitle: staticQuestionnaire.title,
     buildingLabel: 'CHPM · Bâtiment A',
     status: 'in_progress',
@@ -372,7 +372,16 @@ export const staticInvitations: StaticInvitation[] = [
   {
     publicCode: 'ITQ-MB-003',
     destination: 'm••••••@exemple.org',
-    channel: 'Email simulé',
+    channel: 'Email',
+    questionnaireTitle: staticQuestionnaire.title,
+    buildingLabel: 'CHPM · Bâtiment B',
+    status: 'opened',
+    sentAt: '2026-06-24 14:05',
+  },
+  {
+    publicCode: 'ITQ-SMS-003',
+    destination: '•••• 0000',
+    channel: 'SMS',
     questionnaireTitle: staticQuestionnaire.title,
     buildingLabel: 'CHPM · Bâtiment B',
     status: 'opened',
@@ -381,7 +390,7 @@ export const staticInvitations: StaticInvitation[] = [
   {
     publicCode: 'ITQ-MA-004',
     destination: 'n••••••@exemple.org',
-    channel: 'Email simulé',
+    channel: 'Email',
     questionnaireTitle: staticQuestionnaire.title,
     buildingLabel: 'CHPM · Bâtiment A',
     status: 'sent',

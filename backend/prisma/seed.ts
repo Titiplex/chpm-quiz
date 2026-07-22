@@ -130,6 +130,7 @@ async function main() {
         where: { email: seed.email },
         update: {
           passwordHash,
+          mustChangePassword: false,
           displayName: seed.displayName,
           role: seed.role,
           isActive: true,
@@ -140,6 +141,7 @@ async function main() {
         create: {
           email: seed.email,
           passwordHash,
+          mustChangePassword: false,
           displayName: seed.displayName,
           role: seed.role,
           isActive: true,
@@ -352,6 +354,7 @@ async function main() {
   })
 
   const itqVersion = await createItqQuestionnaire(organization.id, admin.id)
+  const lec5Version = await createLec5Questionnaire(organization.id, admin.id)
 
   const pilot = await prisma.questionnaire.create({
     data: {
@@ -401,6 +404,7 @@ async function main() {
   })
 
   await createDemoInvitations(publishedVersion.id, moderator.id, demoBuildings)
+  await createDemoFieldTrackingRecords(publishedVersion.id, moderator.id, requireDemoBuilding(demoBuildings, 'MTL-A'))
   const terminalSeeds = await createDemoTerminalDevices(organization.id, moderator.id, demoBuildings)
   const terminalInvitation = await createOnsiteTerminalInvitation(itqVersion.id, moderator.id, terminalSeeds[0]!)
   const itqDemoToken = await createSeedInvitation(
@@ -410,6 +414,22 @@ async function main() {
     buildingByCode.get('MTL-A')!.siteId,
     'ITQ-0001',
     'itq.demo@example.org',
+  )
+  const itqSmsDemoToken = await createSeedSmsInvitation(
+    itqVersion.id,
+    moderator.id,
+    buildingByCode.get('MTL-A')!.id,
+    buildingByCode.get('MTL-A')!.siteId,
+    'ITQ-SMS-0001',
+    '+33600000000',
+  )
+  const lec5DemoToken = await createSeedInvitation(
+    lec5Version.id,
+    moderator.id,
+    buildingByCode.get('MTL-A')!.id,
+    buildingByCode.get('MTL-A')!.siteId,
+    'LEC5-0001',
+    'lec5.demo@example.org',
   )
   await createItqDemoInvitations(itqVersion.id, moderator.id, demoBuildings, terminalSeeds)
 
@@ -444,6 +464,15 @@ async function main() {
         digestHour: 8,
         isEnabled: true,
       },
+      {
+        userId: admin.id,
+        questionnaireVersionId: lec5Version.id,
+        eventType: 'submission_received',
+        channel: 'email',
+        frequency: 'daily',
+        digestHour: 8,
+        isEnabled: true,
+      },
     ],
   })
 
@@ -462,7 +491,10 @@ async function main() {
   }
   console.log('Le répondant utilise désormais un lien /r/<token> généré par la modération, pas un compte interne.')
   console.log(`Questionnaire ITQ seedé : version publiée, 20 écrans dont 18 items cotés, 1 question par page, bulles d’information activées.`)
+  console.log(`Questionnaire LEC-5 seedé : version papier de démonstration, 17 situations en choix multiples, question d’événement le plus difficile et champ Autre.`)
   console.log(`Lien répondant ITQ de démonstration : /r/${itqDemoToken}`)
+  console.log(`Lien répondant ITQ SMS simulé de démonstration : /r/${itqSmsDemoToken}`)
+  console.log(`Lien répondant LEC-5 de démonstration : /r/${lec5DemoToken}`)
   console.log(`Lien terminal hospitalier de démonstration : /terminal/${terminalSeeds[0]?.terminalToken}`)
   console.log(`Invitation ITQ affectée au terminal : ${terminalInvitation.publicCode}`)
 }
@@ -837,6 +869,197 @@ async function createItqQuestionnaire(organizationId: string, ownerUserId: strin
   return version
 }
 
+
+const lec5ExposureOptions: Array<[string, string]> = [
+  ['happened_to_me', 'Ce m’est arrivé'],
+  ['witnessed_it', 'J’en ai été témoin'],
+  ['learned_about_it', 'Je l’ai appris'],
+  ['part_of_work', 'Dans le cadre du travail'],
+  ['not_applicable', 'Ne s’applique pas'],
+  ['not_sure', 'Je ne suis pas sûr'],
+]
+
+const lec5Events: Array<{ code: string; label: string }> = [
+  {
+    code: 'LEC5-E01',
+    label: '1. Catastrophe naturelle (inondation, ouragan, tornade, tremblement de terre, etc.)',
+  },
+  {
+    code: 'LEC5-E02',
+    label: '2. Incendie ou explosion',
+  },
+  {
+    code: 'LEC5-E03',
+    label: '3. Accident de la route (voiture, bateau, déraillement de train, écrasement d’avion, etc.)',
+  },
+  {
+    code: 'LEC5-E04',
+    label: '4. Accident grave au travail, à domicile ou pendant des loisirs',
+  },
+  {
+    code: 'LEC5-E05',
+    label: '5. Exposition à une substance toxique (produits chimiques dangereux, radiation, etc.)',
+  },
+  {
+    code: 'LEC5-E06',
+    label: '6. Agression physique (attaqué, frappé, poignardé, battu, coups de pied, etc.)',
+  },
+  {
+    code: 'LEC5-E07',
+    label: '7. Attaque à main armée (menacé ou blessé par une arme à feu, un couteau, une bombe, etc.)',
+  },
+  {
+    code: 'LEC5-E08',
+    label: '8. Agression sexuelle (viol, tentative, acte sexuel par la force ou sous menaces)',
+  },
+  {
+    code: 'LEC5-E09',
+    label: '9. Autre expérience sexuelle non désirée et désagréable (abus sexuel dans l’enfance)',
+  },
+  {
+    code: 'LEC5-E10',
+    label: '10. Conflit armé ou présence en zone de guerre (dans l’armée ou comme civil)',
+  },
+  {
+    code: 'LEC5-E11',
+    label: '11. Captivité (kidnappé, enlevé, pris en otage, incarcéré comme prisonnier de guerre, etc.)',
+  },
+  {
+    code: 'LEC5-E12',
+    label: '12. Maladie ou blessure mettant la vie en danger',
+  },
+  {
+    code: 'LEC5-E13',
+    label: '13. Souffrances humaines intenses',
+  },
+  {
+    code: 'LEC5-E14',
+    label: '14. Mort violente (homicide, suicide, etc.)',
+  },
+  {
+    code: 'LEC5-E15',
+    label: '15. Mort subite et accidentelle',
+  },
+  {
+    code: 'LEC5-E16',
+    label: '16. Blessure grave, dommage ou mort causé par vous à quelqu’un',
+  },
+  {
+    code: 'LEC5-E17',
+    label: '17. Toute autre expérience très stressante (négligence sévère dans l’enfance, etc.)',
+  },
+]
+
+async function createLec5Questionnaire(organizationId: string, ownerUserId: string) {
+  const questionnaire = await prisma.questionnaire.create({
+    data: {
+      organizationId,
+      ownerUserId,
+      code: 'LEC5-PPP',
+      title: 'Inventaire des événements de vie — LEC-5',
+      description:
+        'PPP+ · Prévalence du Psychotrauma en Psychiatrie. Version papier de démonstration de l’inventaire LEC-5, intégré au parcours ITQ.',
+      defaultLanguage: 'fr',
+      finality:
+        'Repérer les situations difficiles ou stressantes vécues, observées, apprises ou rencontrées dans le cadre professionnel. Seed de démonstration, sans interprétation clinique automatisée.',
+      status: 'published',
+    },
+  })
+
+  return prisma.questionnaireVersion.create({
+    data: {
+      questionnaireId: questionnaire.id,
+      versionLabel: '1.0-papier-demo',
+      language: 'fr',
+      status: 'published',
+      description:
+        'LEC-5 version papier : 17 situations cochables selon six modalités d’exposition, une question pour l’événement le plus difficile et un champ Autre à préciser.',
+      finality: questionnaire.finality,
+      openFrom: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      openUntil: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
+      publishedAt: new Date(),
+      immutableAt: new Date(),
+      groups: {
+        create: [
+          {
+            title: 'Présentation papier PPP+ / LEC-5',
+            description:
+              'Questionnaire ITQ — version papier · Prévalence du Psychotrauma en Psychiatrie · CH de Montfavet Cloitre et al. ©2018 · traduction FR validée Peraud et al. 2022 · mise en page inspirée du Cn2r.',
+            displayOrder: 1,
+            questionsPerPage: 1,
+            randomize: false,
+            questions: {
+              create: [
+                question(
+                  'LEC5-INTRO',
+                  1,
+                  'VOS EXPÉRIENCES — situations vécues (inventaire LEC-5)',
+                  'information',
+                  false,
+                  'Voici une liste de situations difficiles ou stressantes qu’une personne peut avoir à traverser. Pour chaque situation, cochez la ou les case(s) correspondante(s). Encerclez celle qui fut la plus difficile pour vous, en considérant l’ensemble de votre vie, de l’enfance à l’âge adulte.',
+                ),
+              ],
+            },
+          },
+          {
+            title: 'Situations vécues',
+            description:
+              'Pour chaque situation, cochez une ou plusieurs modalités : ce m’est arrivé, j’en ai été témoin, je l’ai appris, dans le cadre du travail, ne s’applique pas, ou je ne suis pas sûr.',
+            displayOrder: 2,
+            questionsPerPage: 3,
+            randomize: false,
+            questions: {
+              create: lec5Events.map((event, index) =>
+                question(
+                  event.code,
+                  index + 1,
+                  event.label,
+                  'multiple_choice',
+                  false,
+                  'Cochez la ou les case(s) correspondante(s). Plusieurs réponses sont possibles.',
+                  lec5ExposureOptions,
+                ),
+              ),
+            },
+          },
+          {
+            title: 'Événement le plus difficile',
+            description:
+              'Indiquez la situation qui fut la plus difficile pour vous sur l’ensemble de votre vie, puis précisez “Autre” si nécessaire.',
+            displayOrder: 3,
+            questionsPerPage: 1,
+            randomize: false,
+            questions: {
+              create: [
+                question(
+                  'LEC5-WORST',
+                  1,
+                  'Quelle situation fut la plus difficile pour vous ?',
+                  'single_choice',
+                  false,
+                  'Correspond à la consigne papier “Encerclez celle qui fut la plus difficile pour vous”.',
+                  [
+                    ...lec5Events.map((event) => [event.code, event.label] as [string, string]),
+                    ['LEC5-E18', '18. Autre expérience précisée ci-dessous'],
+                  ],
+                ),
+                question(
+                  'LEC5-OTHER',
+                  2,
+                  '18. Autre (précisez)',
+                  'free_text_short',
+                  false,
+                  'Champ libre facultatif. Évitez les noms, dates exactes, lieux précis ou tout détail directement identifiant.',
+                ),
+              ],
+            },
+          },
+        ],
+      },
+    },
+  })
+}
+
 async function attachItqPopups(questionnaireVersionId: string) {
   const popupsByQuestionCode: Record<string, Array<{ termKey: string; title: string; body: string }>> = {
     'ITQ-EXP-DESC': [
@@ -1072,6 +1295,7 @@ async function createSeedInvitation(
       identityVaultEntry: {
         create: {
           uniqueCode: publicCode,
+          contactChannel: 'email',
           encryptedEmail: encryptEmail(email),
           emailHash: hashEmail(email),
           questionnaireVersionId,
@@ -1086,6 +1310,63 @@ async function createSeedInvitation(
           eventType: 'dev_link_created',
           metadata: { seeded: true, accessLink: `/r/${token}` },
         },
+      },
+    },
+  })
+
+  return token
+}
+
+async function createSeedSmsInvitation(
+  questionnaireVersionId: string,
+  moderatorId: string,
+  buildingId: string,
+  siteId: string,
+  publicCode: string,
+  phone: string,
+) {
+  const token = createRespondentToken(publicCode)
+  const normalizedPhone = normalizePhone(phone)
+
+  await prisma.invitation.create({
+    data: {
+      questionnaireVersionId,
+      buildingId,
+      siteId,
+      createdByUserId: moderatorId,
+      publicCode,
+      tokenHash: sha256(token),
+      status: 'opened',
+      deliveryMode: 'sms_simulation',
+      notifyModerator: true,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      sentAt: new Date(),
+      openedAt: new Date(),
+      identityVaultEntry: {
+        create: {
+          uniqueCode: publicCode,
+          contactChannel: 'sms',
+          encryptedPhone: encryptContact(normalizedPhone),
+          phoneHash: hashContact(normalizedPhone),
+          questionnaireVersionId,
+          buildingId,
+          createdByUserId: moderatorId,
+          lastSmsSentAt: new Date(),
+        },
+      },
+      deliveryEvents: {
+        create: [
+          {
+            publicCode,
+            eventType: 'dev_invitation_sms_queued',
+            metadata: { seeded: true, accessLink: `/r/${token}`, provider: 'simulation' },
+          },
+          {
+            publicCode,
+            eventType: 'link_opened',
+            metadata: { seeded: true, channel: 'sms_simulation' },
+          },
+        ],
       },
     },
   })
@@ -1499,6 +1780,66 @@ async function createItqDemoInvitations(questionnaireVersionId: string, moderato
         })
       }
     }
+  }
+}
+
+async function createDemoFieldTrackingRecords(questionnaireVersionId: string, moderatorId: string, building: DemoBuildingTarget) {
+  const records = [
+    {
+      publicCode: 'PAPR-CHPM-001',
+      deliveryMode: 'paper_form',
+      status: 'sent',
+      eventType: 'paper_form_recorded',
+      assistanceMode: 'full_assisted_entry',
+      sentAt: daysAgo(2),
+      cancelledAt: undefined,
+      note: 'Passation papier seedée pour une personne sans email/SMS',
+    },
+    {
+      publicCode: 'REFU-CHPM-001',
+      deliveryMode: 'refusal_record',
+      status: 'cancelled',
+      eventType: 'participation_refusal_recorded',
+      assistanceMode: 'none',
+      sentAt: undefined,
+      cancelledAt: daysAgo(1),
+      note: 'Refus seedé avant collecte de contact numérique',
+    },
+  ]
+
+  for (const record of records) {
+    const token = createRespondentToken(record.publicCode)
+    await prisma.invitation.create({
+      data: {
+        questionnaireVersionId,
+        buildingId: building.buildingId,
+        siteId: building.siteId,
+        createdByUserId: moderatorId,
+        publicCode: record.publicCode,
+        tokenHash: sha256(token),
+        status: record.status as any,
+        deliveryMode: record.deliveryMode as any,
+        assistanceMode: record.assistanceMode as any,
+        notifyModerator: true,
+        notifyAdmins: false,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        sentAt: record.sentAt,
+        cancelledAt: record.cancelledAt,
+        deliveryEvents: {
+          create: {
+            publicCode: record.publicCode,
+            eventType: record.eventType,
+            metadata: {
+              seeded: true,
+              buildingCode: building.code,
+              deliveryMode: record.deliveryMode,
+              note: record.note,
+            },
+            occurredAt: record.cancelledAt ?? record.sentAt ?? new Date(),
+          },
+        },
+      },
+    })
   }
 }
 
@@ -1971,7 +2312,11 @@ function minutesBefore(date: Date, minutes: number): Date {
 }
 
 function encryptEmail(email: string): string {
-  const normalizedEmail = email.trim().toLowerCase()
+  return encryptContact(email.trim().toLowerCase())
+}
+
+function encryptContact(value: string): string {
+  const normalizedValue = value.trim()
   const version = 'v1'
   const iv = randomBytes(12)
   const key = process.env.EMAIL_ENCRYPTION_KEY_B64
@@ -1984,14 +2329,23 @@ function encryptEmail(email: string): string {
 
   const cipher = createCipheriv('aes-256-gcm', key, iv, { authTagLength: 16 })
   cipher.setAAD(Buffer.from(version, 'utf8'))
-  const ciphertext = Buffer.concat([cipher.update(normalizedEmail, 'utf8'), cipher.final()])
+  const ciphertext = Buffer.concat([cipher.update(normalizedValue, 'utf8'), cipher.final()])
   const tag = cipher.getAuthTag()
 
   return [version, iv.toString('base64url'), tag.toString('base64url'), ciphertext.toString('base64url')].join('.')
 }
 
 function hashEmail(email: string): string {
-  return createHmac('sha256', emailHashPepper).update(email.trim().toLowerCase()).digest('hex')
+  return hashContact(email.trim().toLowerCase())
+}
+
+function normalizePhone(phone: string): string {
+  const compact = phone.trim().replace(/[\s().-]/g, '')
+  return compact.startsWith('00') ? `+${compact.slice(2)}` : compact
+}
+
+function hashContact(value: string): string {
+  return createHmac('sha256', emailHashPepper).update(value.trim()).digest('hex')
 }
 
 function createRespondentToken(publicCode: string): string {

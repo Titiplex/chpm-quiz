@@ -232,6 +232,7 @@ export class RespondentService {
 
     await this.auditService.log({
       actor: null,
+      organizationId: invitation.building.organizationId,
       action: 'respondent.submit',
       entityType: 'Submission',
       entityId: submission.id,
@@ -300,11 +301,20 @@ export class RespondentService {
       throw new UnauthorizedException('Jeton répondant invalide')
     }
 
+    const now = new Date()
+    if (invitation.questionnaireVersion.openFrom && invitation.questionnaireVersion.openFrom > now) {
+      throw new ForbiddenException('La période de réponse n’a pas commencé')
+    }
+    if (invitation.questionnaireVersion.openUntil && invitation.questionnaireVersion.openUntil <= now && invitation.status !== 'submitted') {
+      await this.prisma.invitation.update({ where: { id: invitation.id }, data: { status: 'expired' } })
+      throw new ForbiddenException('La période de réponse est terminée')
+    }
+
     if (invitation.status === 'blocked' || invitation.status === 'cancelled') {
       throw new ForbiddenException('Invitation bloquée ou annulée')
     }
 
-    if (invitation.expiresAt <= new Date() && invitation.status !== 'submitted') {
+    if (invitation.expiresAt <= now && invitation.status !== 'submitted') {
       await this.prisma.invitation.update({ where: { id: invitation.id }, data: { status: 'expired' } })
       throw new ForbiddenException('Invitation expirée')
     }

@@ -27,7 +27,7 @@ describe('controller delegation contracts', () => {
       cleanupExpiredDrafts: vi.fn(async () => ({ deletedDraftSessionCount: 2 })),
       pseudonymizedExport: vi.fn(async () => ({ rowCount: 3 })),
     }
-    const controller = new ComplianceController(service as any)
+    const controller = new ComplianceController(service as any, { runOnce: vi.fn(async () => ({})) } as any)
 
     expect(controller.technicalRegister(user)).toEqual({ register: { controller: 'CHPM' } })
     expect(controller.retentionPolicy()).toEqual({ policy: { rules: [] } })

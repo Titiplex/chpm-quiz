@@ -69,12 +69,32 @@ export function createConnectedRoutes(): RouteRecordRaw[] {
       },
     },
     {
+      path: '/change-password',
+      name: 'change-password',
+      component: () => import('@/views/ChangePasswordView.vue'),
+      meta: {
+        label: 'Change password',
+        allowedRoles: [...allRoles],
+        requiresAuthenticatedUser: true,
+      },
+    },
+    {
       path: '/',
       name: 'home',
       component: () => import('@/views/HomeView.vue'),
       meta: {
         label: t('nav.home'),
         allowedRoles: [...allRoles],
+        requiresAuthenticatedUser: true,
+      },
+    },
+    {
+      path: '/administration-projet',
+      name: 'project-administration',
+      component: () => import('@/views/ProjectAdministrationView.vue'),
+      meta: {
+        label: t('nav.projectAdministration'),
+        allowedRoles: ['admin'],
         requiresAuthenticatedUser: true,
       },
     },
@@ -94,17 +114,7 @@ export function createConnectedRoutes(): RouteRecordRaw[] {
       component: () => import('@/views/ModeratorView.vue'),
       meta: {
         label: t('nav.moderation'),
-        allowedRoles: ['admin', 'moderator', 'site_manager'],
-        requiresAuthenticatedUser: true,
-      },
-    },
-    {
-      path: '/questionnaire',
-      name: 'questionnaire',
-      component: () => import('@/views/RespondentView.vue'),
-      meta: {
-        label: t('nav.respondentPreview'),
-        allowedRoles: ['admin', 'moderator', 'questionnaire_admin'],
+        allowedRoles: ['moderator', 'site_manager'],
         requiresAuthenticatedUser: true,
       },
     },
@@ -124,7 +134,7 @@ export function createConnectedRoutes(): RouteRecordRaw[] {
       component: () => import('@/views/StatsView.vue'),
       meta: {
         label: t('nav.stats'),
-        allowedRoles: ['admin', 'site_manager', 'questionnaire_admin', 'analyst', 'dpo'],
+        allowedRoles: ['admin', 'site_manager', 'questionnaire_admin', 'analyst'],
         requiresAuthenticatedUser: true,
       },
     },
@@ -218,6 +228,22 @@ export function createAuthorizationGuard(staticPagesDemo = isStaticPagesDemo) {
       }
 
       return true
+    }
+
+    if (
+      session.isAuthenticated &&
+      session.user?.mustChangePassword &&
+      to.name !== 'change-password'
+    ) {
+      return '/change-password'
+    }
+
+    if (
+      to.name === 'change-password' &&
+      session.isAuthenticated &&
+      !session.user?.mustChangePassword
+    ) {
+      return defaultPathByRole[session.currentRole]
     }
 
     if (to.meta.requiresAuthenticatedUser && !session.isAuthenticated) {

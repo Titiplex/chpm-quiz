@@ -23,7 +23,7 @@ describe('useSessionStore', () => {
     expect(store.isBootstrapped).toBe(true)
     expect(store.isAuthenticated).toBe(true)
     expect(store.currentRole).toBe('admin')
-    expect(store.currentProfile.label).toBe('Administrateur global')
+    expect(store.currentProfile.label).toBe('Administrateur projet / chercheur')
     expect(store.visibleNavigation.map((item) => item.to)).toContain('/admin')
     expect(store.hasPermission('questionnaire:configure')).toBe(true)
     expect(store.hasPermission('judicial:executeAccess')).toBe(false)

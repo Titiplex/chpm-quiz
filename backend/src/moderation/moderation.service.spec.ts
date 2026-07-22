@@ -5,6 +5,7 @@ vi.mock('../prisma/prisma.service', () => ({ PrismaService: class PrismaService 
 vi.mock('../security/access-token.service', () => ({ AccessTokenService: class AccessTokenService {} }))
 vi.mock('../identity-vault/identity-vault.service', () => ({ IdentityVaultService: class IdentityVaultService {} }))
 vi.mock('../mail/mail-queue.service', () => ({ MailQueueService: class MailQueueService {} }))
+vi.mock('../sms/sms-queue.service', () => ({ SmsQueueService: class SmsQueueService {} }))
 vi.mock('../audit/audit.service', () => ({ AuditService: class AuditService {} }))
 
 import { ModerationService } from './moderation.service'
@@ -15,7 +16,7 @@ const siteUser = { id: 'site-user', role: 'site_manager', organizationId: 'org-1
 const request = { ip: '127.0.0.1', get: vi.fn(() => 'Vitest') } as any
 
 const building = { id: 'building-1', siteId: 'site-1', organizationId: 'org-1', label: 'Bâtiment 1', code: 'B1' }
-const version = { id: 'version-1', status: 'published', openUntil: null, questionnaire: { id: 'q1', title: 'ITQ', organizationId: 'org-1' } }
+const version = { id: 'version-1', status: 'published', openFrom: null, openUntil: null, questionnaire: { id: 'q1', title: 'ITQ', organizationId: 'org-1' } }
 const terminal = { id: 'terminal-1', code: 'TERM-0001', label: 'Tablette', status: 'active', buildingId: 'building-1', building, invitations: [] }
 
 function invitation(data: Record<string, unknown> = {}) {
@@ -70,15 +71,19 @@ function makeService(overrides: Record<string, unknown> = {}, env: Record<string
   const accessToken = { create: vi.fn((publicCode: string) => ({ token: `${publicCode}.signed-token`, tokenHash: `${publicCode}-hash` })) }
   const identityVault = {
     hasExistingIdentityForEmail: vi.fn(async () => false),
+    hasExistingIdentityForPhone: vi.fn(async () => false),
     createEmailIdentity: vi.fn(async () => undefined),
+    createPhoneIdentity: vi.fn(async () => undefined),
     recordDeliveryEvent: vi.fn(async () => undefined),
     loadOutboundEmailForInvitation: vi.fn(async () => ({ email: 'patient@example.test' })),
+    loadOutboundPhoneForInvitation: vi.fn(async () => ({ phone: '+33600000000' })),
   }
   const mailQueue = { enqueue: vi.fn(() => 'mail-job-1') }
+  const smsQueue = { enqueue: vi.fn(() => 'sms-job-1') }
   const audit = { log: vi.fn(async () => undefined) }
   const config = { get: vi.fn(<T = string>(key: string, fallback?: T) => (key in env ? env[key] as T : fallback)) }
 
-  return { service: new ModerationService(prisma as any, accessToken as any, identityVault as any, mailQueue as any, audit as any, config as any), prisma, accessToken, identityVault, mailQueue, audit, config }
+  return { service: new ModerationService(prisma as any, accessToken as any, identityVault as any, mailQueue as any, smsQueue as any, audit as any, config as any), prisma, accessToken, identityVault, mailQueue, smsQueue, audit, config }
 }
 
 describe('ModerationService', () => {
@@ -99,7 +104,33 @@ describe('ModerationService', () => {
     expect(prisma.invitation.updateMany).toHaveBeenCalledWith({ where: { id: { in: ['expired-1'] } }, data: { status: 'expired' } })
     expect(identityVault.recordDeliveryEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: 'invitation_expired' }))
     expect(mailQueue.enqueue).toHaveBeenCalledWith(expect.objectContaining({ template: 'expiration', to: { email: 'patient@example.test' } }))
-    expect(result[0]).toMatchObject({ publicCode: 'ABCD-1234', deliveryMode: 'email_simulation', questionnaireTitle: 'ITQ' })
+    const listQuery = (prisma.invitation.findMany as any).mock.calls.at(-1)[0]
+    expect(listQuery.where).toEqual({ buildingId: 'building-1' })
+    expect(listQuery.include).not.toHaveProperty('identityVaultEntry')
+    expect(listQuery).not.toHaveProperty('take')
+    expect(result[0]).toMatchObject({
+      publicCode: 'ABCD-1234',
+      deliveryMode: 'email_simulation',
+      questionnaireTitle: 'ITQ',
+      maskedEmail: 'email masqué',
+      maskedPhone: null,
+    })
+  })
+
+  it('derives SMS masking without querying the protected identity schema', async () => {
+    const { service } = makeService({
+      invitation: {
+        findMany: vi.fn()
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([invitation({ deliveryMode: 'sms_simulation' })]),
+        updateMany: vi.fn(async () => ({ count: 0 })),
+        findUnique: vi.fn(async () => null),
+      },
+    })
+
+    const result = await service.listForUser(moderatorUser)
+
+    expect(result[0]).toMatchObject({ maskedEmail: null, maskedPhone: 'téléphone masqué' })
   })
 
   it('creates an email invitation, writes identity vault data and queues mail', async () => {
@@ -121,6 +152,24 @@ describe('ModerationService', () => {
     expect(result.devAccessLink).toContain('https://app.example.test/r/')
   })
 
+  it('creates a SMS invitation, writes phone identity and queues SMS', async () => {
+    const { service, prisma, identityVault, smsQueue, audit } = makeService({}, { FRONTEND_ORIGIN: 'https://app.example.test', EXPOSE_RESPONDENT_DEV_LINKS: 'true' })
+
+    const result = await service.create(adminUser, {
+      questionnaireVersionId: version.id,
+      buildingId: building.id,
+      phone: '+33600000000',
+      deliveryMode: 'sms_simulation',
+      notifyModerator: true,
+    } as any, request)
+
+    expect(prisma.invitation.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ deliveryMode: 'sms_simulation', status: 'sent', notifyModerator: true }) }))
+    expect(identityVault.createPhoneIdentity).toHaveBeenCalledWith(expect.objectContaining({ phone: '+33600000000', invitationId: 'invitation-1' }))
+    expect(smsQueue.enqueue).toHaveBeenCalledWith(expect.objectContaining({ template: 'invitation', to: { phone: '+33600000000' } }))
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'invitation.create' }))
+    expect(result.accessToken).toContain('.signed-token')
+  })
+
   it('never exposes respondent tokens in production', async () => {
     const { service } = makeService({}, { NODE_ENV: 'production' })
 
@@ -133,6 +182,44 @@ describe('ModerationService', () => {
 
     expect(result.accessToken).toBeNull()
     expect(result.devAccessLink).toBeNull()
+  })
+
+  it('enforces the questionnaire collection window and invitation expiry', async () => {
+    const futureOpen = { ...version, openFrom: new Date(Date.now() + 60_000) }
+    await expect(makeService({ questionnaireVersion: { findUnique: vi.fn(async () => futureOpen) } }).service.create(adminUser, {
+      questionnaireVersionId: version.id,
+      buildingId: building.id,
+      email: 'patient@example.test',
+      deliveryMode: 'email',
+    } as any, request)).rejects.toBeInstanceOf(BadRequestException)
+
+    const closed = { ...version, openUntil: new Date(Date.now() - 60_000) }
+    await expect(makeService({ questionnaireVersion: { findUnique: vi.fn(async () => closed) } }).service.create(adminUser, {
+      questionnaireVersionId: version.id,
+      buildingId: building.id,
+      email: 'patient@example.test',
+      deliveryMode: 'email',
+    } as any, request)).rejects.toBeInstanceOf(BadRequestException)
+
+    const closingSoon = { ...version, openUntil: new Date(Date.now() + 60_000) }
+    await expect(makeService({ questionnaireVersion: { findUnique: vi.fn(async () => closingSoon) } }).service.create(adminUser, {
+      questionnaireVersionId: version.id,
+      buildingId: building.id,
+      email: 'patient@example.test',
+      deliveryMode: 'email',
+      expiresAt: new Date(Date.now() + 120_000).toISOString(),
+    } as any, request)).rejects.toBeInstanceOf(BadRequestException)
+
+    const { service, prisma } = makeService({ questionnaireVersion: { findUnique: vi.fn(async () => closingSoon) } })
+    await service.create(adminUser, {
+      questionnaireVersionId: version.id,
+      buildingId: building.id,
+      email: 'patient@example.test',
+      deliveryMode: 'email',
+    } as any, request)
+    expect(prisma.invitation.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ expiresAt: closingSoon.openUntil }),
+    }))
   })
 
   it('creates onsite terminal invitations without email identity or direct token exposure', async () => {
@@ -153,10 +240,36 @@ describe('ModerationService', () => {
     expect(result).toMatchObject({ accessToken: null, devAccessLink: null })
   })
 
+  it('records paper forms and refusals without email identity or respondent link', async () => {
+    const { service, identityVault, mailQueue, audit } = makeService()
+
+    const paper = await service.create(adminUser, {
+      questionnaireVersionId: version.id,
+      buildingId: building.id,
+      deliveryMode: 'paper_form',
+    } as any, request)
+    const refusal = await service.create(adminUser, {
+      questionnaireVersionId: version.id,
+      buildingId: building.id,
+      deliveryMode: 'refusal_record',
+      refusalReason: 'Refuse de donner un email ou téléphone',
+    } as any, request)
+
+    expect(identityVault.createEmailIdentity).not.toHaveBeenCalled()
+    expect(mailQueue.enqueue).not.toHaveBeenCalled()
+    expect(identityVault.recordDeliveryEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: 'paper_form_recorded' }))
+    expect(identityVault.recordDeliveryEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: 'participation_refusal_recorded' }))
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'invitation.create.paper_form' }))
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'participation.refusal.record' }))
+    expect(paper).toMatchObject({ accessToken: null, devAccessLink: null })
+    expect(refusal.invitation).toMatchObject({ deliveryMode: 'refusal_record', status: 'cancelled' })
+  })
+
   it('rejects invalid invitation creation cases', async () => {
     await expect(makeService().service.create(moderatorUser, { questionnaireVersionId: version.id, buildingId: 'other', email: 'p@test' } as any, request)).rejects.toBeInstanceOf(ForbiddenException)
     await expect(makeService({ questionnaireVersion: { findUnique: vi.fn(async () => ({ ...version, status: 'draft' })) } }).service.create(adminUser, { questionnaireVersionId: version.id, buildingId: building.id, email: 'p@test' } as any, request)).rejects.toBeInstanceOf(BadRequestException)
     await expect(makeService().service.create(adminUser, { questionnaireVersionId: version.id, buildingId: building.id, deliveryMode: 'email' } as any, request)).rejects.toBeInstanceOf(BadRequestException)
+    await expect(makeService().service.create(adminUser, { questionnaireVersionId: version.id, buildingId: building.id, deliveryMode: 'sms' } as any, request)).rejects.toBeInstanceOf(BadRequestException)
     await expect(makeService({ terminalDevice: { findFirst: vi.fn(async () => null) } }).service.create(adminUser, { questionnaireVersionId: version.id, buildingId: building.id, deliveryMode: 'onsite_terminal', terminalDeviceId: 'missing' } as any, request)).rejects.toBeInstanceOf(BadRequestException)
   })
 
@@ -171,6 +284,16 @@ describe('ModerationService', () => {
     expect(identityVault.recordDeliveryEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: 'invitation_reminder_queued' }))
     expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'invitation.resend' }))
     expect(result.invitation.status).toBe('sent')
+  })
+
+  it('resends SMS invitations with renewed tokens and records delivery', async () => {
+    const { service, identityVault, smsQueue } = makeService({ invitation: { findFirst: vi.fn(async () => invitation({ deliveryMode: 'sms_simulation' })), update: vi.fn(async (args: any) => invitation({ deliveryMode: 'sms_simulation', ...args.data })) } })
+
+    await service.resend(adminUser, 'invitation-1', request)
+
+    expect(identityVault.loadOutboundPhoneForInvitation).toHaveBeenCalledWith('invitation-1')
+    expect(smsQueue.enqueue).toHaveBeenCalledWith(expect.objectContaining({ template: 'reminder', to: { phone: '+33600000000' } }))
+    expect(identityVault.recordDeliveryEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: 'invitation_sms_reminder_queued' }))
   })
 
   it('blocks impossible resends and redispatches terminal invitations', async () => {

@@ -43,7 +43,7 @@ export class MailProviderService {
 
   private async sendBrevo(payload: MailJobPayload): Promise<MailDeliveryResult> {
     const apiKey = this.requiredSecret('BREVO_API_KEY')
-    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    const response = await this.fetchProvider('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: {
         Accept: 'application/json',
@@ -72,7 +72,7 @@ export class MailProviderService {
 
   private async sendSendgrid(payload: MailJobPayload): Promise<MailDeliveryResult> {
     const apiKey = this.requiredSecret('SENDGRID_API_KEY')
-    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+    const response = await this.fetchProvider('https://api.sendgrid.com/v3/mail/send', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -102,7 +102,7 @@ export class MailProviderService {
     const publicKey = this.requiredSecret('MAILJET_API_KEY')
     const privateKey = this.requiredSecret('MAILJET_API_SECRET')
     const auth = Buffer.from(`${publicKey}:${privateKey}`, 'utf8').toString('base64')
-    const response = await fetch('https://api.mailjet.com/v3.1/send', {
+    const response = await this.fetchProvider('https://api.mailjet.com/v3.1/send', {
       method: 'POST',
       headers: {
         Authorization: `Basic ${auth}`,
@@ -145,6 +145,11 @@ export class MailProviderService {
 
     const name = this.config.get<string>('EMAIL_FROM_NAME', 'CHPM Questionnaires').trim()
     return { email, ...(name ? { name } : {}) }
+  }
+
+  private fetchProvider(url: string, init: RequestInit): Promise<Response> {
+    const timeoutMs = Math.min(Math.max(Number(this.config.get<string>('PROVIDER_HTTP_TIMEOUT_MS', '10000')), 1_000), 60_000)
+    return fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) })
   }
 
   private requiredSecret(name: string): string {

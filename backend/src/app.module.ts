@@ -16,9 +16,11 @@ import { PrismaModule } from './prisma/prisma.module'
 import { QuestionnairesModule } from './questionnaires/questionnaires.module'
 import { RespondentModule } from './respondent/respondent.module'
 import { SecurityModule } from './security/security.module'
+import { SmsModule } from './sms/sms.module'
 import { StatsModule } from './stats/stats.module'
 import { TerminalModule } from './terminal/terminal.module'
 import { TerminalAdminModule } from './terminal-admin/terminal-admin.module'
+import { UsersModule } from './users/users.module'
 import { VersionsModule } from './versions/versions.module'
 
 @Module({
@@ -41,9 +43,11 @@ import { VersionsModule } from './versions/versions.module'
     NotificationsModule,
     ObservabilityModule,
     RespondentModule,
+    SmsModule,
     StatsModule,
     TerminalModule,
     TerminalAdminModule,
+    UsersModule,
     JudicialModule,
   ],
 })

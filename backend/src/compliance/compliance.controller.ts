@@ -8,11 +8,15 @@ import { RolesGuard } from '../common/guards/roles.guard'
 import { SessionAuthGuard } from '../common/guards/session-auth.guard'
 import { PseudonymizedExportQueryDto } from './dto/pseudonymized-export-query.dto'
 import { ComplianceService } from './compliance.service'
+import { ComplianceMaintenanceService } from './compliance-maintenance.service'
 
 @UseGuards(SessionAuthGuard, RolesGuard)
 @Controller('compliance')
 export class ComplianceController {
-  constructor(private readonly complianceService: ComplianceService) {}
+  constructor(
+    private readonly complianceService: ComplianceService,
+    private readonly maintenanceService: ComplianceMaintenanceService,
+  ) {}
 
   @Get('technical-register')
   @Roles('admin', 'analyst', 'dpo', 'technical_admin', 'judicial_officer')
@@ -27,27 +31,38 @@ export class ComplianceController {
   }
 
   @Post('maintenance/expire-invitations')
-  @Roles('admin', 'dpo', 'technical_admin')
+  @Roles('admin', 'technical_admin')
   async expireInvitations(@CurrentUser() user: AuthenticatedUser, @Req() request: Request) {
     const result = await this.complianceService.expireInvitations(user, request)
     return { result }
   }
 
   @Post('maintenance/cleanup-drafts')
-  @Roles('admin', 'dpo', 'technical_admin')
+  @Roles('admin', 'technical_admin')
   async cleanupDrafts(@CurrentUser() user: AuthenticatedUser, @Req() request: Request) {
     const result = await this.complianceService.cleanupExpiredDrafts(user, request)
     return { result }
   }
 
+  @Post('maintenance/run-retention')
+  @Roles('technical_admin')
+  async runRetention(@CurrentUser() user: AuthenticatedUser, @Req() request: Request) {
+    const result = await this.maintenanceService.runOnce(user, request)
+    return { result }
+  }
+
   @Get('exports/pseudonymized')
-  @Roles('admin', 'analyst', 'dpo')
+  @Roles('admin', 'analyst')
   async pseudonymizedExport(
     @Query() query: PseudonymizedExportQueryDto,
     @CurrentUser() user: AuthenticatedUser,
     @Req() request: Request,
   ) {
-    const exportPayload = await this.complianceService.pseudonymizedExport(query.questionnaireId, user, request)
+    const exportPayload = await this.complianceService.pseudonymizedExport(
+      query.questionnaireId,
+      user,
+      request,
+    )
     return { export: exportPayload }
   }
 }

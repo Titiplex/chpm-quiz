@@ -113,7 +113,7 @@ describe('RBAC authorization contracts', () => {
   }
   const auditService = {
     log: vi.fn(async () => undefined),
-    list: vi.fn(async () => []),
+    listForUser: vi.fn(async () => []),
   }
   const judicialService = {
     list: vi.fn(async () => []),
@@ -121,16 +121,13 @@ describe('RBAC authorization contracts', () => {
     validateDpo: vi.fn(async () => ({ id: 'judicial-1' })),
     validateLegal: vi.fn(async () => ({ id: 'judicial-1' })),
     reject: vi.fn(async () => ({ id: 'judicial-1' })),
-    execute: vi.fn(async () => ({ judicialRequest: { id: 'judicial-1' }, encryptedExport: { ciphertext: 'sealed' } })),
+    execute: vi.fn(async () => ({ judicialRequest: { id: 'judicial-1', status: 'executed' }, export: { envelope: 'encrypted' } })),
     close: vi.fn(async () => ({ id: 'judicial-1' })),
   }
   const identityVaultService = {
     status: vi.fn(async () => ({ directEmailVisibleInAdmin: false })),
-    recordAccessAttempt: vi.fn(async (authenticatedUser: AuthenticatedUser, _dto: unknown) => {
-      if (authenticatedUser.role !== 'judicial_officer') {
-        throw new ForbiddenException('Accès identité interdit hors procédure judiciaire')
-      }
-      return { accepted: true }
+    recordAccessAttempt: vi.fn(async () => {
+      throw new ForbiddenException('Accès identité interdit depuis l’API principale')
     }),
   }
 
@@ -198,19 +195,22 @@ describe('RBAC authorization contracts', () => {
     await getAs('moderator', '/api/stats/submissions/CODE-1').expect(403)
   })
 
-  it('prevents an analyst from creating invitations', async () => {
+  it('prevents analysts and project admins from creating invitations', async () => {
     await postAs('moderator', '/api/moderation/invitations').send({}).expect(201)
+    await postAs('site_manager', '/api/moderation/invitations').send({}).expect(201)
     await postAs('analyst', '/api/moderation/invitations').send({}).expect(403)
+    await postAs('admin', '/api/moderation/invitations').send({}).expect(403)
   })
 
-  it('prevents a global admin from direct email-vault access', async () => {
+  it('prevents direct email-vault access from business and legal roles through the main API', async () => {
     await postAs('admin', '/api/identity-vault/access-attempt').send({ publicCode: 'ABCD-1234', justification: 'Tentative directe hors procédure judiciaire.' }).expect(403)
-    await postAs('judicial_officer', '/api/identity-vault/access-attempt').send({ publicCode: 'ABCD-1234', justification: 'Routage vers procédure judiciaire validée.' }).expect(201)
+    await postAs('judicial_officer', '/api/identity-vault/access-attempt').send({ publicCode: 'ABCD-1234', justification: 'Routage vers procédure judiciaire validée.' }).expect(403)
+    await postAs('dpo', '/api/identity-vault/access-attempt').send({ publicCode: 'ABCD-1234', justification: 'Tentative DPO via API métier.' }).expect(403)
   })
 
-  it('prevents a DPO from executing the judicial export without the judicial-officer role', async () => {
-    await postAs('dpo', '/api/judicial-access/requests/judicial-1/execute').expect(403)
-    await postAs('judicial_officer', '/api/judicial-access/requests/judicial-1/execute').expect(201)
+  it('allows encrypted execution only to the DPO role', async () => {
+    await postAs('dpo', '/api/judicial-access/requests/judicial-1/execute').expect(201)
+    await postAs('judicial_officer', '/api/judicial-access/requests/judicial-1/execute').expect(403)
   })
 
   it('keeps audit logs restricted to control roles', async () => {

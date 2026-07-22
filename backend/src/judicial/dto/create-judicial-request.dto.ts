@@ -18,7 +18,7 @@ export class CreateJudicialRequestDto {
 
   @IsArray()
   @ArrayNotEmpty()
-  @ArrayMaxSize(500)
+  @ArrayMaxSize(50)
   @IsString({ each: true })
   @MaxLength(64, { each: true })
   requestedPublicCodes!: string[]

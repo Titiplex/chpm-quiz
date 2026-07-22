@@ -6,10 +6,15 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_MIGRATOR_PASSWORD: ${POSTGRES_MIGRATOR_PASSWORD:?POSTGRES_MIGRATOR_PASSWORD is required}
+      POSTGRES_OPERATIONAL_PASSWORD: ${POSTGRES_OPERATIONAL_PASSWORD:?POSTGRES_OPERATIONAL_PASSWORD is required}
+      POSTGRES_IDENTITY_PASSWORD: ${POSTGRES_IDENTITY_PASSWORD:?POSTGRES_IDENTITY_PASSWORD is required}
+      POSTGRES_DPO_PASSWORD: ${POSTGRES_DPO_PASSWORD:?POSTGRES_DPO_PASSWORD is required}
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./ops/postgres/init-production.sh:/docker-entrypoint-initdb.d/10-chpm-roles.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
       interval: 10s
       timeout: 5s
       retries: 10
@@ -21,15 +26,16 @@ services:
       context: .
       dockerfile: backend/Dockerfile
       target: build
-    env_file:
-      - .env.preprod
-    command: sh -c "node scripts/prisma.mjs validate && node scripts/prisma.mjs migrate deploy"
+    environment:
+      DATABASE_URL: ${MIGRATION_DATABASE_URL:?MIGRATION_DATABASE_URL is required}
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:?MIGRATION_DATABASE_URL is required}
+    command: sh -c "node scripts/prisma.mjs validate && node scripts/prisma.mjs migrate deploy && npm run db:apply-dpo-grants"
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - internal
-    restart: "no"
+    restart: 'no'
 
   backend:
     build:
@@ -37,15 +43,77 @@ services:
       dockerfile: backend/Dockerfile
       target: runtime
     restart: unless-stopped
-    env_file:
-      - .env.preprod
+    environment:
+      NODE_ENV: preproduction
+      PORT: ${PORT:-3000}
+      API_PREFIX: ${API_PREFIX:-api}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:?FRONTEND_ORIGIN is required}
+      OPERATIONAL_DATABASE_URL: ${OPERATIONAL_DATABASE_URL:?OPERATIONAL_DATABASE_URL is required}
+      IDENTITY_DATABASE_URL: ${IDENTITY_DATABASE_URL:?IDENTITY_DATABASE_URL is required}
+      DATABASE_URL: ${OPERATIONAL_DATABASE_URL:?OPERATIONAL_DATABASE_URL is required}
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-__Host-chpm_session}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-12}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-strict}
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
+      RATE_LIMIT_WINDOW_SECONDS: ${RATE_LIMIT_WINDOW_SECONDS:-60}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS:-240}
+      RATE_LIMIT_LOGIN_MAX_REQUESTS: ${RATE_LIMIT_LOGIN_MAX_REQUESTS:-10}
+      AUTH_LOGIN_MAX_ATTEMPTS: ${AUTH_LOGIN_MAX_ATTEMPTS:-5}
+      AUTH_LOGIN_LOCK_MINUTES: ${AUTH_LOGIN_LOCK_MINUTES:-15}
+      AUTH_PROVIDER: ${AUTH_PROVIDER:-local}
+      ALLOW_LOCAL_AUTH_IN_PRODUCTION: ${ALLOW_LOCAL_AUTH_IN_PRODUCTION:-true}
+      AUTH_OIDC_ISSUER: ${AUTH_OIDC_ISSUER:-}
+      AUTH_OIDC_CLIENT_ID: ${AUTH_OIDC_CLIENT_ID:-}
+      AUTH_OIDC_CLIENT_SECRET: ${AUTH_OIDC_CLIENT_SECRET:-}
+      AUTH_OIDC_REDIRECT_URI: ${AUTH_OIDC_REDIRECT_URI:-}
+      AUTH_OIDC_SCOPES: ${AUTH_OIDC_SCOPES:-openid email profile}
+      AUTH_OIDC_REQUIRED_ACR: ${AUTH_OIDC_REQUIRED_ACR:-}
+      AUTH_OIDC_REQUIRED_AMR: ${AUTH_OIDC_REQUIRED_AMR:-}
+      RESPONDENT_TOKEN_SECRET: ${RESPONDENT_TOKEN_SECRET:?RESPONDENT_TOKEN_SECRET is required}
+      RESPONDENT_TOKEN_TTL_DAYS: ${RESPONDENT_TOKEN_TTL_DAYS:-30}
+      EMAIL_ENCRYPTION_KEY_B64: ${EMAIL_ENCRYPTION_KEY_B64:?EMAIL_ENCRYPTION_KEY_B64 is required}
+      EMAIL_HASH_PEPPER: ${EMAIL_HASH_PEPPER:?EMAIL_HASH_PEPPER is required}
+      JUDICIAL_EXPORT_KEY_B64: ${JUDICIAL_EXPORT_KEY_B64:?JUDICIAL_EXPORT_KEY_B64 is required}
+      JUDICIAL_EXPORT_TTL_MINUTES: ${JUDICIAL_EXPORT_TTL_MINUTES:-60}
+      EMAIL_IDENTITY_DISABLED_FOR_APP: ${EMAIL_IDENTITY_DISABLED_FOR_APP:-true}
+      EXPOSE_RESPONDENT_DEV_LINKS: ${EXPOSE_RESPONDENT_DEV_LINKS:-false}
+      STATISTICS_MIN_GROUP_SIZE: ${STATISTICS_MIN_GROUP_SIZE:-10}
+      DRAFT_RETENTION_DAYS: ${DRAFT_RETENTION_DAYS:-45}
+      IDENTITY_RETENTION_DAYS: ${IDENTITY_RETENTION_DAYS:-365}
+      AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-730}
+      RESPONSE_RETENTION_DAYS: ${RESPONSE_RETENTION_DAYS:-730}
+      ENABLE_RETENTION_WORKER: ${ENABLE_RETENTION_WORKER:-true}
+      RETENTION_WORKER_INTERVAL_MINUTES: ${RETENTION_WORKER_INTERVAL_MINUTES:-1440}
+      DPO_CONTACT: ${DPO_CONTACT:?DPO_CONTACT is required}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:?EMAIL_PROVIDER is required}
+      EMAIL_FROM: ${EMAIL_FROM:?EMAIL_FROM is required}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-CHPM Survey}
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      MAILJET_API_KEY: ${MAILJET_API_KEY:-}
+      MAILJET_API_SECRET: ${MAILJET_API_SECRET:-}
+      EMAIL_JOB_MAX_ATTEMPTS: ${EMAIL_JOB_MAX_ATTEMPTS:-3}
+      EMAIL_JOB_RETRY_DELAY_MS: ${EMAIL_JOB_RETRY_DELAY_MS:-1000}
+      SMS_PROVIDER: ${SMS_PROVIDER:-disabled}
+      SMS_SENDER: ${SMS_SENDER:-CHPM}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM: ${TWILIO_FROM:-}
+      SMS_JOB_MAX_ATTEMPTS: ${SMS_JOB_MAX_ATTEMPTS:-3}
+      SMS_JOB_RETRY_DELAY_MS: ${SMS_JOB_RETRY_DELAY_MS:-1000}
+      DELIVERY_QUEUE_POLL_MS: ${DELIVERY_QUEUE_POLL_MS:-2000}
+      PROVIDER_HTTP_TIMEOUT_MS: ${PROVIDER_HTTP_TIMEOUT_MS:-10000}
+      METRICS_TOKEN: ${METRICS_TOKEN:?METRICS_TOKEN is required}
+      ENABLE_NOTIFICATION_DIGEST_WORKER: ${ENABLE_NOTIFICATION_DIGEST_WORKER:-true}
+      NOTIFICATION_DIGEST_WORKER_INTERVAL_MS: ${NOTIFICATION_DIGEST_WORKER_INTERVAL_MS:-3600000}
     depends_on:
       postgres:
         condition: service_healthy
       migrator:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/api/health/ready"]
+      test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:3000/api/health/ready']
       interval: 30s
       timeout: 5s
       retries: 5
@@ -59,9 +127,11 @@ services:
       dockerfile: Dockerfile.frontend
       args:
         VITE_APP_NAME: ${VITE_APP_NAME:-CHPM Survey}
+        VITE_APP_DESCRIPTION: ${VITE_APP_DESCRIPTION:-Secure questionnaire platform}
+        VITE_DEFAULT_LOCALE: ${VITE_DEFAULT_LOCALE:-fr}
         VITE_API_BASE_URL: /api
         VITE_I18N_CONTENT_BASE_URL: /content/i18n
-        VITE_STATIC_PAGES_DEMO: "false"
+        VITE_STATIC_PAGES_DEMO: 'false'
         VITE_ROUTER_MODE: history
     restart: unless-stopped
     depends_on:
@@ -79,13 +149,13 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "80:80"
-      - "443:443"
+      - '80:80'
+      - '443:443'
     volumes:
       - ./ops/nginx/reverse-proxy.conf:/etc/nginx/nginx.conf:ro
       - ${TLS_CERT_DIR:?TLS_CERT_DIR is required}:/etc/nginx/tls:ro
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "https://127.0.0.1/healthz", "--no-check-certificate"]
+      test: ['CMD', 'wget', '-qO-', 'https://127.0.0.1/healthz', '--no-check-certificate']
       interval: 30s
       timeout: 5s
       retries: 5
@@ -95,13 +165,15 @@ services:
 
   encrypted-backup:
     image: postgres:17-alpine
-    profiles: ["maintenance"]
-    env_file:
-      - .env.preprod
+    profiles: ['maintenance']
+    environment:
+      OPERATIONAL_DATABASE_URL: ${OPERATIONAL_DATABASE_URL:?OPERATIONAL_DATABASE_URL is required}
+      IDENTITY_DATABASE_URL: ${IDENTITY_DATABASE_URL:?IDENTITY_DATABASE_URL is required}
+      BACKUP_ENCRYPTION_PASSPHRASE: ${BACKUP_ENCRYPTION_PASSPHRASE:?BACKUP_ENCRYPTION_PASSPHRASE is required}
     volumes:
       - ./ops/scripts:/ops/scripts:ro
       - ${BACKUP_OUTPUT_DIR:-./backups}:/backups
-    entrypoint: ["/bin/sh", "/ops/scripts/backup_encrypted.sh"]
+    entrypoint: ['/bin/sh', '/ops/scripts/backup_encrypted.sh']
     networks:
       - internal
 

@@ -10,6 +10,10 @@ type AuthenticatedRequest = Request & {
   user?: AuthenticatedUser
 }
 
+/**
+ * Enforces explicit controller/handler role metadata. Protected routes without
+ * `@Roles(...)` fail closed instead of becoming available to every signed-in user.
+ */
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}

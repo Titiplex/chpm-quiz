@@ -1,4 +1,14 @@
-import type { AssistanceMode, BuildingScope, InvitationDeliveryMode, InvitationStatus, LanguageCode, QuestionDefinition, QuestionType, SubmissionStatus, TerminalDeviceStatus } from './domain'
+import type {
+  AssistanceMode,
+  BuildingScope,
+  InvitationDeliveryMode,
+  InvitationStatus,
+  LanguageCode,
+  QuestionDefinition,
+  QuestionType,
+  SubmissionStatus,
+  TerminalDeviceStatus,
+} from './domain'
 import type { Permission, UserRole } from './rbac'
 
 export interface ApiBuilding extends BuildingScope {
@@ -8,12 +18,46 @@ export interface ApiBuilding extends BuildingScope {
   organizationId?: string
 }
 
+export interface ApiSite {
+  id: string
+  code: string
+  name: string
+  organizationId: string
+  organization: { id: string; code: string; name: string } | null
+  country?: string | null
+  timezone?: string | null
+}
+
+export interface CreateSiteRequest {
+  code: string
+  name: string
+  country?: string
+  timezone?: string
+}
+
+export interface SiteMutationResponse {
+  site: ApiSite
+}
+
+export interface CreateBuildingRequest {
+  code: string
+  label: string
+  city: string
+  country: string
+  timezone: string
+}
+
+export interface BuildingMutationResponse {
+  building: ApiBuilding
+}
+
 export interface AuthUserProfile {
   id: string
   email: string
   displayName: string
   role: UserRole
   permissions: Permission[]
+  mustChangePassword?: boolean
   building: ApiBuilding | null
 }
 
@@ -22,8 +66,99 @@ export interface LoginRequest {
   password: string
 }
 
+export interface ChangePasswordRequest {
+  currentPassword: string
+  newPassword: string
+}
+
 export interface AuthResponse {
   user: AuthUserProfile
+}
+
+export interface ApiSiteTeamUser {
+  id: string
+  email: string
+  displayName: string
+  role: Extract<UserRole, 'site_manager' | 'moderator'>
+  roleLabel: string
+  isActive: boolean
+  organizationId: string | null
+  siteId: string | null
+  buildingId: string | null
+  site: { id: string; code: string; name: string } | null
+  building: ApiBuilding | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SiteTeamResponse {
+  users: ApiSiteTeamUser[]
+  policy: {
+    manageableRoles: Array<Extract<UserRole, 'moderator'>>
+    scope: 'site' | 'project'
+    passwordReturnedOnce: boolean
+  }
+}
+
+export interface SitesResponse {
+  sites: ApiSite[]
+}
+
+export interface SiteAdminsResponse {
+  users: ApiSiteAdminUser[]
+  policy: {
+    manageableRoles: Array<Extract<UserRole, 'site_manager'>>
+    scope: 'project'
+    passwordReturnedOnce: boolean
+    forbiddenRoles: UserRole[]
+  }
+}
+
+export type ApiSiteAdminUser = ApiSiteTeamUser & {
+  role: Extract<UserRole, 'site_manager'>
+}
+
+export interface CreateSiteAdminRequest {
+  email: string
+  displayName: string
+  siteId: string
+  temporaryPassword?: string
+}
+
+export interface SiteAdminMutationResponse {
+  user: ApiSiteAdminUser
+  temporaryPassword?: string
+  temporaryPasswordGenerated?: boolean
+}
+
+export interface UpdateSiteAdminRequest {
+  displayName?: string
+  siteId?: string
+  isActive?: boolean
+}
+
+export interface RevokeSessionsResponse {
+  user: ApiSiteTeamUser
+  revokedSessionCount: number
+}
+
+export interface CreateSiteModeratorRequest {
+  email: string
+  displayName: string
+  buildingId: string
+  temporaryPassword?: string
+}
+
+export interface SiteModeratorMutationResponse {
+  user: ApiSiteTeamUser
+  temporaryPassword?: string
+  temporaryPasswordGenerated?: boolean
+}
+
+export interface UpdateSiteModeratorRequest {
+  displayName?: string
+  buildingId?: string
+  isActive?: boolean
 }
 
 export interface ApiLikertScale {
@@ -59,7 +194,16 @@ export interface ApiPopupDefinition {
 export interface ConditionExpression {
   questionId?: string
   questionCode?: string
-  operator?: 'answered' | 'not_answered' | 'equals' | 'not_equals' | 'contains' | 'gt' | 'gte' | 'lt' | 'lte'
+  operator?:
+    | 'answered'
+    | 'not_answered'
+    | 'equals'
+    | 'not_equals'
+    | 'contains'
+    | 'gt'
+    | 'gte'
+    | 'lt'
+    | 'lte'
   value?: unknown
   equals?: unknown
   all?: ConditionExpression[]
@@ -122,6 +266,17 @@ export interface QuestionnaireResponse {
   questionnaire: ApiQuestionnaire
 }
 
+export interface AddQuestionnaireLanguageRequest {
+  language: LanguageCode
+  title?: string
+  description?: string
+  finality?: string
+}
+
+export interface AddQuestionnaireLanguageResponse {
+  questionnaire: ApiQuestionnaire
+}
+
 export interface CreateQuestionnaireRequest {
   code: string
   title: string
@@ -174,12 +329,28 @@ export interface CreateQuestionRequest {
   code: string
   label: string
   helperText?: string
-  responseType: Extract<QuestionType, 'free_text' | 'free_text_short' | 'free_text_long' | 'likert' | 'single_choice' | 'multiple_choice' | 'number' | 'date' | 'information'>
+  responseType: Extract<
+    QuestionType,
+    | 'free_text'
+    | 'free_text_short'
+    | 'free_text_long'
+    | 'likert'
+    | 'single_choice'
+    | 'multiple_choice'
+    | 'number'
+    | 'date'
+    | 'information'
+  >
   isRequired?: boolean
   displayOrder?: number
   conditionExpression?: ConditionExpression | null
   likertScale?: LikertScaleRequest
-  answerOptions?: Array<{ value: string; label: string; displayOrder?: number; isExclusive?: boolean }>
+  answerOptions?: Array<{
+    value: string
+    label: string
+    displayOrder?: number
+    isExclusive?: boolean
+  }>
   popupDefinition?: PopupDefinitionRequest
 }
 
@@ -187,12 +358,28 @@ export interface UpdateQuestionRequest {
   code?: string
   label?: string
   helperText?: string
-  responseType?: Extract<QuestionType, 'free_text' | 'free_text_short' | 'free_text_long' | 'likert' | 'single_choice' | 'multiple_choice' | 'number' | 'date' | 'information'>
+  responseType?: Extract<
+    QuestionType,
+    | 'free_text'
+    | 'free_text_short'
+    | 'free_text_long'
+    | 'likert'
+    | 'single_choice'
+    | 'multiple_choice'
+    | 'number'
+    | 'date'
+    | 'information'
+  >
   isRequired?: boolean
   displayOrder?: number
   conditionExpression?: ConditionExpression | null
   likertScale?: LikertScaleRequest
-  answerOptions?: Array<{ value: string; label: string; displayOrder?: number; isExclusive?: boolean }>
+  answerOptions?: Array<{
+    value: string
+    label: string
+    displayOrder?: number
+    isExclusive?: boolean
+  }>
   popupDefinition?: PopupDefinitionRequest | null
 }
 
@@ -232,6 +419,7 @@ export interface ApiInvitation {
   deliveryMode: InvitationDeliveryMode
   assistanceMode: AssistanceMode
   maskedEmail: string | null
+  maskedPhone: string | null
   questionnaireVersionId: string
   questionnaireTitle: string | null
   versionLabel: string | null
@@ -250,7 +438,6 @@ export interface InvitationsResponse {
   invitations: ApiInvitation[]
 }
 
-
 export interface TerminalDevicesResponse {
   terminalDevices: ApiTerminalDevice[]
 }
@@ -265,7 +452,6 @@ export interface RegisterTerminalDeviceResponse {
   terminalAccessToken: string
   terminalLaunchLink: string
 }
-
 
 export interface UpdateTerminalDeviceRequest {
   label?: string
@@ -297,8 +483,10 @@ export interface CreateInvitationRequest {
   questionnaireVersionId: string
   buildingId: string
   email?: string
+  phone?: string
   deliveryMode?: InvitationDeliveryMode
   terminalDeviceId?: string
+  refusalReason?: string
   assistanceMode?: AssistanceMode
   expiresAt?: string
   notifyModerator?: boolean
@@ -310,6 +498,22 @@ export interface CreateInvitationResponse {
   accessToken: string | null
   devAccessLink: string | null
   terminalDispatchLink?: string | null
+}
+
+export interface SubmitPaperResponsesRequest {
+  answers: Array<{ questionId: string; value: unknown }>
+  moderatorNote?: string
+}
+
+export interface SubmitPaperResponsesResponse {
+  invitation: ApiInvitation
+  submission: {
+    id: string
+    publicCode: string
+    submittedAt: string
+    answerCount: number
+  }
+  warnings: Array<{ questionId: string; reason: string | null }>
 }
 
 export interface RespondentAnswer {
@@ -410,50 +614,68 @@ export interface StatsResponse {
     questionnaire: { id: string; code: string; title: string }
     threshold: number
     totals: {
-      invited: number
-      opened: number
-      started: number
-      submitted: number
-      abandoned: number
-      expired: number
-      openingRate: number
-      startRate: number
-      submissionRate: number
-      completionRate: number
-      abandonmentRate: number
-      telemetryEvents: number
-      popupOpens: number
-      answerChanges: number
-      backtracks: number
-      resumes: number
+      invited: number | null
+      opened: number | null
+      started: number | null
+      submitted: number | null
+      abandoned: number | null
+      expired: number | null
+      openingRate: number | null
+      startRate: number | null
+      submissionRate: number | null
+      completionRate: number | null
+      abandonmentRate: number | null
+      telemetryEvents: number | null
+      popupOpens: number | null
+      answerChanges: number | null
+      backtracks: number | null
+      resumes: number | null
       medianTotalDurationMs: number | null
+      effectifSufficient: boolean
+    }
+    fieldTracking: {
+      approached: number | null
+      invited: number | null
+      refused: number | null
+      refusalRate: number | null
+      noDigitalContact: number | null
+      noDigitalContactRate: number | null
+      onsiteTerminal: number | null
+      paperForms: number | null
+      digitalContact: number | null
+      pendingWithoutDigitalContact: number | null
+      effectifSufficient: boolean
+      displayValue: string
     }
     versions: Array<{
       id: string
       versionLabel: string
       status: string
-      invited: number
-      opened: number
-      started: number
-      submitted: number
-      abandoned: number
-      openingRate: number
-      startRate: number
-      submissionRate: number
-      completionRate: number
-      abandonmentRate: number
+      invited: number | null
+      opened: number | null
+      started: number | null
+      submitted: number | null
+      abandoned: number | null
+      openingRate: number | null
+      startRate: number | null
+      submissionRate: number | null
+      completionRate: number | null
+      abandonmentRate: number | null
       effectifSufficient: boolean
+      displayValue: string
     }>
     deliveryModes: Array<{
       mode: InvitationDeliveryMode
       label: string
-      invited: number
-      opened: number
-      started: number
-      submitted: number
-      openingRate: number
-      startRate: number
-      submissionRate: number
+      invited: number | null
+      opened: number | null
+      started: number | null
+      submitted: number | null
+      openingRate: number | null
+      startRate: number | null
+      submissionRate: number | null
+      effectifSufficient: boolean
+      displayValue: string
     }>
     buildings: Array<{
       buildingId: string
@@ -472,20 +694,24 @@ export interface StatsResponse {
     sites?: Array<{
       siteId: string
       label: string
-      invited: number
-      opened: number
-      started: number
-      submitted: number
-      openingRate: number
-      startRate: number
-      submissionRate: number
+      invited: number | null
+      opened: number | null
+      started: number | null
+      submitted: number | null
+      openingRate: number | null
+      startRate: number | null
+      submissionRate: number | null
+      effectifSufficient: boolean
+      displayValue: string
     }>
     languages?: Array<{
       language: string
       versionCount: number
-      invited: number
-      submitted: number
-      submissionRate: number
+      invited: number | null
+      submitted: number | null
+      submissionRate: number | null
+      effectifSufficient: boolean
+      displayValue: string
     }>
     popups?: Array<{
       id: string
@@ -526,7 +752,12 @@ export interface StatsResponse {
       responseChanges: number | null
       backtracks: number | null
       medianDurationMs?: number | null
-      likertDistribution: Array<{ value: number; label: string; count: number; rate: number }> | null
+      likertDistribution: Array<{
+        value: number
+        label: string
+        count: number
+        rate: number
+      }> | null
       freeTextResponses: Array<{ publicCode: string | null; value: string; warning: string | null }>
       freeTextAccess: 'granted' | 'forbidden' | 'not_applicable'
       highMedianDuration: boolean
@@ -585,8 +816,10 @@ export interface IdentityVaultStatusResponse {
     identityTable: string
     model: string
     directEmailVisibleInAdmin: boolean
+    directPhoneVisibleInAdmin?: boolean
     currentRole: UserRole
     currentRoleCanExecuteEmailAccess: boolean
+    currentRoleCanExecuteIdentityAccess?: boolean
     accessMode: string
     audit: string[]
   }
@@ -642,12 +875,25 @@ export interface CreateJudicialAccessRequest {
   comments?: string
 }
 
-export interface JudicialAccessRequestResponse {
-  judicialRequest: JudicialAccessRequestRecord
-  secureDocument?: SecureDocumentDescriptor
+export interface JudicialEncryptedEnvelope {
+  algorithm: 'aes-256-gcm'
+  keyRef: string
+  iv: string
+  authTag: string
+  ciphertext: string
 }
 
+export interface JudicialEncryptedExport {
+  fingerprint: string
+  expiresAt: string
+  rowCount: number
+  envelope: JudicialEncryptedEnvelope
+}
 
+export interface JudicialAccessRequestResponse {
+  judicialRequest: JudicialAccessRequestRecord
+  export?: JudicialEncryptedExport
+}
 
 export type NotificationFrequency = 'none' | 'immediate' | 'daily'
 export type NotificationChannel = 'email' | 'internal' | 'simulation'
@@ -682,7 +928,6 @@ export interface ApiNotificationSubscription {
 export interface NotificationsResponse {
   subscriptions: ApiNotificationSubscription[]
 }
-
 
 export interface NotificationDigestRunResponse {
   result: {
@@ -740,14 +985,24 @@ export interface RetentionPolicyResponse {
 
 export interface ComplianceMaintenanceResponse {
   result: {
+    skipped?: boolean
+    reason?: string
     expiredCount?: number
+    expiredInvitationCount?: number
     deletedDraftSessionCount?: number
+    deletedSubmittedSessionCount?: number
+    deletedAuditCount?: number
+    expiredExportCount?: number
+    anonymizedIdentityCount?: number
+    deletedDeliveryEventCount?: number
+    deletedDeliveryJobCount?: number
+    deletedIdentityAuditCount?: number
     purgedTokenCount?: number
     purgedCount?: number
     deletedResponseSessionCount?: number
     purgedStorageRefs?: string[]
     cutoff?: string
-    executedAt: string
+    executedAt?: string
   }
 }
 
@@ -778,7 +1033,12 @@ export interface PseudonymizedExportResponse {
       submittedAt: string
       answerCount: number
       telemetryEventCount: number
-      answers: Array<{ questionCode: string; responseType: QuestionType; value: unknown; warning: string | null }>
+      answers: Array<{
+        questionCode: string
+        responseType: QuestionType
+        value: unknown
+        warning: string | null
+      }>
     }>
   }
 }

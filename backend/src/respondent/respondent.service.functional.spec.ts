@@ -5,11 +5,13 @@ vi.mock('../prisma/prisma.service', () => ({ PrismaService: class PrismaService 
 
 import { RespondentService } from './respondent.service'
 
-function makeQuestionnaireVersion() {
+function makeQuestionnaireVersion(): any {
   return {
     id: 'version-1',
     versionLabel: '1.0',
     language: 'fr',
+    openFrom: null,
+    openUntil: null,
     description: 'Description',
     finality: 'Finalité',
     questionnaire: {
@@ -158,6 +160,21 @@ describe('RespondentService functional flow', () => {
     }))
     expect(response.responseSession.publicCode).toBe('CODE-1')
     expect(response.questionnaire.groups[0]!.questions.map((question: any) => question.id)).toEqual(['q1', 'q2'])
+  })
+
+  it('blocks respondent access outside the questionnaire collection window', async () => {
+    const notOpen = makeInvitation(null)
+    notOpen.questionnaireVersion.openFrom = new Date(Date.now() + 60_000)
+    await expect(makeService(notOpen).service.getSession('token')).rejects.toThrow(ForbiddenException)
+
+    const closed = makeInvitation(null)
+    closed.questionnaireVersion.openUntil = new Date(Date.now() - 60_000)
+    const { service, prisma } = makeService(closed)
+    await expect(service.getSession('token')).rejects.toThrow(ForbiddenException)
+    expect(prisma.invitation.update).toHaveBeenCalledWith({
+      where: { id: 'invitation-1' },
+      data: { status: 'expired' },
+    })
   })
 
   it('refuses to save an answer for a question hidden by the active conditional path', async () => {

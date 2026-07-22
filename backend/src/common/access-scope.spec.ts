@@ -34,7 +34,7 @@ describe('access scope helpers', () => {
     expect(canAccessBuilding({ ...baseUser, role: 'moderator', buildingId: 'other' }, building)).toBe(false)
     expect(canAccessBuilding({ ...baseUser, role: 'site_manager', siteId: 'site-1' }, building)).toBe(true)
     expect(canAccessBuilding({ ...baseUser, role: 'site_manager', siteId: 'other' }, building)).toBe(false)
-    expect(canAccessBuilding({ ...baseUser, role: 'dpo' }, building)).toBe(true)
+    expect(canAccessBuilding({ ...baseUser, role: 'dpo' }, building)).toBe(false)
     expect(canAccessBuilding({ ...baseUser, role: 'respondent' }, building)).toBe(false)
   })
 
@@ -48,6 +48,7 @@ describe('access scope helpers', () => {
     expect(canAccessQuestionnaire({ ...baseUser, role: 'admin' }, questionnaire)).toBe(true)
     expect(canAccessQuestionnaire({ ...baseUser, role: 'questionnaire_admin', id: 'owner-1', organizationId: 'org-x' }, questionnaire)).toBe(true)
     expect(canAccessQuestionnaire({ ...baseUser, role: 'site_manager' }, questionnaire)).toBe(true)
+    expect(canAccessQuestionnaire({ ...baseUser, role: 'dpo' }, questionnaire)).toBe(false)
     expect(canAccessQuestionnaire({ ...baseUser, role: 'respondent' }, questionnaire)).toBe(false)
     expect(canAccessQuestionnaire({ ...baseUser, role: 'admin', organizationId: 'org-2' }, questionnaire)).toBe(false)
   })

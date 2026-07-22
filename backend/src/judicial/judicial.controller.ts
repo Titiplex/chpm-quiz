@@ -16,14 +16,14 @@ export class JudicialController {
   constructor(private readonly judicialService: JudicialService) {}
 
   @Get()
-  @Roles('dpo', 'judicial_officer')
-  async list() {
-    const requests = await this.judicialService.list()
+  @Roles('judicial_officer', 'dpo')
+  async list(@CurrentUser() user: AuthenticatedUser) {
+    const requests = await this.judicialService.list(user)
     return { requests }
   }
 
   @Post()
-  @Roles('dpo', 'judicial_officer')
+  @Roles('judicial_officer')
   async create(
     @Body() dto: CreateJudicialRequestDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -58,7 +58,7 @@ export class JudicialController {
   }
 
   @Post(':id/reject')
-  @Roles('dpo', 'judicial_officer')
+  @Roles('judicial_officer', 'dpo')
   async reject(
     @Param('id') id: string,
     @Body() dto: RejectJudicialRequestDto,
@@ -70,7 +70,7 @@ export class JudicialController {
   }
 
   @Post(':id/execute')
-  @Roles('judicial_officer')
+  @Roles('dpo')
   async execute(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -80,7 +80,7 @@ export class JudicialController {
   }
 
   @Post(':id/close')
-  @Roles('dpo', 'judicial_officer')
+  @Roles('judicial_officer')
   async close(
     @Param('id') id: string,
     @Body() dto: JudicialWorkflowCommentDto,

@@ -10,6 +10,10 @@ type AuthenticatedRequest = Request & {
   cookies: Record<string, string | undefined>
 }
 
+/**
+ * Resolves the opaque staff cookie, rejects missing/expired/revoked sessions, and
+ * attaches the trusted session/user records for downstream decorators and guards.
+ */
 @Injectable()
 export class SessionAuthGuard implements CanActivate {
   constructor(private readonly authService: AuthService) {}

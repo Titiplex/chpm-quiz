@@ -1,10 +1,66 @@
 openapi: 3.1.0
 info:
   title: CHPM Survey API
-  version: 0.9.0-preprod
-  description: API REST JSON pour questionnaires adaptatifs, invitations, passation répondant, statistiques, conformité et accès judiciaire.
+  version: 1.0.0
+  summary: Role- and scope-aware questionnaire collection API
+  description: |
+    REST API for internal staff authentication, scoped administration, questionnaire
+    authoring/versioning, invitation delivery, token-based respondent sessions, managed
+    terminals, pseudonymized statistics, compliance operations, notifications, audit,
+    and the controlled exceptional legal-access workflow.
+
+    The specification describes implemented NestJS controller operations only. Direct
+    respondent contact data is not available through normal business endpoints. The
+    exceptional DPO export is allowed only after independent DPO and legal validation,
+    is restricted to explicit public codes, returns an AES-256-GCM encrypted envelope,
+    expires automatically, and is fully audited. The local DPO console enforces the same
+    approved-request prerequisite.
+
+    Version 1.0 is the production handover contract. Compatibility changes follow the
+    release and upgrade procedure in `docs/production/installation.md`.
+  contact:
+    name: CHPM Survey maintainers
+  license:
+    name: Proprietary / internal project
+    identifier: LicenseRef-Proprietary
 servers:
   - url: /api
+    description: Same-origin reverse-proxy deployment
+tags:
+  - name: Health
+    description: Public process and dependency probes.
+  - name: Observability
+    description: Technical-administrator metrics.
+  - name: Authentication
+    description: Internal staff session lifecycle.
+  - name: Buildings
+    description: Role- and scope-filtered building reference data.
+  - name: Project administration
+    description: Project administrator management of sites and site-manager accounts.
+  - name: Site administration
+    description: Site-manager delegation to moderators.
+  - name: Questionnaires
+    description: Questionnaire metadata, groups, questions, and preview.
+  - name: Versions
+    description: Version lifecycle, conditional rules, publication checks, and publication.
+  - name: Moderation
+    description: Scoped invitations, resends, paper entry, and terminal compatibility routes.
+  - name: Respondent
+    description: Public secret-token session, autosave, telemetry, and final submission.
+  - name: Terminals
+    description: Managed on-site terminal administration and token-bound operation.
+  - name: Statistics
+    description: Threshold-protected aggregates and analyst-only pseudonymized detail.
+  - name: Notifications
+    description: Staff event subscriptions and digest processing.
+  - name: Compliance
+    description: Technical register, retention, maintenance, and pseudonymized export.
+  - name: Identity boundary
+    description: Technical boundary status and denied-access evidence; no identity export.
+  - name: Judicial workflow
+    description: Exceptional request authorization-state and secure-document metadata.
+  - name: Audit
+    description: Authorized operational audit reads.
 security:
   - sessionCookie: []
 components:
@@ -13,246 +69,4167 @@ components:
       type: apiKey
       in: cookie
       name: chpm_session
-    respondentToken:
+      description: Opaque internal staff session. Only a SHA-256 hash is stored server-side.
+    respondentQueryToken:
       type: apiKey
       in: query
       name: token
+      description: Signed secret bound to one respondent invitation/session.
+    terminalQueryToken:
+      type: apiKey
+      in: query
+      name: token
+      description: Secret managed-device token used by the public terminal session endpoint.
+    metricsBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: Dedicated monitoring token supplied through `METRICS_TOKEN`; not a staff session.
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    QuestionnaireId:
+      name: id
+      in: path
+      required: true
+      description: Questionnaire identifier.
+      schema:
+        type: string
+        format: uuid
+    VersionId:
+      name: id
+      in: path
+      required: true
+      description: Questionnaire version identifier.
+      schema:
+        type: string
+        format: uuid
+    GroupId:
+      name: groupId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    QuestionId:
+      name: questionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RuleId:
+      name: ruleId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PublicCode:
+      name: publicCode
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 4
+        maxLength: 64
+        pattern: '^[A-Z0-9-]+$'
+    AuditLimit:
+      name: limit
+      in: query
+      required: false
+      description: Maximum number of recent audit rows. The service applies its own safe bounds.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+    QuestionnaireIdQuery:
+      name: questionnaireId
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+    RespondentToken:
+      name: token
+      in: query
+      required: true
+      description: Secret respondent token from the invitation link. Do not log or persist in analytics.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 512
+    OptionalTerminalToken:
+      name: terminalToken
+      in: query
+      required: false
+      description: Required when the respondent session was opened through a managed terminal.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 512
+  headers:
+    RequestId:
+      description: Accepted or generated request/correlation identifier.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+  responses:
+    BadRequest:
+      description: Invalid payload, query, path value, or workflow request.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/RequestId'
+        X-Correlation-ID:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Missing, invalid, expired, revoked, or inactive session/token.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Authenticated caller lacks the required role or object scope.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Object does not exist or is intentionally hidden because it is outside the caller's scope.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Duplicate or invalid lifecycle transition, including immutable/already-submitted state.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RateLimited:
+      description: In-process request-rate limit exceeded.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RateLimitResponse'
+    ServiceUnavailable:
+      description: Required dependency is unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ReadinessResponse'
   schemas:
     ErrorResponse:
       type: object
+      additionalProperties: false
       required: [statusCode, error, path, timestamp]
       properties:
-        statusCode: { type: integer }
+        statusCode:
+          type: integer
+          minimum: 400
+          maximum: 599
         error:
           type: object
+          additionalProperties: false
+          required: [code, message]
           properties:
-            code: { type: string }
-            message: { type: string }
+            code:
+              type: string
+              examples: [VALIDATION_ERROR]
+            message:
+              type: string
             details:
               type: array
-              items: { type: string }
-        path: { type: string }
-        timestamp: { type: string, format: date-time }
+              items:
+                type: string
+        path:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+    RateLimitResponse:
+      type: object
+      additionalProperties: false
+      required: [message, error]
+      description: Rate-limit middleware response, emitted before the global exception filter.
+      properties:
+        message:
+          type: string
+        error:
+          const: Rate limit
+    UserRole:
+      type: string
+      enum:
+        - admin
+        - site_manager
+        - moderator
+        - questionnaire_admin
+        - analyst
+        - dpo
+        - judicial_officer
+        - technical_admin
+        - service_account
+        - respondent
+    Permission:
+      type: string
+      pattern: '^[a-z]+:[A-Za-z]+$'
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [status, service, timestamp]
+      properties:
+        status:
+          const: ok
+        service:
+          type: string
+          examples: [chpm-api]
+        timestamp:
+          type: string
+          format: date-time
+    ReadinessResponse:
+      type: object
+      additionalProperties: false
+      required: [status, service, checks, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        service:
+          type: string
+        checks:
+          type: object
+          additionalProperties: false
+          required: [operationalDatabase, identityDatabase, deliveryQueue]
+          properties:
+            operationalDatabase:
+              type: string
+              enum: [ok, failed]
+            identityDatabase:
+              type: string
+              enum: [ok, failed]
+            deliveryQueue:
+              type: string
+              enum: [ok, failed]
+        timestamp:
+          type: string
+          format: date-time
     LoginRequest:
       type: object
+      additionalProperties: false
       required: [email, password]
       properties:
-        email: { type: string, format: email }
-        password: { type: string, minLength: 8 }
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 256
+          writeOnly: true
+    ChangePasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          format: password
+          minLength: 1
+          maxLength: 200
+          writeOnly: true
+        newPassword:
+          type: string
+          format: password
+          minLength: 12
+          maxLength: 200
+          writeOnly: true
+          description: Must satisfy the server password policy and differ from the current password.
+    AuthConfigResponse:
+      type: object
+      additionalProperties: false
+      required: [provider, localLoginEnabled, oidcEnabled]
+      properties:
+        provider:
+          type: string
+          enum: [local, oidc, saml]
+        localLoginEnabled:
+          type: boolean
+        oidcEnabled:
+          type: boolean
     PublicUser:
       type: object
+      required: [id, email, displayName, role, permissions, building, mustChangePassword]
       properties:
-        id: { type: string, format: uuid }
-        email: { type: string, format: email }
-        displayName: { type: string }
-        role:
+        id:
           type: string
-          enum: [admin, moderator, site_manager, questionnaire_admin, analyst, dpo, judicial_officer, technical_admin, service_account, respondent]
+          format: uuid
+        email:
+          type: string
+          format: email
+          description: Internal staff account email, never a respondent contact value.
+        displayName:
+          type: string
+        role:
+          $ref: '#/components/schemas/UserRole'
         permissions:
           type: array
-          items: { type: string }
-    PseudonymizedExport:
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/Permission'
+        mustChangePassword:
+          type: boolean
+          description: Forces local-authentication users through password rotation before other protected pages.
+        building:
+          oneOf:
+            - $ref: '#/components/schemas/Building'
+            - type: 'null'
+    AuthResponse:
       type: object
+      additionalProperties: false
+      required: [user]
       properties:
-        generatedAt: { type: string, format: date-time }
-        containsDirectEmail: { type: boolean, const: false }
-        identityVaultExcluded: { type: boolean, const: true }
-        threshold: { type: integer }
-        suppressedByThreshold: { type: boolean }
-        fingerprint: { type: string }
-        rows:
+        user:
+          $ref: '#/components/schemas/PublicUser'
+    OkResponse:
+      type: object
+      additionalProperties: false
+      required: [ok]
+      properties:
+        ok:
+          const: true
+    Building:
+      type: object
+      required: [id, code, label, city, country, timezone]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        label:
+          type: string
+        city:
+          type: string
+        country:
+          type: string
+        timezone:
+          type: string
+          examples: [America/Toronto]
+        siteId:
+          type: [string, 'null']
+          format: uuid
+        organizationId:
+          type: [string, 'null']
+          format: uuid
+    BuildingsResponse:
+      type: object
+      additionalProperties: false
+      required: [buildings]
+      properties:
+        buildings:
           type: array
-          items: { type: object }
+          items:
+            $ref: '#/components/schemas/Building'
+    CreateBuildingRequest:
+      type: object
+      additionalProperties: false
+      required: [code, label, city, country, timezone]
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 40
+          pattern: '^[A-Za-z0-9][A-Za-z0-9_-]*$'
+        label:
+          type: string
+          minLength: 2
+          maxLength: 160
+        city:
+          type: string
+          minLength: 2
+          maxLength: 100
+        country:
+          type: string
+          minLength: 2
+          maxLength: 100
+        timezone:
+          type: string
+          minLength: 3
+          maxLength: 100
+    BuildingResponse:
+      type: object
+      additionalProperties: false
+      required: [building]
+      properties:
+        building:
+          $ref: '#/components/schemas/Building'
+    OrganizationSummary:
+      type: object
+      required: [id, code, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+    Site:
+      type: object
+      required: [id, code, name, organizationId]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        organizationId:
+          type: string
+          format: uuid
+        organization:
+          oneOf:
+            - $ref: '#/components/schemas/OrganizationSummary'
+            - type: 'null'
+        country:
+          type: [string, 'null']
+        timezone:
+          type: [string, 'null']
+    SitesResponse:
+      type: object
+      additionalProperties: false
+      required: [sites]
+      properties:
+        sites:
+          type: array
+          items:
+            $ref: '#/components/schemas/Site'
+    CreateSiteRequest:
+      type: object
+      additionalProperties: false
+      required: [code, name]
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 40
+          pattern: '^[A-Za-z0-9][A-Za-z0-9_-]*$'
+        name:
+          type: string
+          minLength: 2
+          maxLength: 160
+        country:
+          type: string
+          maxLength: 100
+        timezone:
+          type: string
+          maxLength: 100
+    SiteResponse:
+      type: object
+      additionalProperties: false
+      required: [site]
+      properties:
+        site:
+          $ref: '#/components/schemas/Site'
+    SiteTeamUser:
+      type: object
+      required: [id, email, displayName, role, isActive, organizationId, siteId, buildingId, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+          description: Internal staff account email.
+        displayName:
+          type: string
+        role:
+          type: string
+          enum: [site_manager, moderator]
+        roleLabel:
+          type: string
+        isActive:
+          type: boolean
+        organizationId:
+          type: [string, 'null']
+          format: uuid
+        siteId:
+          type: [string, 'null']
+          format: uuid
+        buildingId:
+          type: [string, 'null']
+          format: uuid
+        site:
+          oneOf:
+            - $ref: '#/components/schemas/Site'
+            - type: 'null'
+        building:
+          oneOf:
+            - $ref: '#/components/schemas/Building'
+            - type: 'null'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    SiteAdminsResponse:
+      type: object
+      required: [users, policy]
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/SiteTeamUser'
+        policy:
+          type: object
+          required: [manageableRoles, scope, passwordReturnedOnce, forbiddenRoles]
+          properties:
+            manageableRoles:
+              type: array
+              items:
+                const: site_manager
+            scope:
+              const: project
+            passwordReturnedOnce:
+              const: true
+            forbiddenRoles:
+              type: array
+              items:
+                $ref: '#/components/schemas/UserRole'
+    SiteTeamResponse:
+      type: object
+      required: [users, policy]
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/SiteTeamUser'
+        policy:
+          type: object
+          required: [manageableRoles, scope, passwordReturnedOnce]
+          properties:
+            manageableRoles:
+              type: array
+              items:
+                const: moderator
+            scope:
+              const: site
+            passwordReturnedOnce:
+              const: true
+    CreateSiteAdminRequest:
+      type: object
+      additionalProperties: false
+      required: [email, displayName, siteId]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        displayName:
+          type: string
+          minLength: 2
+          maxLength: 120
+        siteId:
+          type: string
+          format: uuid
+        temporaryPassword:
+          type: string
+          format: password
+          minLength: 12
+          maxLength: 128
+          writeOnly: true
+    UpdateSiteAdminRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        displayName:
+          type: string
+          minLength: 2
+          maxLength: 120
+        siteId:
+          type: string
+          format: uuid
+        isActive:
+          type: boolean
+    CreateSiteModeratorRequest:
+      type: object
+      additionalProperties: false
+      required: [email, displayName, buildingId]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        displayName:
+          type: string
+          minLength: 2
+          maxLength: 120
+        buildingId:
+          type: string
+          format: uuid
+        temporaryPassword:
+          type: string
+          format: password
+          minLength: 12
+          maxLength: 128
+          writeOnly: true
+    UpdateSiteModeratorRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        displayName:
+          type: string
+          minLength: 2
+          maxLength: 120
+        buildingId:
+          type: string
+          format: uuid
+        isActive:
+          type: boolean
+    UserMutationResponse:
+      type: object
+      required: [user]
+      properties:
+        user:
+          $ref: '#/components/schemas/SiteTeamUser'
+        temporaryPassword:
+          type: string
+          format: password
+          readOnly: true
+          description: Returned once when generated/reset. Never log or persist in application storage.
+        temporaryPasswordGenerated:
+          type: boolean
+    RevokeSessionsResponse:
+      type: object
+      additionalProperties: false
+      required: [user, revokedSessionCount]
+      properties:
+        user:
+          $ref: '#/components/schemas/SiteTeamUser'
+        revokedSessionCount:
+          type: integer
+          minimum: 0
+    QuestionType:
+      type: string
+      enum: [free_text, free_text_short, free_text_long, likert, single_choice, multiple_choice, number, date, information]
+    ConditionExpression:
+      type: object
+      description: Recursive condition expression interpreted by questionnaire services.
+      additionalProperties: true
+    AnswerOptionRequest:
+      type: object
+      additionalProperties: false
+      required: [value, label]
+      properties:
+        value:
+          type: string
+          minLength: 1
+          maxLength: 80
+        label:
+          type: string
+          minLength: 1
+          maxLength: 200
+        displayOrder:
+          type: integer
+          minimum: 1
+          maximum: 500
+        isExclusive:
+          type: boolean
+    LikertScaleRequest:
+      type: object
+      additionalProperties: false
+      required: [points, leftAnchor, rightAnchor]
+      properties:
+        points:
+          type: integer
+          minimum: 3
+          maximum: 10
+        minValue:
+          type: integer
+          minimum: 0
+          maximum: 10
+        leftAnchor:
+          type: string
+          minLength: 2
+          maxLength: 80
+        rightAnchor:
+          type: string
+          minLength: 2
+          maxLength: 80
+        neutralLabel:
+          type: string
+          maxLength: 80
+        allowNotApplicable:
+          type: boolean
+    PopupDefinitionRequest:
+      type: object
+      additionalProperties: false
+      required: [title, body]
+      properties:
+        title:
+          type: string
+          minLength: 2
+          maxLength: 120
+        body:
+          type: string
+          minLength: 5
+          maxLength: 2000
+        termsExplained:
+          type: array
+          maxItems: 8
+          items:
+            type: string
+            maxLength: 80
+    CreateQuestionnaireRequest:
+      type: object
+      additionalProperties: false
+      required: [code, title]
+      properties:
+        code:
+          type: string
+          minLength: 3
+          maxLength: 40
+        title:
+          type: string
+          minLength: 3
+          maxLength: 160
+        description:
+          type: string
+          maxLength: 2000
+        defaultLanguage:
+          type: string
+          minLength: 2
+          maxLength: 12
+        finality:
+          type: string
+          maxLength: 2000
+    CreateTranslationRequest:
+      type: object
+      additionalProperties: false
+      required: [language]
+      properties:
+        language:
+          type: string
+          enum: [fr, en, es]
+        title:
+          type: string
+          minLength: 3
+          maxLength: 160
+        description:
+          type: string
+          maxLength: 2000
+        finality:
+          type: string
+          maxLength: 2000
+      description: Creates a separate draft questionnaire by cloning structure and conditional references from the source language.
+    UpdateQuestionnaireRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          minLength: 3
+          maxLength: 160
+        description:
+          type: string
+          maxLength: 2000
+        defaultLanguage:
+          type: string
+          minLength: 2
+          maxLength: 12
+        finality:
+          type: string
+          maxLength: 2000
+    CreateQuestionGroupRequest:
+      type: object
+      additionalProperties: false
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 2
+          maxLength: 160
+        description:
+          type: string
+          maxLength: 1000
+        displayOrder:
+          type: integer
+          minimum: 1
+          maximum: 100
+        questionsPerPage:
+          type: integer
+          minimum: 1
+          maximum: 20
+        randomize:
+          type: boolean
+        conditionExpression:
+          $ref: '#/components/schemas/ConditionExpression'
+    UpdateQuestionGroupRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          minLength: 2
+          maxLength: 160
+        description:
+          type: string
+          maxLength: 1000
+        displayOrder:
+          type: integer
+          minimum: 1
+          maximum: 100
+        questionsPerPage:
+          type: integer
+          minimum: 1
+          maximum: 20
+        randomize:
+          type: boolean
+        conditionExpression:
+          $ref: '#/components/schemas/ConditionExpression'
+    CreateQuestionRequest:
+      type: object
+      additionalProperties: false
+      required: [code, label, responseType]
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 40
+        label:
+          type: string
+          minLength: 3
+          maxLength: 500
+        helperText:
+          type: string
+          maxLength: 1000
+        responseType:
+          $ref: '#/components/schemas/QuestionType'
+        isRequired:
+          type: boolean
+        displayOrder:
+          type: integer
+          minimum: 1
+          maximum: 500
+        conditionExpression:
+          $ref: '#/components/schemas/ConditionExpression'
+        answerOptions:
+          type: array
+          maxItems: 30
+          items:
+            $ref: '#/components/schemas/AnswerOptionRequest'
+        likertScale:
+          $ref: '#/components/schemas/LikertScaleRequest'
+        popupDefinition:
+          $ref: '#/components/schemas/PopupDefinitionRequest'
+      description: answerOptions are required for choice types; likertScale is required for likert.
+    UpdateQuestionRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 40
+        label:
+          type: string
+          minLength: 3
+          maxLength: 500
+        helperText:
+          type: string
+          maxLength: 1000
+        responseType:
+          $ref: '#/components/schemas/QuestionType'
+        isRequired:
+          type: boolean
+        displayOrder:
+          type: integer
+          minimum: 1
+          maximum: 500
+        conditionExpression:
+          $ref: '#/components/schemas/ConditionExpression'
+        answerOptions:
+          type: array
+          maxItems: 30
+          items:
+            $ref: '#/components/schemas/AnswerOptionRequest'
+        likertScale:
+          $ref: '#/components/schemas/LikertScaleRequest'
+        popupDefinition:
+          oneOf:
+            - $ref: '#/components/schemas/PopupDefinitionRequest'
+            - type: 'null'
+    Questionnaire:
+      type: object
+      required: [id, code, title, defaultLanguage, versionId, version, versionLabel, language, status, isPublished, groupCount, questionCount, groups]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        title:
+          type: string
+        description:
+          type: [string, 'null']
+        defaultLanguage:
+          type: string
+        versionId:
+          type: string
+          format: uuid
+        version:
+          type: string
+        versionLabel:
+          type: string
+        language:
+          type: string
+        finality:
+          type: [string, 'null']
+        status:
+          type: string
+        isPublished:
+          type: boolean
+        openFrom:
+          type: [string, 'null']
+          format: date-time
+        openUntil:
+          type: [string, 'null']
+          format: date-time
+        groupCount:
+          type: integer
+          minimum: 0
+        questionCount:
+          type: integer
+          minimum: 0
+        groups:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    QuestionnairesResponse:
+      type: object
+      additionalProperties: false
+      required: [questionnaires]
+      properties:
+        questionnaires:
+          type: array
+          items:
+            $ref: '#/components/schemas/Questionnaire'
+    QuestionnaireResponse:
+      type: object
+      additionalProperties: false
+      required: [questionnaire]
+      properties:
+        questionnaire:
+          $ref: '#/components/schemas/Questionnaire'
+    CreateVersionRequest:
+      type: object
+      additionalProperties: false
+      required: [versionLabel]
+      properties:
+        versionLabel:
+          type: string
+          minLength: 1
+          maxLength: 40
+          pattern: '^[A-Za-z0-9._-]+$'
+        language:
+          type: string
+          minLength: 2
+          maxLength: 12
+        description:
+          type: string
+          maxLength: 2000
+        finality:
+          type: string
+          maxLength: 2000
+        openFrom:
+          type: string
+          format: date-time
+        openUntil:
+          type: string
+          format: date-time
+    Version:
+      type: object
+      required: [id, versionLabel, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        versionLabel:
+          type: string
+        language:
+          type: string
+        status:
+          type: string
+        publishedAt:
+          type: [string, 'null']
+          format: date-time
+        immutableAt:
+          type: [string, 'null']
+          format: date-time
+      additionalProperties: true
+    VersionsResponse:
+      type: object
+      additionalProperties: false
+      required: [versions]
+      properties:
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Version'
+    VersionResponse:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        version:
+          $ref: '#/components/schemas/Version'
+    CreateConditionalRuleRequest:
+      type: object
+      additionalProperties: false
+      required: [code, trigger, effect]
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 80
+        trigger:
+          type: object
+          additionalProperties: true
+        effect:
+          type: object
+          additionalProperties: true
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 10000
+        isActive:
+          type: boolean
+    UpdateConditionalRuleRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 80
+        trigger:
+          type: object
+          additionalProperties: true
+        effect:
+          type: object
+          additionalProperties: true
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 10000
+        isActive:
+          type: boolean
+    ConditionalRule:
+      type: object
+      required: [id, code, trigger, effect, priority, isActive]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        trigger:
+          type: object
+          additionalProperties: true
+        effect:
+          type: object
+          additionalProperties: true
+        priority:
+          type: integer
+        isActive:
+          type: boolean
+      additionalProperties: true
+    RuleResponse:
+      type: object
+      additionalProperties: false
+      required: [rule]
+      properties:
+        rule:
+          $ref: '#/components/schemas/ConditionalRule'
+    RulesResponse:
+      type: object
+      additionalProperties: false
+      required: [rules]
+      properties:
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConditionalRule'
+    PublicationCheckResponse:
+      type: object
+      additionalProperties: false
+      required: [report]
+      properties:
+        report:
+          type: object
+          required: [canPublish, errors]
+          properties:
+            canPublish:
+              type: boolean
+            errors:
+              type: array
+              items:
+                type: string
+          additionalProperties: true
+    InvitationDeliveryMode:
+      type: string
+      enum: [email, email_simulation, sms, sms_simulation, onsite_terminal, paper_form, refusal_record]
+    AssistanceMode:
+      type: string
+      enum: [none, technical_help, full_assisted_entry]
+    InvitationStatus:
+      type: string
+      enum: [pending, sent, opened, in_progress, draft, submitted, expired, blocked, cancelled]
+    TerminalStatus:
+      type: string
+      enum: [active, paused, revoked]
+    TerminalDevice:
+      type: object
+      required: [id, code, label, status, building, lastSeenAt, pendingInvitationCount]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        label:
+          type: string
+        status:
+          $ref: '#/components/schemas/TerminalStatus'
+        building:
+          $ref: '#/components/schemas/Building'
+        lastSeenAt:
+          type: [string, 'null']
+          format: date-time
+        pendingInvitationCount:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    Invitation:
+      type: object
+      required: [id, publicCode, status, deliveryMode, assistanceMode, maskedEmail, maskedPhone, questionnaireVersionId, building, expiresAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        publicCode:
+          type: string
+        status:
+          $ref: '#/components/schemas/InvitationStatus'
+        deliveryMode:
+          $ref: '#/components/schemas/InvitationDeliveryMode'
+        assistanceMode:
+          $ref: '#/components/schemas/AssistanceMode'
+        maskedEmail:
+          type: [string, 'null']
+          description: Masked contact only; clear identity data is never returned here.
+        maskedPhone:
+          type: [string, 'null']
+        questionnaireVersionId:
+          type: string
+          format: uuid
+        questionnaireTitle:
+          type: [string, 'null']
+        versionLabel:
+          type: [string, 'null']
+        building:
+          $ref: '#/components/schemas/Building'
+        terminalDevice:
+          oneOf:
+            - $ref: '#/components/schemas/TerminalDevice'
+            - type: 'null'
+        terminalDispatchedAt:
+          type: [string, 'null']
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        sentAt:
+          type: [string, 'null']
+          format: date-time
+        openedAt:
+          type: [string, 'null']
+          format: date-time
+        startedAt:
+          type: [string, 'null']
+          format: date-time
+        submittedAt:
+          type: [string, 'null']
+          format: date-time
+        responseStatus:
+          type: [string, 'null']
+    InvitationsResponse:
+      type: object
+      additionalProperties: false
+      required: [invitations]
+      properties:
+        invitations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Invitation'
+    CreateInvitationRequest:
+      type: object
+      additionalProperties: false
+      required: [questionnaireVersionId, buildingId]
+      properties:
+        questionnaireVersionId:
+          type: string
+          format: uuid
+        buildingId:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          writeOnly: true
+        phone:
+          type: string
+          pattern: '^\\+?[1-9]\\d{7,14}$'
+          maxLength: 32
+          writeOnly: true
+        deliveryMode:
+          $ref: '#/components/schemas/InvitationDeliveryMode'
+        terminalDeviceId:
+          type: string
+          format: uuid
+        refusalReason:
+          type: string
+          maxLength: 300
+        assistanceMode:
+          $ref: '#/components/schemas/AssistanceMode'
+        notifyModerator:
+          type: boolean
+        notifyAdmins:
+          type: boolean
+        expiresAt:
+          type: string
+          format: date-time
+      description: Email/phone/terminal requirements depend on deliveryMode. Paper/refusal/terminal modes do not accept ordinary digital contact.
+    CreateInvitationResponse:
+      type: object
+      required: [invitation, accessToken, devAccessLink]
+      properties:
+        invitation:
+          $ref: '#/components/schemas/Invitation'
+        accessToken:
+          type: [string, 'null']
+          readOnly: true
+          description: Secret returned only where the environment/workflow permits it. Never log.
+        devAccessLink:
+          type: [string, 'null']
+          readOnly: true
+          description: Development-only convenience link; null in production flows.
+        terminalDispatchLink:
+          type: [string, 'null']
+    AnswerInput:
+      type: object
+      additionalProperties: false
+      required: [questionId, value]
+      properties:
+        questionId:
+          type: string
+          format: uuid
+        value: {}
+    SubmitPaperResponsesRequest:
+      type: object
+      additionalProperties: false
+      required: [answers]
+      properties:
+        answers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnswerInput'
+        moderatorNote:
+          type: string
+          maxLength: 500
+    SubmissionSummary:
+      type: object
+      required: [id, publicCode, submittedAt, answerCount]
+      properties:
+        id:
+          type: string
+          format: uuid
+        publicCode:
+          type: string
+        submittedAt:
+          type: string
+          format: date-time
+        answerCount:
+          type: integer
+          minimum: 0
+    SubmitPaperResponsesResponse:
+      type: object
+      required: [invitation, submission, warnings]
+      properties:
+        invitation:
+          $ref: '#/components/schemas/Invitation'
+        submission:
+          $ref: '#/components/schemas/SubmissionSummary'
+        warnings:
+          type: array
+          items:
+            type: object
+            required: [questionId, reason]
+            properties:
+              questionId:
+                type: string
+                format: uuid
+              reason:
+                type: [string, 'null']
+    CreateTerminalDeviceRequest:
+      type: object
+      additionalProperties: false
+      required: [buildingId, label]
+      properties:
+        buildingId:
+          type: string
+          format: uuid
+        label:
+          type: string
+          minLength: 2
+          maxLength: 120
+    UpdateTerminalDeviceRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        label:
+          type: string
+          minLength: 2
+          maxLength: 120
+        status:
+          $ref: '#/components/schemas/TerminalStatus'
+    TerminalDevicesResponse:
+      type: object
+      additionalProperties: false
+      required: [terminalDevices]
+      properties:
+        terminalDevices:
+          type: array
+          items:
+            $ref: '#/components/schemas/TerminalDevice'
+    TerminalDeviceMutationResponse:
+      type: object
+      additionalProperties: false
+      required: [terminalDevice]
+      properties:
+        terminalDevice:
+          $ref: '#/components/schemas/TerminalDevice'
+    TerminalCredentialResponse:
+      type: object
+      required: [terminalDevice, terminalAccessToken, terminalLaunchLink]
+      properties:
+        terminalDevice:
+          $ref: '#/components/schemas/TerminalDevice'
+        terminalAccessToken:
+          type: string
+          readOnly: true
+          description: One-time clear secret returned on create/regeneration. Never log or retain centrally.
+        terminalLaunchLink:
+          type: string
+          readOnly: true
+    TerminalSessionResponse:
+      type: object
+      additionalProperties: false
+      required: [terminalDevice, invitations]
+      properties:
+        terminalDevice:
+          $ref: '#/components/schemas/TerminalDevice'
+        invitations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Invitation'
+    TerminalTokenBody:
+      type: object
+      additionalProperties: false
+      required: [terminalToken]
+      properties:
+        terminalToken:
+          type: string
+          minLength: 1
+          maxLength: 512
+          writeOnly: true
+    OpenTerminalInvitationResponse:
+      type: object
+      required: [invitation, accessToken, respondentAccessLink]
+      properties:
+        invitation:
+          $ref: '#/components/schemas/Invitation'
+        accessToken:
+          type: string
+          readOnly: true
+        respondentAccessLink:
+          type: string
+          readOnly: true
+    RespondentTokenBody:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token:
+          type: string
+          minLength: 1
+          maxLength: 512
+          writeOnly: true
+        terminalToken:
+          type: string
+          minLength: 1
+          maxLength: 512
+          writeOnly: true
+    SaveAnswersRequest:
+      allOf:
+        - $ref: '#/components/schemas/RespondentTokenBody'
+        - type: object
+          required: [answers]
+          properties:
+            answers:
+              type: array
+              minItems: 1
+              maxItems: 200
+              items:
+                $ref: '#/components/schemas/AnswerInput'
+    RespondentAnswer:
+      type: object
+      required: [id, questionId, value]
+      properties:
+        id:
+          type: string
+          format: uuid
+        questionId:
+          type: string
+          format: uuid
+        value: {}
+        identifiabilityWarning:
+          type: boolean
+        warningReason:
+          type: [string, 'null']
+    SaveAnswersResponse:
+      type: object
+      additionalProperties: false
+      required: [savedAnswers, warnings]
+      properties:
+        savedAnswers:
+          type: array
+          items:
+            $ref: '#/components/schemas/RespondentAnswer'
+        warnings:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    TelemetryRequest:
+      allOf:
+        - $ref: '#/components/schemas/RespondentTokenBody'
+        - type: object
+          required: [eventType]
+          properties:
+            questionId:
+              type: string
+              format: uuid
+            popupDefinitionId:
+              type: string
+              format: uuid
+            eventType:
+              type: string
+              enum: [session_open, questionnaire_resume, answer_change, popup_open, popup_close, forward_navigation, backward_navigation, questionnaire_total_time, questionnaire_abandon]
+            eventPayload:
+              type: object
+              additionalProperties: true
+            currentPage:
+              type: integer
+              minimum: 1
+            durationMs:
+              type: integer
+              minimum: 0
+            occurredAt:
+              type: string
+              format: date-time
+    RespondentSessionResponse:
+      type: object
+      required: [responseSession, invitation, questionnaire]
+      properties:
+        responseSession:
+          type: object
+          additionalProperties: true
+        legalNotice:
+          type: object
+          additionalProperties: true
+        invitation:
+          type: object
+          additionalProperties: true
+        questionnaire:
+          type: object
+          additionalProperties: true
+      description: Contains only token-bound questionnaire/session data and no clear respondent contact.
+    SubmitResponse:
+      type: object
+      additionalProperties: false
+      required: [submission]
+      properties:
+        submission:
+          $ref: '#/components/schemas/SubmissionSummary'
+    StatsResponse:
+      type: object
+      required: [stats]
+      properties:
+        stats:
+          type: object
+          required: [questionnaire, threshold, totals, fieldTracking, versions, deliveryModes, buildings, groups, questions, submissions]
+          properties:
+            questionnaire:
+              type: object
+              additionalProperties: true
+            threshold:
+              type: integer
+              minimum: 1
+              description: Minimum cell size used for granular disclosure control.
+            totals:
+              type: object
+              additionalProperties: true
+              description: Counts and rates are null with `effectifSufficient=false` below the configured threshold.
+            fieldTracking:
+              type: object
+              additionalProperties: true
+              description: Field-tracking counts are suppressed when too few people were approached.
+            versions:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+            deliveryModes:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+            buildings:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+            sites:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+            languages:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+            popups:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+            groups:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+            questions:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+            submissions:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+    QuestionStatsResponse:
+      type: object
+      required: [stats]
+      properties:
+        stats:
+          type: object
+          additionalProperties: true
+    SubmissionDetailsResponse:
+      type: object
+      required: [submission]
+      properties:
+        submission:
+          type: object
+          description: Pseudonymized analyst-only detail. May contain sensitive answers/free text; never direct contact.
+          additionalProperties: true
+    NotificationEvent:
+      type: string
+      enum: [submission_received, difficult_question, invitation_expired, campaign_finished, double_submission_attempt, judicial_access_executed]
+    UpsertNotificationSubscriptionRequest:
+      type: object
+      additionalProperties: false
+      required: [eventType]
+      properties:
+        eventType:
+          $ref: '#/components/schemas/NotificationEvent'
+        channel:
+          type: string
+          enum: [email, internal, simulation]
+        frequency:
+          type: string
+          enum: [none, immediate, daily]
+        digestHour:
+          type: integer
+          minimum: 0
+          maximum: 23
+        questionnaireVersionId:
+          type: string
+          format: uuid
+        buildingId:
+          type: string
+          format: uuid
+        isEnabled:
+          type: boolean
+    NotificationSubscription:
+      type: object
+      required: [id, userId, eventType, channel, frequency, digestHour, isEnabled]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        eventType:
+          $ref: '#/components/schemas/NotificationEvent'
+        channel:
+          type: string
+        frequency:
+          type: string
+        digestHour:
+          type: integer
+        isEnabled:
+          type: boolean
+      additionalProperties: true
+    NotificationSubscriptionsResponse:
+      type: object
+      additionalProperties: false
+      required: [subscriptions]
+      properties:
+        subscriptions:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationSubscription'
+    NotificationSubscriptionResponse:
+      type: object
+      additionalProperties: false
+      required: [subscription]
+      properties:
+        subscription:
+          $ref: '#/components/schemas/NotificationSubscription'
+    DigestRunResponse:
+      type: object
+      required: [result]
+      properties:
+        result:
+          type: object
+          additionalProperties: true
+    AuditLog:
+      type: object
+      required: [id, action, entityType, occurredAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        actorUserId:
+          type: [string, 'null']
+          format: uuid
+        organizationId:
+          type: [string, 'null']
+          format: uuid
+        actorRole:
+          type: [string, 'null']
+        action:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type: [string, 'null']
+        publicCode:
+          type: [string, 'null']
+        justification:
+          type: [string, 'null']
+        correlationId:
+          type: [string, 'null']
+        metadata:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: 'null'
+        ipAddress:
+          type: [string, 'null']
+        userAgent:
+          type: [string, 'null']
+        occurredAt:
+          type: string
+          format: date-time
+      additionalProperties: true
+    AuditLogsResponse:
+      type: object
+      additionalProperties: false
+      required: [logs]
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLog'
+    TechnicalRegisterResponse:
+      type: object
+      required: [register]
+      properties:
+        register:
+          type: object
+          additionalProperties: true
+    RetentionPolicyResponse:
+      type: object
+      required: [policy]
+      properties:
+        policy:
+          type: object
+          additionalProperties: true
+    MaintenanceResponse:
+      type: object
+      required: [result]
+      properties:
+        result:
+          type: object
+          additionalProperties: true
+    PseudonymizedExportResponse:
+      type: object
+      required: [export]
+      properties:
+        export:
+          type: object
+          required: [generatedAt, generatedByRole, questionnaire, rowCount, containsDirectEmail, identityVaultExcluded, fingerprint, rows]
+          properties:
+            generatedAt:
+              type: string
+              format: date-time
+            generatedByRole:
+              $ref: '#/components/schemas/UserRole'
+            questionnaire:
+              type: object
+              additionalProperties: true
+            rowCount:
+              type: integer
+              minimum: 0
+            threshold:
+              type: integer
+              minimum: 1
+            suppressedByThreshold:
+              type: boolean
+            containsDirectEmail:
+              const: false
+            containsEmailHash:
+              const: false
+            containsEncryptedEmail:
+              const: false
+            identityVaultExcluded:
+              const: true
+            fingerprint:
+              type: string
+              pattern: '^[a-f0-9]{64}$'
+            rows:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+          additionalProperties: true
+    IdentityVaultStatusResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: object
+          required: [operationalSchema, identitySchema, identityTable, model, directEmailVisibleInAdmin, currentRole, accessMode, audit]
+          properties:
+            operationalSchema:
+              type: string
+            identitySchema:
+              type: string
+            identityTable:
+              type: string
+            model:
+              type: string
+            directEmailVisibleInAdmin:
+              const: false
+            directPhoneVisibleInAdmin:
+              type: boolean
+            currentRole:
+              $ref: '#/components/schemas/UserRole'
+            currentRoleCanExecuteEmailAccess:
+              type: boolean
+            currentRoleCanExecuteIdentityAccess:
+              type: boolean
+            accessMode:
+              type: string
+            audit:
+              type: array
+              items:
+                type: string
+    IdentityVaultAccessAttemptRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        publicCode:
+          type: string
+          minLength: 4
+          maxLength: 64
+          pattern: '^[A-Z0-9-]+$'
+        justification:
+          type: string
+          minLength: 10
+          maxLength: 2000
+      description: Records a prohibited/diagnostic web access attempt. It never returns or decrypts contact data.
+    CreateJudicialRequest:
+      type: object
+      additionalProperties: false
+      required: [requestReference, legalBasisDescription, requestedPublicCodes, requestedBy]
+      properties:
+        requestReference:
+          type: string
+          minLength: 3
+          maxLength: 120
+        legalBasisDescription:
+          type: string
+          minLength: 10
+          maxLength: 2000
+        courtOrderReference:
+          type: string
+          maxLength: 120
+        requestedPublicCodes:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: string
+            maxLength: 64
+        requestedBy:
+          type: string
+          minLength: 3
+          maxLength: 254
+        comments:
+          type: string
+          maxLength: 2000
+    JudicialWorkflowComment:
+      type: object
+      additionalProperties: false
+      properties:
+        comments:
+          type: string
+          maxLength: 2000
+    RejectJudicialRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          maxLength: 2000
+        comments:
+          type: string
+          maxLength: 2000
+    JudicialRequest:
+      type: object
+      required: [id, requestReference, legalBasisDescription, requestedPublicCodes, requestedBy, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        organizationId:
+          type: [string, 'null']
+          format: uuid
+        requestReference:
+          type: string
+        legalBasisDescription:
+          type: string
+        courtOrderReference:
+          type: [string, 'null']
+        requestedPublicCodes:
+          type: array
+          items:
+            type: string
+        requestedBy:
+          type: string
+        status:
+          type: string
+          enum: [received, validated, rejected, executed, closed]
+        exportFingerprint:
+          type: [string, 'null']
+        exportExpiresAt:
+          type: [string, 'null']
+          format: date-time
+        exportDeletedAt:
+          type: [string, 'null']
+          format: date-time
+        dpoValidationUserId:
+          type: [string, 'null']
+          format: uuid
+        legalValidationUserId:
+          type: [string, 'null']
+          format: uuid
+        comments:
+          type: [string, 'null']
+      additionalProperties: true
+    JudicialRequestsResponse:
+      type: object
+      additionalProperties: false
+      required: [requests]
+      properties:
+        requests:
+          type: array
+          items:
+            $ref: '#/components/schemas/JudicialRequest'
+    JudicialRequestResponse:
+      type: object
+      required: [judicialRequest]
+      properties:
+        judicialRequest:
+          $ref: '#/components/schemas/JudicialRequest'
+    JudicialExecutionResponse:
+      type: object
+      additionalProperties: false
+      required: [judicialRequest, export]
+      properties:
+        judicialRequest:
+          $ref: '#/components/schemas/JudicialRequest'
+        export:
+          type: object
+          additionalProperties: false
+          required: [fingerprint, expiresAt, rowCount, envelope]
+          properties:
+            fingerprint:
+              type: string
+              pattern: '^[a-f0-9]{64}$'
+            expiresAt:
+              type: string
+              format: date-time
+            rowCount:
+              type: integer
+              minimum: 0
+              maximum: 50
+            envelope:
+              type: object
+              additionalProperties: false
+              required: [algorithm, keyRef, iv, authTag, ciphertext]
+              properties:
+                algorithm:
+                  const: aes-256-gcm
+                keyRef:
+                  type: string
+                  description: Approved decryption-key reference; never the key itself.
+                iv:
+                  type: string
+                authTag:
+                  type: string
+                ciphertext:
+                  type: string
+                  description: Encrypted minimal code-to-contact export. Handle as highly sensitive data.
 paths:
   /health/live:
     get:
-      summary: Sonde de vie conteneur
+      tags: [Health]
+      operationId: getLiveness
+      summary: Check whether the API process is alive
       security: []
       responses:
-        '200': { description: API process alive }
+        '200':
+          description: API process is alive.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '429':
+          $ref: '#/components/responses/RateLimited'
   /health/ready:
     get:
-      summary: Sonde de readiness avec bases opérationnelle et identité
+      tags: [Health]
+      operationId: getReadiness
+      summary: Check database and durable-queue readiness
       security: []
       responses:
-        '200': { description: API ready }
-        '503': { description: Base indisponible }
+        '200':
+          description: Both database domains and the durable outbound queue model are reachable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   /metrics:
     get:
-      summary: Métriques JSON techniques
-      security: [{ sessionCookie: [] }]
+      tags: [Observability]
+      operationId: getJsonMetrics
+      summary: Read the application metrics snapshot
+      x-required-roles: [technical_admin]
       responses:
-        '200': { description: Métriques API, erreurs, latence, autosave, jetons invalides et exports inhabituels }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        '200':
+          description: Technical metrics snapshot.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [metrics]
+                properties:
+                  metrics:
+                    type: object
+                    additionalProperties: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /metrics/prometheus:
     get:
-      summary: Métriques Prometheus
-      security: [{ sessionCookie: [] }]
+      tags: [Observability]
+      operationId: getPrometheusMetrics
+      summary: Read Prometheus metrics exposition
+      description: Uses a dedicated bearer token and does not accept the staff session cookie.
+      security:
+        - metricsBearer: []
       responses:
-        '200': { description: Flux text/plain Prometheus }
+        '200':
+          description: Prometheus text exposition.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/config:
+    get:
+      tags: [Authentication]
+      operationId: getAuthenticationConfiguration
+      summary: Read the public staff authentication mode
+      security: []
+      responses:
+        '200':
+          description: Public login-provider configuration used by the login page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthConfigResponse'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /auth/oidc/start:
+    get:
+      tags: [Authentication]
+      operationId: startOidcAuthorization
+      summary: Start OIDC Authorization Code with PKCE
+      security: []
+      parameters:
+        - name: returnTo
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 500
+            pattern: '^/(?!/).*$'
+      responses:
+        '302':
+          description: Redirect to the configured OIDC provider authorization endpoint.
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /auth/oidc/callback:
+    get:
+      tags: [Authentication]
+      operationId: completeOidcAuthorization
+      summary: Validate the OIDC callback and create a staff session
+      description: Validates state, nonce, PKCE, signature, issuer, audience, expiry, verified email, and configured MFA claims before redirecting to the frontend.
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '302':
+          description: Staff session created and redirected to the validated same-origin frontend path.
+          headers:
+            Location:
+              schema:
+                type: string
+            Set-Cookie:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   /auth/login:
     post:
-      summary: Connexion utilisateur interne et pose du cookie HttpOnly
+      tags: [Authentication]
+      operationId: loginStaffUser
+      summary: Authenticate an internal staff user
+      description: Sets the opaque `chpm_session` HTTP-only cookie and returns the public staff profile.
       security: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/LoginRequest' }
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              staffLogin:
+                value:
+                  email: user@example.org
+                  password: replace-with-user-secret
       responses:
-        '201': { description: Profil connecté }
-        '401': { description: Identifiants invalides }
+        '201':
+          description: Authenticated; session cookie was set.
+          headers:
+            Set-Cookie:
+              description: HTTP-only staff session cookie.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /auth/change-password:
+    post:
+      tags: [Authentication]
+      operationId: changeCurrentUserPassword
+      summary: Rotate the current local-account password
+      description: Revokes all other staff sessions, clears the forced-rotation flag, and records an audit event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '201':
+          description: Password rotated; the current session remains active.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /auth/me:
     get:
-      summary: Profil connecté
+      tags: [Authentication]
+      operationId: getAuthenticatedUser
+      summary: Read the current staff profile and permissions
       responses:
-        '200': { description: Profil et permissions }
-        '401': { description: Session absente ou expirée }
+        '200':
+          description: Current public staff profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /auth/logout:
     post:
-      summary: Déconnexion et suppression du cookie
+      tags: [Authentication]
+      operationId: logoutStaffUser
+      summary: Revoke the current staff session
       responses:
-        '201': { description: Session supprimée }
+        '201':
+          description: Session revoked and cookie cleared.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /me:
     get:
-      summary: Alias profil utilisateur authentifié
+      tags: [Authentication]
+      operationId: getAuthenticatedUserAlias
+      summary: Read the current staff profile through the compatibility alias
+      description: Compatibility alias for `GET /auth/me`.
+      deprecated: true
       responses:
-        '200': { description: Profil courant }
+        '200':
+          description: Current public staff profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /buildings:
     get:
-      summary: Bâtiments filtrés par périmètre
+      tags: [Buildings]
+      operationId: listScopedBuildings
+      summary: List buildings visible to the current role and scope
+      x-required-roles: [admin, moderator, site_manager, questionnaire_admin, analyst]
       responses:
-        '200': { description: Liste des bâtiments accessibles }
+        '200':
+          description: Scoped building list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildingsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/sites:
+    get:
+      tags: [Project administration]
+      operationId: listProjectSites
+      summary: List sites managed by the project administrator
+      description: Returns project reference data only and no respondent identity data.
+      x-required-roles: [admin]
+      responses:
+        '200':
+          description: Sites in the administrator's organization/project.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SitesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Project administration]
+      operationId: createProjectSite
+      summary: Create a site in the administrator's organization
+      x-required-roles: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSiteRequest'
+      responses:
+        '201':
+          description: Site created in the caller's organization and audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /admin/site-admins:
+    get:
+      tags: [Project administration]
+      operationId: listSiteManagers
+      summary: List site-manager accounts
+      x-required-roles: [admin]
+      responses:
+        '200':
+          description: Scoped site-manager accounts and delegation policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteAdminsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Project administration]
+      operationId: createSiteManager
+      summary: Create or provision a site-manager account
+      description: Cannot create project administrators, DPO, judicial, or technical roles.
+      x-required-roles: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSiteAdminRequest'
+      responses:
+        '201':
+          description: Site manager created; a generated temporary password may be returned once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserMutationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /admin/site-admins/{id}:
+    patch:
+      tags: [Project administration]
+      operationId: updateSiteManager
+      summary: Update a site manager's name, site, or active state
+      x-required-roles: [admin]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSiteAdminRequest'
+      responses:
+        '200':
+          description: Site manager updated; sensitive changes revoke sessions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserMutationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /admin/site-admins/{id}/reset-password:
+    post:
+      tags: [Project administration]
+      operationId: resetSiteManagerPassword
+      summary: Reset a site manager's password and revoke sessions
+      x-required-roles: [admin]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '201':
+          description: Temporary password returned once and prior sessions revoked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserMutationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /admin/site-admins/{id}/revoke-sessions:
+    post:
+      tags: [Project administration]
+      operationId: revokeSiteManagerSessions
+      summary: Revoke every active session for a site manager
+      x-required-roles: [admin]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '201':
+          description: Sessions revoked and action audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevokeSessionsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /site/buildings:
+    post:
+      tags: [Site administration]
+      operationId: createSiteBuilding
+      summary: Create a building in the site manager's assigned site
+      x-required-roles: [site_manager]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBuildingRequest'
+      responses:
+        '201':
+          description: Building created in the assigned site and organization and audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildingResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /site/team:
+    get:
+      tags: [Site administration]
+      operationId: listSiteTeam
+      summary: List moderator accounts for the current site
+      x-required-roles: [site_manager]
+      responses:
+        '200':
+          description: Moderators in the current site and delegation policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteTeamResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /site/moderators:
+    post:
+      tags: [Site administration]
+      operationId: createOrReactivateSiteModerator
+      summary: Create or reactivate a moderator in the current site
+      x-required-roles: [site_manager]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSiteModeratorRequest'
+      responses:
+        '201':
+          description: Moderator created/reactivated; temporary password may be returned once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserMutationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /site/moderators/{id}:
+    patch:
+      tags: [Site administration]
+      operationId: updateSiteModerator
+      summary: Update a moderator in the current site
+      x-required-roles: [site_manager]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSiteModeratorRequest'
+      responses:
+        '200':
+          description: Moderator updated; sensitive changes revoke sessions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserMutationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /site/moderators/{id}/reset-password:
+    post:
+      tags: [Site administration]
+      operationId: resetSiteModeratorPassword
+      summary: Reset a moderator password and revoke sessions
+      x-required-roles: [site_manager]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '201':
+          description: Temporary password returned once and prior sessions revoked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserMutationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /site/moderators/{id}/revoke-sessions:
+    post:
+      tags: [Site administration]
+      operationId: revokeSiteModeratorSessions
+      summary: Revoke every active session for a moderator
+      x-required-roles: [site_manager]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '201':
+          description: Sessions revoked and action audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevokeSessionsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /users/site-team:
+    get:
+      tags: [Site administration]
+      operationId: listSiteTeamLegacy
+      summary: List the current site team through the legacy alias
+      deprecated: true
+      description: Use `GET /site/team` for new clients.
+      x-required-roles: [site_manager]
+      responses:
+        '200':
+          description: Moderators in the current site.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteTeamResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /users/site-moderators:
+    post:
+      tags: [Site administration]
+      operationId: createOrReactivateSiteModeratorLegacy
+      summary: Create or reactivate a moderator through the legacy alias
+      deprecated: true
+      description: Use `POST /site/moderators` for new clients.
+      x-required-roles: [site_manager]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSiteModeratorRequest'
+      responses:
+        '201':
+          description: Moderator created/reactivated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserMutationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /users/site-moderators/{id}:
+    patch:
+      tags: [Site administration]
+      operationId: updateSiteModeratorLegacy
+      summary: Update a moderator through the legacy alias
+      deprecated: true
+      description: Use `PATCH /site/moderators/{id}` for new clients.
+      x-required-roles: [site_manager]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSiteModeratorRequest'
+      responses:
+        '200':
+          description: Moderator updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserMutationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /users/site-moderators/{id}/reset-password:
+    post:
+      tags: [Site administration]
+      operationId: resetSiteModeratorPasswordLegacy
+      summary: Reset a moderator password through the legacy alias
+      deprecated: true
+      description: Use `POST /site/moderators/{id}/reset-password` for new clients.
+      x-required-roles: [site_manager]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '201':
+          description: Temporary password returned once and sessions revoked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserMutationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /users/site-moderators/{id}/revoke-sessions:
+    post:
+      tags: [Site administration]
+      operationId: revokeSiteModeratorSessionsLegacy
+      summary: Revoke moderator sessions through the legacy alias
+      deprecated: true
+      description: Use `POST /site/moderators/{id}/revoke-sessions` for new clients.
+      x-required-roles: [site_manager]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '201':
+          description: Sessions revoked and action audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevokeSessionsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /questionnaires:
     get:
-      summary: Liste des questionnaires accessibles
+      tags: [Questionnaires]
+      operationId: listQuestionnaires
+      summary: List questionnaires visible to the current user
+      description: Non-authoring roles receive only questionnaire content allowed by service publication/scope rules.
+      x-required-roles: [admin, moderator, site_manager, questionnaire_admin, analyst]
       responses:
-        '200': { description: Questionnaires avec versions et groupes selon rôle }
+        '200':
+          description: Scoped questionnaire list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionnairesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
-      summary: Création questionnaire brouillon
+      tags: [Questionnaires]
+      operationId: createQuestionnaire
+      summary: Create a draft questionnaire and initial version
+      x-required-roles: [admin, questionnaire_admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateQuestionnaireRequest'
       responses:
-        '201': { description: Questionnaire créé }
+        '201':
+          description: Draft questionnaire created and audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionnaireResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /questionnaires/{id}:
     get:
-      summary: Détail questionnaire
-      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      tags: [Questionnaires]
+      operationId: getQuestionnaire
+      summary: Read one scoped questionnaire
+      x-required-roles: [admin, moderator, site_manager, questionnaire_admin, analyst]
+      parameters:
+        - $ref: '#/components/parameters/QuestionnaireId'
       responses:
-        '200': { description: Questionnaire }
+        '200':
+          description: Questionnaire detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionnaireResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
     patch:
-      summary: Mise à jour questionnaire brouillon
-      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      tags: [Questionnaires]
+      operationId: updateQuestionnaire
+      summary: Update draft questionnaire metadata
+      description: Published versions are immutable and reject mutation.
+      x-required-roles: [admin, questionnaire_admin]
+      parameters:
+        - $ref: '#/components/parameters/QuestionnaireId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateQuestionnaireRequest'
       responses:
-        '200': { description: Questionnaire mis à jour }
+        '200':
+          description: Draft questionnaire metadata updated and audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionnaireResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /questionnaires/{id}/translations:
+    post:
+      tags: [Questionnaires]
+      operationId: createQuestionnaireTranslationDraft
+      summary: Clone a questionnaire into a new language draft
+      description: Creates a distinct questionnaire and draft version, preserves structure, rewrites internal conditional references, and records an audit event.
+      x-required-roles: [admin, questionnaire_admin]
+      parameters:
+        - $ref: '#/components/parameters/QuestionnaireId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTranslationRequest'
+      responses:
+        '201':
+          description: Translation draft created from the source questionnaire.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionnaireResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /questionnaires/{id}/preview:
+    get:
+      tags: [Questionnaires]
+      operationId: previewQuestionnaire
+      summary: Read questionnaire content for staff preview
+      x-required-roles: [admin, moderator, questionnaire_admin]
+      parameters:
+        - $ref: '#/components/parameters/QuestionnaireId'
+      responses:
+        '200':
+          description: Questionnaire preview model.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionnaireResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /questionnaires/{id}/groups:
+    post:
+      tags: [Questionnaires]
+      operationId: createQuestionGroup
+      summary: Add a group to the active draft version
+      x-required-roles: [admin, questionnaire_admin]
+      parameters:
+        - $ref: '#/components/parameters/QuestionnaireId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateQuestionGroupRequest'
+      responses:
+        '201':
+          description: Group added; returns the updated questionnaire.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionnaireResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /questionnaires/{id}/groups/{groupId}:
+    patch:
+      tags: [Questionnaires]
+      operationId: updateQuestionGroup
+      summary: Update a group in the active draft version
+      x-required-roles: [admin, questionnaire_admin]
+      parameters:
+        - $ref: '#/components/parameters/QuestionnaireId'
+        - $ref: '#/components/parameters/GroupId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateQuestionGroupRequest'
+      responses:
+        '200':
+          description: Group updated; returns the updated questionnaire.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionnaireResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [Questionnaires]
+      operationId: archiveQuestionGroup
+      summary: Archive a group from the active draft version
+      description: Uses archive semantics and returns the updated questionnaire.
+      x-required-roles: [admin, questionnaire_admin]
+      parameters:
+        - $ref: '#/components/parameters/QuestionnaireId'
+        - $ref: '#/components/parameters/GroupId'
+      responses:
+        '200':
+          description: Group archived; returns the updated questionnaire.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionnaireResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /questionnaires/{id}/groups/{groupId}/questions:
+    post:
+      tags: [Questionnaires]
+      operationId: createQuestion
+      summary: Add a question to a draft group
+      x-required-roles: [admin, questionnaire_admin]
+      parameters:
+        - $ref: '#/components/parameters/QuestionnaireId'
+        - $ref: '#/components/parameters/GroupId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateQuestionRequest'
+      responses:
+        '201':
+          description: Question added; returns the updated questionnaire.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionnaireResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /questionnaires/{id}/questions/{questionId}:
+    patch:
+      tags: [Questionnaires]
+      operationId: updateQuestion
+      summary: Update a question in the active draft version
+      x-required-roles: [admin, questionnaire_admin]
+      parameters:
+        - $ref: '#/components/parameters/QuestionnaireId'
+        - $ref: '#/components/parameters/QuestionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateQuestionRequest'
+      responses:
+        '200':
+          description: Question updated; returns the updated questionnaire.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionnaireResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [Questionnaires]
+      operationId: archiveQuestion
+      summary: Archive a question from the active draft version
+      x-required-roles: [admin, questionnaire_admin]
+      parameters:
+        - $ref: '#/components/parameters/QuestionnaireId'
+        - $ref: '#/components/parameters/QuestionId'
+      responses:
+        '200':
+          description: Question archived; returns the updated questionnaire.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionnaireResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /questionnaires/{id}/versions:
     get:
-      summary: Versions d'un questionnaire
-      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      tags: [Versions]
+      operationId: listQuestionnaireVersions
+      summary: List versions for a questionnaire
+      x-required-roles: [admin, questionnaire_admin]
+      parameters:
+        - $ref: '#/components/parameters/QuestionnaireId'
       responses:
-        '200': { description: Versions }
+        '200':
+          description: Version list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
     post:
-      summary: Création version brouillon
-      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      tags: [Versions]
+      operationId: createQuestionnaireVersion
+      summary: Create a new draft questionnaire version
+      x-required-roles: [admin, questionnaire_admin]
+      parameters:
+        - $ref: '#/components/parameters/QuestionnaireId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVersionRequest'
       responses:
-        '201': { description: Version créée }
+        '201':
+          description: Draft version created and audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /versions/{id}/rules:
+    get:
+      tags: [Versions]
+      operationId: listConditionalRules
+      summary: List conditional rules for a version
+      x-required-roles: [admin, questionnaire_admin]
+      parameters:
+        - $ref: '#/components/parameters/VersionId'
+      responses:
+        '200':
+          description: Conditional rules ordered by service policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RulesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Versions]
+      operationId: createConditionalRule
+      summary: Create a conditional rule on a draft version
+      x-required-roles: [admin, questionnaire_admin]
+      parameters:
+        - $ref: '#/components/parameters/VersionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConditionalRuleRequest'
+      responses:
+        '201':
+          description: Conditional rule created and audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /versions/{id}/rules/{ruleId}:
+    patch:
+      tags: [Versions]
+      operationId: updateConditionalRule
+      summary: Update a conditional rule on a draft version
+      x-required-roles: [admin, questionnaire_admin]
+      parameters:
+        - $ref: '#/components/parameters/VersionId'
+        - $ref: '#/components/parameters/RuleId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateConditionalRuleRequest'
+      responses:
+        '200':
+          description: Conditional rule updated and audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [Versions]
+      operationId: archiveConditionalRule
+      summary: Archive a conditional rule on a draft version
+      x-required-roles: [admin, questionnaire_admin]
+      parameters:
+        - $ref: '#/components/parameters/VersionId'
+        - $ref: '#/components/parameters/RuleId'
+      responses:
+        '200':
+          description: Archived rule representation and audit evidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuleResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /versions/{id}/publication-check:
+    get:
+      tags: [Versions]
+      operationId: checkVersionPublication
+      summary: Validate whether a draft version can be published
+      x-required-roles: [admin, questionnaire_admin]
+      parameters:
+        - $ref: '#/components/parameters/VersionId'
+      responses:
+        '200':
+          description: Publication readiness report; validation errors are returned in the report.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationCheckResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /versions/{id}/publish:
     post:
-      summary: Publication immutable après validation
-      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      tags: [Versions]
+      operationId: publishQuestionnaireVersion
+      summary: Publish and make a questionnaire version immutable
+      description: Publication succeeds only after validation and is an audited irreversible transition for the version.
+      x-required-roles: [admin, questionnaire_admin]
+      parameters:
+        - $ref: '#/components/parameters/VersionId'
       responses:
-        '201': { description: Version publiée }
+        '201':
+          description: Version published and immutable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /moderation/invitations:
     get:
-      summary: Suivi des invitations du périmètre
+      tags: [Moderation]
+      operationId: listScopedInvitations
+      summary: List invitations in the moderator or site-manager scope
+      description: Returns masked contact data only.
+      x-required-roles: [moderator, site_manager]
       responses:
-        '200': { description: Invitations }
+        '200':
+          description: Scoped invitation list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
-      summary: Création invitation avec code unique et jeton signé
+      tags: [Moderation]
+      operationId: createInvitation
+      summary: Create an invitation using an approved delivery mode
+      description: |
+        Creates an email, SMS, terminal, paper, or refusal tracking record. Direct contact
+        is encrypted in the identity domain and is never returned in clear form. A
+        `refusal_record` never creates a response session or submission.
+      x-required-roles: [moderator, site_manager]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInvitationRequest'
+            examples:
+              email:
+                value:
+                  questionnaireVersionId: 00000000-0000-4000-8000-000000000001
+                  buildingId: 00000000-0000-4000-8000-000000000002
+                  email: respondent@example.org
+                  deliveryMode: email
+                  assistanceMode: none
+              paper:
+                value:
+                  questionnaireVersionId: 00000000-0000-4000-8000-000000000001
+                  buildingId: 00000000-0000-4000-8000-000000000002
+                  deliveryMode: paper_form
       responses:
-        '201': { description: Invitation créée }
+        '201':
+          description: Invitation created and audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateInvitationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /moderation/invitations/{id}/paper-entry:
+    post:
+      tags: [Moderation]
+      operationId: submitPaperResponses
+      summary: Transcribe and lock a paper-form response
+      description: Valid only for a scoped `paper_form` invitation. Creates a final locked submission and audit evidence.
+      x-required-roles: [moderator, site_manager]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitPaperResponsesRequest'
+      responses:
+        '201':
+          description: Paper responses validated, submitted, locked, and audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmitPaperResponsesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /moderation/invitations/{id}/resend:
     post:
-      summary: Relance d'une invitation non soumise
-      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      tags: [Moderation]
+      operationId: resendInvitation
+      summary: Resend an eligible non-submitted invitation
+      x-required-roles: [moderator, site_manager]
+      parameters:
+        - $ref: '#/components/parameters/Id'
       responses:
-        '201': { description: Relance exécutée ou simulée }
+        '201':
+          description: Invitation delivery retried and audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateInvitationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /moderation/terminal-devices:
+    get:
+      tags: [Moderation, Terminals]
+      operationId: listTerminalDevicesForModeration
+      summary: List terminal devices through the moderation route
+      x-required-roles: [moderator, site_manager, technical_admin]
+      responses:
+        '200':
+          description: Scoped terminal-device list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalDevicesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Moderation, Terminals]
+      operationId: registerTerminalDeviceForModeration
+      summary: Register a terminal device through the moderation route
+      x-required-roles: [technical_admin, site_manager]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTerminalDeviceRequest'
+      responses:
+        '201':
+          description: Terminal registered; clear launch credential returned once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalCredentialResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /respondent/session:
     get:
-      summary: Résolution du jeton répondant
-      security: [{ respondentToken: [] }]
+      tags: [Respondent]
+      operationId: getRespondentSession
+      summary: Resolve or resume the token-bound respondent session
+      description: Returns questionnaire/session data only; never clear respondent contact.
+      security:
+        - respondentQueryToken: []
+      parameters:
+        - $ref: '#/components/parameters/RespondentToken'
+        - $ref: '#/components/parameters/OptionalTerminalToken'
       responses:
-        '200': { description: Session répondant et questionnaire rendu }
-        '401': { description: Jeton invalide }
-        '403': { description: Jeton expiré ou invitation bloquée }
+        '200':
+          description: Token-bound respondent session and questionnaire.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespondentSessionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
   /respondent/answers:
     put:
-      summary: Sauvegarde autosave des réponses brouillon
-      security: [{ respondentToken: [] }]
+      tags: [Respondent]
+      operationId: saveRespondentAnswers
+      summary: Autosave validated draft answers
+      description: Uses the secret token in the JSON body. Terminal-bound sessions also require `terminalToken`.
+      security: []
+      x-auth-model: respondent-body-token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveAnswersRequest'
       responses:
-        '200': { description: Réponses sauvegardées }
+        '200':
+          description: Answers saved; identifiability warnings may be returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveAnswersResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
   /respondent/telemetry:
     post:
-      summary: Enregistrement télémétrie popup/navigation/temps
-      security: [{ respondentToken: [] }]
+      tags: [Respondent]
+      operationId: recordRespondentTelemetry
+      summary: Record an allowed respondent interaction event
+      description: The event allow-list excludes answer content and direct contact. Uses a secret body token.
+      security: []
+      x-auth-model: respondent-body-token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelemetryRequest'
       responses:
-        '201': { description: Evénement enregistré }
+        '201':
+          description: Telemetry event accepted.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /respondent/submit:
     post:
-      summary: Soumission finale verrouillée
-      security: [{ respondentToken: [] }]
+      tags: [Respondent]
+      operationId: submitRespondentSession
+      summary: Finalize and irreversibly lock the respondent session
+      description: Uses a secret body token. Subsequent answer changes/submission attempts are rejected.
+      security: []
+      x-auth-model: respondent-body-token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RespondentTokenBody'
       responses:
-        '201': { description: Soumission créée et verrouillée }
+        '201':
+          description: Submission created; response session and answers locked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmitResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /terminal/session:
+    get:
+      tags: [Terminals]
+      operationId: getTerminalSession
+      summary: Resolve a managed terminal and its pending invitations
+      security:
+        - terminalQueryToken: []
+      parameters:
+        - name: token
+          in: query
+          required: true
+          description: Managed terminal secret. Do not log or expose in analytics.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 512
+      responses:
+        '200':
+          description: Terminal identity and scoped pending invitations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalSessionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /terminal/invitations/{id}/open:
+    post:
+      tags: [Terminals]
+      operationId: openTerminalInvitation
+      summary: Open an eligible invitation assigned to a managed terminal
+      description: Exchanges a valid terminal assignment for a respondent access token/link.
+      security: []
+      x-auth-model: terminal-body-token
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TerminalTokenBody'
+      responses:
+        '201':
+          description: Invitation opened; respondent secret returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenTerminalInvitationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /terminal-devices:
+    get:
+      tags: [Terminals]
+      operationId: listTerminalDevices
+      summary: List terminal devices visible to the current staff user
+      x-required-roles: [admin, technical_admin, site_manager, moderator]
+      responses:
+        '200':
+          description: Scoped terminal-device list. Moderator access is read-only.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalDevicesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Terminals]
+      operationId: createTerminalDevice
+      summary: Create a terminal device and return its launch secret once
+      x-required-roles: [admin, technical_admin, site_manager]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTerminalDeviceRequest'
+      responses:
+        '201':
+          description: Terminal created; clear token/link returned once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalCredentialResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /terminal-devices/{id}:
+    patch:
+      tags: [Terminals]
+      operationId: updateTerminalDevice
+      summary: Update the label or lifecycle status of a terminal device
+      x-required-roles: [admin, technical_admin, site_manager]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTerminalDeviceRequest'
+      responses:
+        '200':
+          description: Terminal device updated and audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalDeviceMutationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /terminal-devices/{id}/revoke:
+    post:
+      tags: [Terminals]
+      operationId: revokeTerminalDevice
+      summary: Revoke a terminal device and its access token
+      x-required-roles: [admin, technical_admin, site_manager]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '201':
+          description: Terminal revoked and action audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalDeviceMutationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /terminal-devices/{id}/regenerate-token:
+    post:
+      tags: [Terminals]
+      operationId: regenerateTerminalDeviceToken
+      summary: Invalidate the old terminal token and return a new one once
+      x-required-roles: [admin, technical_admin, site_manager]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '201':
+          description: Prior terminal token invalidated; new clear token/link returned once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalCredentialResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /stats/questionnaires/{id}:
     get:
-      summary: Statistiques agrégées seuillées
-      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      tags: [Statistics]
+      operationId: getQuestionnaireStatistics
+      summary: Read threshold-protected questionnaire statistics
+      description: Granular values below the configured minimum group size are suppressed. The read is audited.
+      x-required-roles: [admin, site_manager, questionnaire_admin, analyst]
+      parameters:
+        - $ref: '#/components/parameters/QuestionnaireId'
       responses:
-        '200': { description: Volumes, durées, completion, seuil anti-réidentification }
+        '200':
+          description: Scoped aggregate statistics and eligible pseudonymized rows.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /stats/questions/{id}:
+    get:
+      tags: [Statistics]
+      operationId: getQuestionStatistics
+      summary: Read threshold-protected statistics for one question
+      description: Free-text access and small-cell disclosure depend on role and service suppression rules. The read is audited.
+      x-required-roles: [admin, site_manager, questionnaire_admin, analyst]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Scoped question statistics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionStatsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /stats/submissions/{publicCode}:
     get:
-      summary: Soumission pseudonymisée par code public
-      parameters: [{ name: publicCode, in: path, required: true, schema: { type: string } }]
+      tags: [Statistics]
+      operationId: getPseudonymizedSubmission
+      summary: Read analyst-only pseudonymized submission detail
+      description: Contains no direct contact but may contain sensitive answers/free text. Every read is audited.
+      x-required-roles: [analyst]
+      parameters:
+        - $ref: '#/components/parameters/PublicCode'
       responses:
-        '200': { description: Soumission sans email }
+        '200':
+          description: Pseudonymized submission detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionDetailsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /notifications/subscriptions:
     get:
-      summary: Préférences de notification
-      responses: { '200': { description: Subscriptions } }
-    post:
-      summary: Création préférence notification
-      responses: { '201': { description: Subscription créée } }
-  /audit-logs:
-    get:
-      summary: Journaux d'audit selon habilitation
+      tags: [Notifications]
+      operationId: listNotificationSubscriptions
+      summary: List notification subscriptions for the current staff user
+      x-required-roles: [admin, moderator, site_manager, questionnaire_admin, analyst]
       responses:
-        '200': { description: Audit logs }
+        '200':
+          description: Scoped subscriptions owned by the current user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationSubscriptionsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Notifications]
+      operationId: upsertNotificationSubscription
+      summary: Create or update a notification subscription
+      description: Scope is checked against the current user's building/questionnaire permissions.
+      x-required-roles: [admin, moderator, site_manager, questionnaire_admin, analyst]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertNotificationSubscriptionRequest'
+      responses:
+        '201':
+          description: Subscription created or updated and audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationSubscriptionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /notifications/daily-digests/run:
+    post:
+      tags: [Notifications]
+      operationId: runDailyNotificationDigests
+      summary: Process notification subscriptions with due daily digests
+      description: Intended for an authenticated controlled scheduler/administrator workflow.
+      x-required-roles: [admin, technical_admin]
+      responses:
+        '201':
+          description: Due daily digests processed; result may be a dry run depending on provider configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DigestRunResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /compliance/technical-register:
     get:
-      summary: Registre technique RGPD simplifié
+      tags: [Compliance]
+      operationId: getTechnicalProcessingRegister
+      summary: Read the generated technical processing register
+      description: Technical inventory only; it does not replace the controller's approved Article 30 record or DPIA.
+      x-required-roles: [admin, analyst, dpo, technical_admin, judicial_officer]
       responses:
-        '200': { description: Registre }
+        '200':
+          description: Technical processing register for the current role.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TechnicalRegisterResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /compliance/retention-policy:
     get:
-      summary: Politique de conservation et purge
+      tags: [Compliance]
+      operationId: getRetentionPolicy
+      summary: Read configured retention and cleanup rules
+      x-required-roles: [admin, analyst, dpo, technical_admin, judicial_officer]
       responses:
-        '200': { description: Politique }
+        '200':
+          description: Current technical retention rules, parameters, and known limitations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetentionPolicyResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /compliance/maintenance/expire-invitations:
+    post:
+      tags: [Compliance]
+      operationId: expireInvitations
+      summary: Expire invitations past the configured token lifetime
+      description: Audited maintenance action that must not alter final submissions.
+      x-required-roles: [admin, technical_admin]
+      responses:
+        '201':
+          description: Expiry job completed with counts and execution time.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /compliance/maintenance/cleanup-drafts:
+    post:
+      tags: [Compliance]
+      operationId: cleanupExpiredDrafts
+      summary: Delete stale draft response sessions under retention policy
+      description: Audited maintenance action; final submissions and locked answers are preserved.
+      x-required-roles: [admin, technical_admin]
+      responses:
+        '201':
+          description: Draft cleanup completed with cutoffs/counts and execution time.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /compliance/maintenance/run-retention:
+    post:
+      tags: [Compliance]
+      operationId: runCompleteRetentionCycle
+      summary: Run the complete configured retention cycle immediately
+      description: Expires invitations, removes stale drafts and expired submitted records, scrubs identity mappings, expires judicial exports, and prunes audit records. The same cycle runs on the configured production schedule.
+      x-required-roles: [technical_admin]
+      responses:
+        '201':
+          description: Retention cycle completed or reported that another cycle is already running.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /compliance/exports/pseudonymized:
     get:
-      summary: Export pseudonymisé sans base identité
+      tags: [Compliance]
+      operationId: exportPseudonymizedSubmissions
+      summary: Produce a threshold-aware pseudonymized export
+      description: Excludes direct contact, contact hashes/ciphertext, secrets, and the identity schema. The export remains sensitive and is fingerprinted/audited.
+      x-required-roles: [admin, analyst]
+      parameters:
+        - $ref: '#/components/parameters/QuestionnaireIdQuery'
       responses:
-        '200': { description: Export, empreinte et seuils, schema: { $ref: '#/components/schemas/PseudonymizedExport' } }
+        '200':
+          description: Pseudonymized export with suppression metadata and SHA-256 fingerprint.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PseudonymizedExportResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /identity-vault/status:
+    get:
+      tags: [Identity boundary]
+      operationId: getIdentityVaultBoundaryStatus
+      summary: Read identity-boundary architecture and access-mode status
+      description: Returns no decrypted contact, ciphertext, hash, or mapping.
+      x-required-roles: [technical_admin]
+      responses:
+        '200':
+          description: Identity-vault boundary status and audit-control description.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityVaultStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /identity-vault/access-attempt:
+    post:
+      tags: [Identity boundary]
+      operationId: recordIdentityVaultAccessAttempt
+      summary: Record a web identity-access attempt without disclosing identity data
+      description: This endpoint is evidence/control behavior, not an identity lookup. Actual approved export uses the double-validated DPO workflow.
+      x-error-only: true
+      x-required-roles: [technical_admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IdentityVaultAccessAttemptRequest'
+      responses:
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /judicial-access/requests:
     get:
-      summary: Liste des demandes judiciaires habilitées
+      tags: [Judicial workflow]
+      operationId: listJudicialRequests
+      summary: List exceptional legal-access workflow records
+      description: Records contain authorization/secure-document metadata, not unrestricted contact mappings.
+      x-required-roles: [judicial_officer, dpo]
       responses:
-        '200': { description: Demandes }
+        '200':
+          description: Judicial request workflow records.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudicialRequestsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
-      summary: Création demande judiciaire exceptionnelle
+      tags: [Judicial workflow]
+      operationId: createJudicialRequest
+      summary: Record a new exceptional legal-access request
+      x-required-roles: [judicial_officer]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateJudicialRequest'
       responses:
-        '201': { description: Demande créée }
-components:
-  responses:
-    Forbidden:
-      description: Droits insuffisants
-      content:
-        application/json:
-          schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '201':
+          description: Request recorded in received state and audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudicialRequestResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /judicial-access/requests/{id}/validate-dpo:
+    post:
+      tags: [Judicial workflow]
+      operationId: validateJudicialRequestByDpoStage
+      summary: Record the DPO validation stage for a request
+      description: Independent DPO approval. The DPO and legal validation stages must both exist before execution.
+      x-required-roles: [dpo]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JudicialWorkflowComment'
+      responses:
+        '201':
+          description: DPO validation stage recorded and audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudicialRequestResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /judicial-access/requests/{id}/validate-legal:
+    post:
+      tags: [Judicial workflow]
+      operationId: validateJudicialRequestByLegalStage
+      summary: Record the legal validation stage for a request
+      x-required-roles: [judicial_officer]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JudicialWorkflowComment'
+      responses:
+        '201':
+          description: Legal validation stage recorded and audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudicialRequestResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /judicial-access/requests/{id}/reject:
+    post:
+      tags: [Judicial workflow]
+      operationId: rejectJudicialRequest
+      summary: Reject an exceptional legal-access request
+      x-required-roles: [judicial_officer, dpo]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectJudicialRequest'
+      responses:
+        '201':
+          description: Request rejected with reason and audit evidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudicialRequestResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /judicial-access/requests/{id}/execute:
+    post:
+      tags: [Judicial workflow]
+      operationId: executeJudicialRequest
+      summary: Produce an encrypted minimal export after double validation
+      description: DPO-only execution after both DPO and legal validation. The response contains no plaintext contact data and expires under the configured export TTL.
+      x-required-roles: [dpo]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '201':
+          description: Encrypted export envelope produced, fingerprinted, expiry-stamped, and audited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudicialExecutionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /judicial-access/requests/{id}/close:
+    post:
+      tags: [Judicial workflow]
+      operationId: closeJudicialRequest
+      summary: Close an executed judicial workflow with final comments
+      x-required-roles: [judicial_officer]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JudicialWorkflowComment'
+      responses:
+        '201':
+          description: Workflow closed with closure evidence and audit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudicialRequestResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /audit-logs:
+    get:
+      tags: [Audit]
+      operationId: listAuditLogs
+      summary: List recent operational audit records
+      description: Returns at most 200 recent rows and always restricts results to the caller's organization. The response must never be treated as an unrestricted secret/contact/answer search.
+      x-required-roles: [admin, dpo, judicial_officer, technical_admin]
+      parameters:
+        - $ref: '#/components/parameters/AuditLimit'
+      responses:
+        '200':
+          description: Recent audit records visible to the authorized role.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'

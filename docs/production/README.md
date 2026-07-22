@@ -1,16 +1,26 @@
-# Production / préproduction
+# Production handover and runbooks
 
-Documents livrés pour les passes 8 et 9 :
+These runbooks describe the repository's operational baseline. They must be adapted to the target organization's infrastructure, contacts, legal decisions, recovery objectives, and security policy.
 
-- `installation.md` : recréer une préproduction depuis dépôt + variables + migrations.
-- `exploitation.md` : services, healthchecks, métriques, alertes et logs.
-- `incident-response.md` : procédure incident / violation potentielle.
-- `backup-restore.md` : sauvegarde chiffrée et test de restauration.
-- `judicial-access.md` : accès exceptionnel email-code.
-- `retention-purge.md` : conservation, purge, expiration.
-- `respondent-notice.md` : notice répondant prête à intégrer.
-- `rgpd-register.md` : registre RGPD finalisable.
-- `aipd-checklist.md` : checklist AIPD.
+| Document | Purpose |
+| --- | --- |
+| [Installation](installation.md) | Install, configure, validate, bootstrap, upgrade, and hand over production |
+| [Go-live record](go-live-checklist.md) | Client evidence checklist and formal go/no-go signatures |
+| [Operations](exploitation.md) | Services, health, metrics, alerts, logs, maintenance, and routine checks |
+| [Backup and restore](backup-restore.md) | Encrypted backups and isolated restoration tests |
+| [Incident response](incident-response.md) | Containment, evidence, privacy assessment, recovery, and closure |
+| [Retention and purge](retention-purge.md) | Configured lifetimes and safe maintenance actions |
+| [Respondent notice](respondent-notice.md) | English baseline notice requiring local approval/localization |
+| [GDPR processing register](rgpd-register.md) | Technical draft for the controller's formal record |
+| [DPIA checklist](aipd-checklist.md) | Screening and approval questions for high-risk processing |
+| [Exceptional identity access](judicial-access.md) | DPO-controlled code-to-contact procedure |
 
-Référentiel de recette : `docs/recette/`.
-OpenAPI : `docs/openapi.yaml`.
+Acceptance evidence is organized under [docs/recette](../recette/README.md). The API contract is [docs/openapi.yaml](../openapi.yaml).
+
+## Release gate
+
+The application contains a production deployment reference, OIDC with MFA enforcement, least-privilege database roles, durable delivery queues, automatic retention, complete OpenAPI coverage, and controlled judicial export. This makes it technically deployable; it does not manufacture client-specific evidence.
+
+Production requires all placeholders to be replaced, immutable image digests, migrations and health checks to pass, signed privacy/legal decisions, security and accessibility acceptance, tested restoration, monitored alerts, incident rehearsal, identity-access rehearsal, and client-approved OIDC/provider configuration.
+
+Documentation marked “draft,” “recommended,” or “to be approved” is not a passed control.

@@ -4,8 +4,8 @@ import { createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 
 import HomeView from '@/views/HomeView.vue'
+import ProjectAdministrationView from '@/views/ProjectAdministrationView.vue'
 import AdminBuilderView from '@/views/AdminBuilderView.vue'
-import RespondentView from '@/views/RespondentView.vue'
 import ModeratorView from '@/views/ModeratorView.vue'
 import StatsView from '@/views/StatsView.vue'
 import AccessDeniedView from '@/views/AccessDeniedView.vue'
@@ -28,21 +28,25 @@ function makeRouter() {
         meta: { label: 'Accueil', allowedRoles: allRoles, requiresAuthenticatedUser: true },
       },
       {
+        path: '/administration-projet',
+        component: ProjectAdministrationView,
+        meta: {
+          label: 'Administration projet',
+          allowedRoles: ['admin'],
+          requiresAuthenticatedUser: true,
+        },
+      },
+      {
         path: '/admin',
         component: AdminBuilderView,
         meta: { label: 'Admin', allowedRoles: ['admin'], requiresAuthenticatedUser: true },
-      },
-      {
-        path: '/questionnaire',
-        component: RespondentView,
-        meta: { label: 'Questionnaire', allowedRoles: allRoles, requiresAuthenticatedUser: true },
       },
       {
         path: '/moderation',
         component: ModeratorView,
         meta: {
           label: 'Modération',
-          allowedRoles: ['admin', 'moderator'],
+          allowedRoles: ['moderator', 'site_manager'],
           requiresAuthenticatedUser: true,
         },
       },
@@ -92,8 +96,8 @@ describe('HomeView', () => {
 
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.text()).toContain('Application connectée')
-    expect(wrapper.text()).toContain('Constructeur de questionnaire')
+    expect(wrapper.text()).toContain('Espace de travail')
+    expect(wrapper.text()).toContain('Administration projet')
     expect(wrapper.text()).toContain('Vos modules')
     expect(wrapper.text()).toContain('Statistiques')
     expect(wrapper.text()).not.toContain('Architecture')

@@ -40,8 +40,8 @@ __screenshots__/
 
 .env
 
-package-lock.json
 .env.preprod
+.env.production
 backups/
 ops/tls-dev/
 *.tar.enc

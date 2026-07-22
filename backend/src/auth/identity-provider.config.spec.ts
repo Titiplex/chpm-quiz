@@ -27,7 +27,7 @@ describe('IdentityProviderConfigService', () => {
       callbackPath: '/callback',
       enabled: true,
     })
-    expect(service({ AUTH_PROVIDER: 'saml', AUTH_SAML_ENTITY_ID: 'entity-id' }).getConfig()).toMatchObject({ provider: 'saml', issuer: 'entity-id', enabled: true })
+    expect(service({ AUTH_PROVIDER: 'saml', AUTH_SAML_ENTITY_ID: 'entity-id' }).getConfig()).toMatchObject({ provider: 'saml', issuer: 'entity-id', enabled: false })
   })
 
   it('falls back to local for unknown providers', () => {

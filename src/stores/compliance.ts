@@ -57,21 +57,9 @@ export const useComplianceStore = defineStore('compliance', () => {
     })
   }
 
-  async function purgeExpiredTokens(): Promise<void> {
-    await runMaintenance('/compliance/maintenance/purge-expired-tokens', (response) => {
-      message.value = `${response.result.purgedTokenCount ?? 0} token(s) expiré(s) neutralisé(s).`
-    })
-  }
-
-  async function purgeExpiredExports(): Promise<void> {
-    await runMaintenance('/compliance/maintenance/purge-expired-exports', (response) => {
-      message.value = `${response.result.purgedCount ?? 0} export(s) expiré(s) purgé(s).`
-    })
-  }
-
-  async function purgeOutOfRetentionData(): Promise<void> {
-    await runMaintenance('/compliance/maintenance/purge-out-of-retention-data', (response) => {
-      message.value = `${response.result.deletedResponseSessionCount ?? 0} session(s) hors conservation supprimée(s).`
+  async function runRetention(): Promise<void> {
+    await runMaintenance('/compliance/maintenance/run-retention', (response) => {
+      message.value = `Cycle de conservation exécuté : ${response.result.expiredInvitationCount ?? 0} invitation(s), ${response.result.deletedDraftSessionCount ?? 0} brouillon(s) et ${response.result.deletedSubmittedSessionCount ?? 0} réponse(s) traités.`
     })
   }
 
@@ -82,7 +70,9 @@ export const useComplianceStore = defineStore('compliance', () => {
 
     try {
       const query = questionnaireId ? `?questionnaireId=${encodeURIComponent(questionnaireId)}` : ''
-      const response = await apiRequest<PseudonymizedExportResponse>(`/compliance/exports/pseudonymized${query}`)
+      const response = await apiRequest<PseudonymizedExportResponse>(
+        `/compliance/exports/pseudonymized${query}`,
+      )
       exportPayload.value = response.export
       message.value = `Export pseudonymisé généré : ${response.export.rowCount} ligne(s), empreinte ${response.export.fingerprint.slice(0, 12)}…`
       status.value = 'ready'
@@ -98,11 +88,14 @@ export const useComplianceStore = defineStore('compliance', () => {
   }
 
   async function fetchAuditLogs(): Promise<void> {
-    const auditResponse = await apiRequest<AuditLogsResponse>('/audit-logs?limit=30')
+    const auditResponse = await apiRequest<AuditLogsResponse>('/audit-logs')
     auditLogs.value = auditResponse.logs
   }
 
-  async function runMaintenance(path: string, onSuccess: (response: ComplianceMaintenanceResponse) => void): Promise<void> {
+  async function runMaintenance(
+    path: string,
+    onSuccess: (response: ComplianceMaintenanceResponse) => void,
+  ): Promise<void> {
     status.value = 'saving'
     error.value = null
     message.value = null
@@ -133,9 +126,7 @@ export const useComplianceStore = defineStore('compliance', () => {
     fetchAll,
     expireInvitations,
     cleanupDrafts,
-    purgeExpiredTokens,
-    purgeExpiredExports,
-    purgeOutOfRetentionData,
+    runRetention,
     fetchPseudonymizedExport,
   }
 })

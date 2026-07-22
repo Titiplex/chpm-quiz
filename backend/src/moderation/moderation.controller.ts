@@ -8,6 +8,7 @@ import { RolesGuard } from '../common/guards/roles.guard'
 import { SessionAuthGuard } from '../common/guards/session-auth.guard'
 import { CreateInvitationDto } from './dto/create-invitation.dto'
 import { RegisterTerminalDeviceDto } from './dto/register-terminal-device.dto'
+import { SubmitPaperResponsesDto } from './dto/submit-paper-responses.dto'
 import { ModerationService } from './moderation.service'
 
 @UseGuards(SessionAuthGuard, RolesGuard)
@@ -16,33 +17,45 @@ export class ModerationController {
   constructor(private readonly moderationService: ModerationService) {}
 
   @Get('invitations')
-  @Roles('admin', 'moderator', 'site_manager', 'analyst', 'dpo')
+  @Roles('moderator', 'site_manager')
   async list(@CurrentUser() user: AuthenticatedUser) {
     const invitations = await this.moderationService.listForUser(user)
     return { invitations }
   }
 
   @Post('invitations')
-  @Roles('admin', 'moderator', 'site_manager')
+  @Roles('moderator', 'site_manager')
   async create(@Body() dto: CreateInvitationDto, @CurrentUser() user: AuthenticatedUser, @Req() request: Request) {
     return this.moderationService.create(user, dto, request)
   }
 
+
+  @Post('invitations/:id/paper-entry')
+  @Roles('moderator', 'site_manager')
+  async submitPaperResponses(
+    @Param('id') id: string,
+    @Body() dto: SubmitPaperResponsesDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: Request,
+  ) {
+    return this.moderationService.submitPaperResponses(user, id, dto, request)
+  }
+
   @Post('invitations/:id/resend')
-  @Roles('admin', 'moderator', 'site_manager')
+  @Roles('moderator', 'site_manager')
   async resend(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser, @Req() request: Request) {
     return this.moderationService.resend(user, id, request)
   }
 
   @Get('terminal-devices')
-  @Roles('admin', 'moderator', 'site_manager', 'technical_admin')
+  @Roles('moderator', 'site_manager', 'technical_admin')
   async listTerminalDevices(@CurrentUser() user: AuthenticatedUser) {
     const terminalDevices = await this.moderationService.listTerminalDevices(user)
     return { terminalDevices }
   }
 
   @Post('terminal-devices')
-  @Roles('admin', 'technical_admin', 'site_manager')
+  @Roles('technical_admin', 'site_manager')
   async registerTerminalDevice(@Body() dto: RegisterTerminalDeviceDto, @CurrentUser() user: AuthenticatedUser, @Req() request: Request) {
     return this.moderationService.registerTerminalDevice(user, dto, request)
   }

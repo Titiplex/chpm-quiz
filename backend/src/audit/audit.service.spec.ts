@@ -43,13 +43,18 @@ describe('AuditService', () => {
     })
   })
 
-  it('clamps list limits to the supported range', async () => {
+  it('scopes logs by organization and caps result size', async () => {
     const { service, prisma } = makeService()
 
-    await service.list(999)
-    expect(prisma.auditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 250 }))
+    await service.listForUser({ organizationId: 'org-1' } as any)
+    expect(prisma.auditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { organizationId: 'org-1' },
+      take: 100,
+    }))
 
-    await service.list(-5)
-    expect(prisma.auditLog.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ take: 1 }))
+    await service.listForUser({ organizationId: 'org-1' } as any, 999)
+    expect(prisma.auditLog.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ take: 200 }))
+
+    await expect(service.listForUser({ organizationId: null } as any)).resolves.toEqual([])
   })
 })

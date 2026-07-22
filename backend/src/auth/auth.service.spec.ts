@@ -28,7 +28,7 @@ const activeUser = {
 
 function makeService(overrides: Record<string, unknown> = {}, configOverrides: Record<string, unknown> = {}) {
   const prisma = {
-    user: { findUnique: vi.fn(async () => activeUser) },
+    user: { findUnique: vi.fn(async () => activeUser), update: vi.fn(async (args: any) => ({ ...activeUser, ...args.data })) },
     session: {
       create: vi.fn(async (args: unknown) => args),
       findUnique: vi.fn(async () => null),

@@ -10,6 +10,7 @@ import { adminLikeRoles, type UserRole } from '../auth/role-permissions'
 import { assertCanAccessQuestionnaire } from '../common/access-scope'
 import { PrismaService } from '../prisma/prisma.service'
 import type { CreateQuestionnaireDto } from './dto/create-questionnaire.dto'
+import type { CreateTranslationDto } from './dto/create-translation.dto'
 import type {
   CreateQuestionDto,
   CreateQuestionGroupDto,
@@ -116,6 +117,173 @@ export class QuestionnairesService {
     })
 
     return this.toApiQuestionnaire(questionnaire, questionnaire.versions[0])
+  }
+
+  async createTranslationDraft(id: string, dto: CreateTranslationDto, user: AuthenticatedUser) {
+    await this.assertCanConfigure(id, user)
+    const source = await this.prisma.questionnaire.findUnique({
+      where: { id },
+      include: {
+        versions: {
+          orderBy: [{ updatedAt: 'desc' }],
+          include: this.versionCloneInclude(),
+        },
+      },
+    })
+
+    if (!source || !source.versions.length) {
+      throw new NotFoundException('Questionnaire source introuvable')
+    }
+
+    const sourceVersion = source.versions.find((version: any) => version.status === draftStatus) ?? source.versions[0]
+    if (sourceVersion.language === dto.language) {
+      throw new BadRequestException('La traduction doit utiliser une autre langue que la source')
+    }
+
+    const code = normalizeCode(`${source.code}-${dto.language}`)
+    const existing = await this.prisma.questionnaire.findUnique({ where: { code } })
+    if (existing) {
+      throw new ConflictException(`Une traduction ${dto.language.toUpperCase()} existe déjà pour ce questionnaire`)
+    }
+
+    const translatedQuestionnaire = await this.prisma.$transaction(async (tx: any) => {
+      const questionnaire = await tx.questionnaire.create({
+        data: {
+          code,
+          title: dto.title?.trim() || `${source.title} (${dto.language.toUpperCase()})`,
+          description: cleanOptionalText(dto.description) ?? source.description,
+          defaultLanguage: dto.language,
+          finality: cleanOptionalText(dto.finality) ?? source.finality,
+          status: draftStatus,
+          ownerUserId: user.id,
+          organizationId: source.organizationId,
+        },
+      })
+      const version = await tx.questionnaireVersion.create({
+        data: {
+          questionnaireId: questionnaire.id,
+          versionLabel: defaultDraftVersionLabel,
+          language: dto.language,
+          status: draftStatus,
+          description: cleanOptionalText(dto.description) ?? sourceVersion.description ?? source.description,
+          finality: cleanOptionalText(dto.finality) ?? sourceVersion.finality ?? source.finality,
+          openFrom: sourceVersion.openFrom,
+          openUntil: sourceVersion.openUntil,
+        },
+      })
+
+      const groupIdMap = new Map<string, string>()
+      const questionIdMap = new Map<string, string>()
+      for (const group of sourceVersion.groups) {
+        const clonedGroup = await tx.questionGroup.create({
+          data: {
+            questionnaireVersionId: version.id,
+            title: group.title,
+            description: group.description,
+            displayOrder: group.displayOrder,
+            questionsPerPage: group.questionsPerPage,
+            randomize: group.randomize,
+            conditionExpression: null,
+          },
+        })
+        groupIdMap.set(group.id, clonedGroup.id)
+
+        for (const question of group.questions) {
+          const clonedQuestion = await tx.question.create({
+            data: {
+              groupId: clonedGroup.id,
+              code: question.code,
+              language: dto.language,
+              label: question.label,
+              helperText: question.helperText,
+              responseType: question.responseType,
+              isRequired: question.isRequired,
+              displayOrder: question.displayOrder,
+              tags: question.tags,
+              conditionExpression: null,
+            },
+          })
+          questionIdMap.set(question.id, clonedQuestion.id)
+
+          if (question.likertScale) {
+            await tx.likertScale.create({
+              data: {
+                questionId: clonedQuestion.id,
+                points: question.likertScale.points,
+                minValue: question.likertScale.minValue,
+                leftAnchor: question.likertScale.leftAnchor,
+                rightAnchor: question.likertScale.rightAnchor,
+                neutralLabel: question.likertScale.neutralLabel,
+                allowNotApplicable: question.likertScale.allowNotApplicable,
+                orientation: question.likertScale.orientation,
+              },
+            })
+          }
+
+          if (question.answerOptions.length) {
+            await tx.answerOption.createMany({
+              data: question.answerOptions.map((option: any) => ({
+                questionId: clonedQuestion.id,
+                value: option.value,
+                label: option.label,
+                displayOrder: option.displayOrder,
+                isExclusive: option.isExclusive,
+              })),
+            })
+          }
+
+          for (const popup of question.popupDefinitions) {
+            await tx.popupDefinition.create({
+              data: {
+                questionId: clonedQuestion.id,
+                termKey: popup.termKey,
+                language: dto.language,
+                title: popup.title,
+                body: popup.body,
+                version: popup.version,
+                isRequired: popup.isRequired,
+              },
+            })
+          }
+        }
+      }
+
+      for (const group of sourceVersion.groups) {
+        const clonedGroupId = groupIdMap.get(group.id)
+        if (clonedGroupId && group.conditionExpression) {
+          await tx.questionGroup.update({
+            where: { id: clonedGroupId },
+            data: { conditionExpression: this.rewriteClonedReferences(group.conditionExpression, groupIdMap, questionIdMap) },
+          })
+        }
+        for (const question of group.questions) {
+          const clonedQuestionId = questionIdMap.get(question.id)
+          if (clonedQuestionId && question.conditionExpression) {
+            await tx.question.update({
+              where: { id: clonedQuestionId },
+              data: { conditionExpression: this.rewriteClonedReferences(question.conditionExpression, groupIdMap, questionIdMap) },
+            })
+          }
+        }
+      }
+
+      for (const rule of sourceVersion.conditionalRules) {
+        await tx.conditionalRule.create({
+          data: {
+            questionnaireVersionId: version.id,
+            code: rule.code,
+            trigger: this.rewriteClonedReferences(rule.trigger, groupIdMap, questionIdMap),
+            effect: this.rewriteClonedReferences(rule.effect, groupIdMap, questionIdMap),
+            priority: rule.priority,
+            isActive: rule.isActive,
+          },
+        })
+      }
+
+      return questionnaire
+    })
+
+    return this.returnEditableQuestionnaire(translatedQuestionnaire.id)
   }
 
   async updateQuestionnaire(id: string, dto: UpdateQuestionnaireDto, user: AuthenticatedUser) {
@@ -934,4 +1102,3 @@ function normalizeTermKey(value: string): string {
 
   return normalized || 'terme_explique'
 }
-

@@ -1,5 +1,6 @@
 import { BadRequestException, INestApplication, ValidationError, ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
+import { ConfigService } from '@nestjs/config'
 import request from 'supertest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -9,6 +10,7 @@ import { AuditController } from './audit/audit.controller'
 import { AuditService } from './audit/audit.service'
 import { AuthController } from './auth/auth.controller'
 import { AuthService } from './auth/auth.service'
+import { OidcService } from './auth/oidc.service'
 import type { AuthenticatedUser } from './auth/auth.types'
 import { RolesGuard } from './common/guards/roles.guard'
 import { SessionAuthGuard } from './common/guards/session-auth.guard'
@@ -107,7 +109,7 @@ describe('API route contracts', () => {
   }
   const auditService = {
     log: vi.fn(async () => undefined),
-    list: vi.fn(async () => [{ id: 'audit-1' }]),
+    listForUser: vi.fn(async () => [{ id: 'audit-1' }]),
   }
   const judicialService = {
     list: vi.fn(async () => [{ id: 'judicial-1' }]),
@@ -135,6 +137,8 @@ describe('API route contracts', () => {
       ],
       providers: [
         { provide: AuthService, useValue: authService },
+        { provide: OidcService, useValue: { enabled: vi.fn(() => false), createAuthorizationUrl: vi.fn(), completeAuthorization: vi.fn() } },
+        { provide: ConfigService, useValue: { get: vi.fn((_: string, fallback?: string) => fallback) } },
         { provide: QuestionnairesService, useValue: questionnairesService },
         { provide: VersionsService, useValue: versionsService },
         { provide: ModerationService, useValue: moderationService },

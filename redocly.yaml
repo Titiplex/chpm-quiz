@@ -1,0 +1,6 @@
+extends:
+  - recommended
+rules:
+  # Three defensive endpoints intentionally return errors only in the current build.
+  # `scripts/validate-documentation.mjs` enforces 2xx responses on every other operation.
+  operation-2xx-response: off

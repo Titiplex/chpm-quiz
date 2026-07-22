@@ -1,26 +1,52 @@
-# Matrice permissions finale
+# Permissions and scope matrix
 
-Légende : `✓` autorisé, `●` autorisé sous condition de périmètre/procédure, `✗` interdit.
+Legend: `Yes` means allowed within the stated scope; `Conditional` requires the stated exceptional procedure; `No` means prohibited. This matrix documents intended behavior. NestJS guards and service-level checks are authoritative enforcement.
 
-| Action | Répondant | Modérateur | Resp. site | Admin quest. | Analyste | Admin global | DPO | Judiciaire | Tech admin |
+The persisted technical role `admin` means **project administrator/researcher**, not an identity/DPO super-administrator.
+
+| Action | Respondent | Moderator | Site manager | Questionnaire admin | Analyst | Project admin | DPO | Judicial officer | Technical admin |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Répondre au questionnaire assigné | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| Reprendre brouillon non soumis | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| Soumettre définitivement | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| Créer invitation | ✗ | ✓ | ● | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ |
-| Voir statut invitation dans périmètre | ✗ | ✓ | ✓ | ✗ | ● | ✓ | ● | ✗ | ✗ |
-| Voir email invité | ✗ | ● | ✗ | ✗ | ✗ | ✗ | ✗ | ● | ✗ |
-| Modifier questionnaire brouillon | ✗ | ✗ | ✗ | ✓ | ✗ | ✓ | ● | ✗ | ✗ |
-| Publier questionnaire | ✗ | ✗ | ✗ | ✓ | ✗ | ✓ | ● | ✗ | ✗ |
-| Configurer popups/glossaire | ✗ | ✗ | ✗ | ✓ | ✗ | ✓ | ● | ✗ | ✗ |
-| Consulter stats agrégées | ✗ | ● | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✗ |
-| Consulter soumission pseudonymisée | ✗ | ✗ | ● | ● | ✓ | ✓ | ✓ | ✗ | ✗ |
-| Exporter données pseudonymisées | ✗ | ✗ | ✗ | ● | ● | ● | ✓ | ✗ | ✗ |
-| Accéder table email | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ● | ✗ |
-| Créer demande judiciaire | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ● | ✗ |
-| Valider demande judiciaire | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ● | ✗ |
-| Administrer utilisateurs/rôles | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ● | ✗ | ✗ |
-| Consulter journaux d'audit | ✗ | ✗ | ✗ | ✗ | ✗ | ● | ✓ | ● | ✓ |
-| Consulter métriques techniques | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✓ | ✗ | ✓ |
+| Complete token-assigned questionnaire | Yes, token scope | No | No | No | No | No | No | No | No |
+| Create/resend/list invitations | No | Yes, building | Yes, site | No | No | No | No | No | No |
+| Enter paper responses | No | Yes, building | Yes, site | No | No | No | No | No | No |
+| View clear respondent contact | No | No | No | No | No | No | Conditional, approved decryption environment | No | No |
+| View code-to-contact mapping | No | No | No | No | No | No | Conditional, encrypted API/console execution | No | No |
+| Read published questionnaires | Token version | Yes | Yes | Yes | Yes | Yes | No | No | No |
+| Create/edit draft questionnaires | No | No | No | Yes | No | Yes | No | No | No |
+| Publish questionnaire version | No | No | No | Yes | No | Yes | No | No | No |
+| Manage conditional rules | No | No | No | Yes | No | Yes | No | No | No |
+| Read aggregate thresholded statistics | No | No | Yes, site | Yes, authorized | Yes, authorized | Yes, organization | No | No | No |
+| Read individual pseudonymized submission | No | No | No | No | Yes | No | No | No | No |
+| Export pseudonymized data | No | No | No | No | Yes, thresholds/scope | Yes, thresholds/scope | No | No | No |
+| Manage site-manager accounts | No | No | No | No | No | Yes, project sites | No | No | No |
+| Manage moderator accounts | No | No | Yes, own site | No | No | No | No | No | No |
+| Provision sensitive roles | No | No | No | No | No | No | No | No | Conditional, approved local console |
+| Administer terminal devices | No | Read scoped list | Yes, site | No | No | Yes, organization | No | No | Yes, organization |
+| Read operational audit logs | No | No | No | No | No | Yes | Yes | Yes | Yes |
+| Read technical metrics | No | No | No | No | No | No | No | No | Yes |
+| Read technical register/retention | No | No | No | No | Yes | Yes | Yes | Yes | Yes |
+| Run retention maintenance | No | No | No | No | No | Expiry/drafts only | No | No | Scoped actions + full cycle |
+| Create/advance judicial request | No | No | No | No | No | No | Validate/reject/execute | Create/legal validate/reject/close | No |
+| Export code-to-contact | No | No | No | No | No | No | Conditional: explicit codes + authority + justification + encryption + dual audit | No | No |
 
-Conditions principales : périmètre site/bâtiment, absence d'email dans interfaces métier, procédure judiciaire formalisée, audit obligatoire des exports et consultations détaillées.
+## Scope rules
+
+- Project administrators operate within their organization/project and cannot read the identity domain.
+- Site managers operate only on their assigned site and its buildings.
+- Moderators operate only on their assigned building.
+- Questionnaire administrators are limited by questionnaire ownership/organization checks.
+- Analysts receive authorized analytics scope and are the only role with individual pseudonymized submission detail.
+- Technical administrators operate infrastructure/terminals/maintenance without clear respondent contact access.
+- Judicial officers manage request state but do not independently decrypt identity data.
+- DPO identity access uses only the approved double-validation procedure through the dedicated `/coffre-email` screen/API or a controlled local-console file.
+
+Out-of-scope objects may return `404` to avoid confirming existence. A frontend page/menu is never an authorization boundary.
+
+## Non-negotiable controls
+
+- No routine role receives clear respondent contact or identity-vault fields through the business API.
+- Superior/peer/specialized roles cannot be created through ordinary delegated account screens.
+- Sensitive account/scope changes revoke sessions and create audit evidence.
+- Published questionnaire versions and final submissions are immutable.
+- Small-cell suppression and export identity exclusion are enforced server-side.
+- One-time temporary passwords and terminal tokens are not logged or redisplayed.

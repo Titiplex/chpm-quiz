@@ -1,40 +1,99 @@
-# Recette métier complète
+# End-to-end business acceptance
 
-## Administration questionnaire
+Run against a migrated preproduction environment with fabricated data and real production-like configuration, except delivery may use an approved sandbox provider.
 
-1. Créer un questionnaire brouillon avec finalité, langue, période d'ouverture.
-2. Ajouter groupes, questions, Likert, texte libre, popups et condition.
-3. Prévisualiser le chemin conditionnel.
-4. Publier la version.
-5. Vérifier qu'une version publiée ne peut plus être modifiée en place.
+## Setup and roles
 
-Preuves : captures écrans admin, réponse API `/questionnaires`, audit log de publication.
+1. Create named test accounts for each enabled role through the intended provisioning path.
+2. Create at least two organizations/sites/buildings so out-of-scope access can be tested.
+3. Record the release, configuration, threshold, retention values, and provider modes.
+4. Confirm demo/static modes are disabled.
 
-## Modération
+## Authentication and delegation
 
-1. Se connecter comme modérateur.
-2. Vérifier que seuls les bâtiments habilités sont visibles.
-3. Créer une invitation email ou simulation selon environnement.
-4. Vérifier absence d'email dans l'URL répondant.
-5. Suivre statuts `sent`, `opened`, `draft`, `submitted`, `expired`.
+1. Test OIDC Authorization Code/PKCE with the required MFA claim, invalid state/nonce/audience, an unprovisioned email, inactive user, logout, expiry, and session revocation.
+2. Project administrator creates/lists sites and creates/updates/disables a site manager.
+3. Site manager creates a building and creates/updates/disables a moderator in an in-site building.
+4. Attempt cross-site building assignment and superior/specialized role creation; the API must reject.
+5. Verify one-time temporary password handling and audit evidence.
 
-Preuves : capture table invitations, logs sans email en clair, audit création invitation.
+## Questionnaire administration
 
-## Parcours répondant
+1. Create a draft with purpose, language, and metadata.
+2. Add groups, supported question types, Likert scale, options, help pop-up, and conditions.
+3. Update and archive draft elements; verify they remain in the expected audit/history model.
+4. Test matching/non-matching conditional paths and resumed sessions.
+5. Run publication check, correct errors, publish, and verify immutability.
+6. Verify staff without builder roles cannot mutate content.
+7. Clone a language draft, verify its independent identifiers and rewritten conditions, translate content, preview it, and publish it independently.
 
-1. Ouvrir le lien unique.
-2. Lire notice et démarrer.
-3. Répondre, ouvrir une popup, changer de page.
-4. Interrompre puis reprendre.
-5. Soumettre définitivement.
-6. Réessayer de soumettre : l'API doit refuser.
+Evidence: UI captures without secrets, relevant API results, publication audit, version identifiers, negative-access results.
 
-Preuves : telemetry events, réponses draft puis verrouillées, statut invitation `submitted`.
+## Invitation channels
 
-## Statistiques
+For email, SMS, terminal, paper, and refusal modes as configured:
 
-1. Vérifier volumes, completion, durée, popups par questionnaire/version/question/site.
-2. Tester seuil anti-réidentification sous `STATISTICS_MIN_GROUP_SIZE`.
-3. Exporter pseudonymisé et vérifier absence email/ciphertext.
+1. Create in-scope and out-of-scope requests.
+2. Validate required/forbidden contact fields and invalid E.164/expiry inputs.
+3. Confirm normal responses/UI/logs contain masked contact only and no token in inappropriate places.
+4. Test resend eligibility and submitted/expired conflicts.
+5. Test status transitions and scoped list visibility.
+6. Verify a refusal never creates a response session/submission.
+7. Verify invitations cannot exceed the collection close time and that respondents cannot start before `openFrom` or after `openUntil`.
+8. Stop/restart a delivery worker between enqueue and send; verify durable claim/retry, bounded attempts, provider timeout, and no plaintext payload in the operational database/logs.
 
-Preuves : capture stats, export JSON avec `identityVaultExcluded=true`, audit export avec fingerprint.
+## Respondent workflow
+
+1. Open a valid link and verify the exact approved notice/version.
+2. Test invalid, altered, expired, and already-used/locked tokens.
+3. Answer every type, open help, navigate backward/forward, autosave, close, and resume.
+4. Attempt wrong-question IDs, malformed values, extra fields, and oversized batches.
+5. Submit, verify answer/session/submission locks, then retry submit/autosave.
+6. Verify invitation status and audit/metrics without clear contact/token/answer bodies.
+
+## Terminal workflow
+
+1. Create a terminal and capture the clear token once through the approved setup channel.
+2. Verify device/building scope and pending invitation list.
+3. Attempt opening an unassigned, expired, submitted, and cross-building invitation.
+4. Complete a dual-token respondent flow.
+5. Revoke/regenerate the terminal token and confirm old access fails.
+6. Verify handoff clears the previous respondent view.
+
+## Paper workflow
+
+1. Generate and inspect a blank PDF for the exact published version.
+2. Create a `paper_form` invitation without contact data.
+3. Transcribe valid responses and verify warnings/audit/locked submission.
+4. Test wrong channel, wrong questions, duplicate entry, and invalid answers.
+5. Verify paper retention/destruction evidence.
+
+## Statistics and exports
+
+1. Verify totals/rates/durations across questionnaire, version, delivery mode, site/building, group, question, and pop-up.
+2. Recalculate a representative sample independently.
+3. Test below/at/above `STATISTICS_MIN_GROUP_SIZE` for every granular surface.
+4. Confirm roles/scopes and analyst-only individual pseudonymized detail.
+5. Export the minimum scope; verify identity exclusion, no email/phone/hash/ciphertext/token, fingerprint, suppression, and audit.
+6. Attempt differencing/filter combinations that could expose small cells and record risk decision.
+
+## Compliance, notification, and operations
+
+1. Review technical register and retention output against approved values.
+2. Run expiry/draft cleanup and the complete retention cycle on disposable records around every cutoff; verify counts, identity scrubbing, queue/audit cleanup, export expiry, final-response deletion, and hold procedure.
+3. Create/update notification subscriptions and process a digest with authorized recipients only.
+4. Verify health, authenticated metrics, structured logs, correlation IDs, and alert generation.
+5. Execute encrypted backup and isolated restoration.
+6. Run incident and exceptional-access tabletop/technical exercises.
+
+## Deployment-constraint acceptance
+
+Confirm OIDC/provider/TLS/database integrations in the real target environment. For multiple API replicas, prove trusted-ingress/shared rate limiting and proxy-IP handling. For high availability, prove database replication/PITR, redundant ingress, rolling deployment, centralized logs/secrets, and failover independently of the single-node Compose reference.
+
+## Exit criteria
+
+- All critical paths and negative tests pass.
+- No cross-scope/direct-contact/token leakage is observed.
+- Statistics suppression and irreversible transitions are verified.
+- Accessibility, security, DPO, restore, and incident evidence is approved.
+- Known limitations have explicit owners, risk decisions, and user-facing treatment.

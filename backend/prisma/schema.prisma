@@ -20,6 +20,7 @@ enum UserRole {
   technical_admin
   service_account
   respondent
+
   @@schema("public")
 }
 
@@ -27,6 +28,7 @@ enum QuestionnaireStatus {
   draft
   published
   archived
+
   @@schema("public")
 }
 
@@ -34,6 +36,7 @@ enum QuestionnaireVersionStatus {
   draft
   published
   archived
+
   @@schema("public")
 }
 
@@ -47,6 +50,7 @@ enum QuestionType {
   number
   date
   information
+
   @@schema("public")
 }
 
@@ -60,6 +64,7 @@ enum InvitationStatus {
   expired
   blocked
   cancelled
+
   @@schema("public")
 }
 
@@ -68,13 +73,19 @@ enum ResponseSessionStatus {
   submitted
   locked
   abandoned
+
   @@schema("public")
 }
 
 enum InvitationDeliveryMode {
   email
   email_simulation
+  sms
+  sms_simulation
   onsite_terminal
+  paper_form
+  refusal_record
+
   @@schema("public")
 }
 
@@ -82,6 +93,7 @@ enum AssistanceMode {
   none
   technical_help
   full_assisted_entry
+
   @@schema("public")
 }
 
@@ -89,6 +101,7 @@ enum TerminalDeviceStatus {
   active
   paused
   revoked
+
   @@schema("public")
 }
 
@@ -98,7 +111,25 @@ enum JudicialAccessStatus {
   rejected
   executed
   closed
+
   @@schema("public")
+}
+
+enum OutboundDeliveryChannel {
+  email
+  sms
+
+  @@schema("identity")
+}
+
+enum OutboundDeliveryStatus {
+  pending
+  processing
+  retry
+  succeeded
+  dead
+
+  @@schema("identity")
 }
 
 model Organization {
@@ -112,6 +143,7 @@ model Organization {
   buildings      Building[]
   users          User[]
   questionnaires Questionnaire[]
+
   @@schema("public")
 }
 
@@ -161,34 +193,38 @@ model Building {
 }
 
 model User {
-  id             String       @id @default(uuid()) @db.Uuid
-  organizationId String?      @db.Uuid
-  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-  siteId         String?      @db.Uuid
-  site           Site?        @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  buildingId     String?      @db.Uuid
-  building       Building?    @relation(fields: [buildingId], references: [id], onDelete: SetNull)
-  email          String       @unique
-  passwordHash   String
-  displayName    String
-  role           UserRole
-  isActive       Boolean      @default(true)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id                 String        @id @default(uuid()) @db.Uuid
+  organizationId     String?       @db.Uuid
+  organization       Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  siteId             String?       @db.Uuid
+  site               Site?         @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  buildingId         String?       @db.Uuid
+  building           Building?     @relation(fields: [buildingId], references: [id], onDelete: SetNull)
+  email              String        @unique
+  passwordHash       String
+  displayName        String
+  role               UserRole
+  isActive           Boolean       @default(true)
+  mustChangePassword Boolean       @default(false)
+  failedLoginCount   Int           @default(0)
+  lockedUntil        DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 
   sessions                  Session[]
-  ownedQuestionnaires       Questionnaire[]       @relation("QuestionnaireOwner")
-  createdInvitations        Invitation[]          @relation("InvitationCreator")
+  ownedQuestionnaires       Questionnaire[]            @relation("QuestionnaireOwner")
+  createdInvitations        Invitation[]               @relation("InvitationCreator")
   notificationSubscriptions NotificationSubscription[]
-  auditLogs                 AuditLog[]            @relation("AuditActor")
-  judicialRequestsDpo       JudicialAccessRequest[] @relation("JudicialDpoValidator")
-  judicialRequestsLegal     JudicialAccessRequest[] @relation("JudicialLegalValidator")
-  judicialRequestsExecuted  JudicialAccessRequest[] @relation("JudicialExecutor")
+  auditLogs                 AuditLog[]                 @relation("AuditActor")
+  judicialRequestsDpo       JudicialAccessRequest[]    @relation("JudicialDpoValidator")
+  judicialRequestsLegal     JudicialAccessRequest[]    @relation("JudicialLegalValidator")
+  judicialRequestsExecuted  JudicialAccessRequest[]    @relation("JudicialExecutor")
 
   @@index([role])
   @@index([organizationId])
   @@index([siteId])
   @@index([buildingId])
+  @@index([lockedUntil])
   @@schema("public")
 }
 
@@ -208,20 +244,33 @@ model Session {
   @@schema("public")
 }
 
+model OidcLoginState {
+  id           String   @id @default(uuid()) @db.Uuid
+  stateHash    String   @unique
+  codeVerifier String
+  nonce        String
+  returnTo     String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([expiresAt])
+  @@schema("public")
+}
+
 model Questionnaire {
-  id             String              @id @default(uuid()) @db.Uuid
-  organizationId String?             @db.Uuid
-  organization   Organization?       @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-  ownerUserId    String?             @db.Uuid
-  owner          User?               @relation("QuestionnaireOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  code           String              @unique
-  title          String
-  description    String?
-  defaultLanguage String             @default("fr")
-  finality       String?
-  status         QuestionnaireStatus @default(draft)
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  id              String              @id @default(uuid()) @db.Uuid
+  organizationId  String?             @db.Uuid
+  organization    Organization?       @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  ownerUserId     String?             @db.Uuid
+  owner           User?               @relation("QuestionnaireOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  code            String              @unique
+  title           String
+  description     String?
+  defaultLanguage String              @default("fr")
+  finality        String?
+  status          QuestionnaireStatus @default(draft)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
 
   versions QuestionnaireVersion[]
 
@@ -232,20 +281,20 @@ model Questionnaire {
 }
 
 model QuestionnaireVersion {
-  id                String                     @id @default(uuid()) @db.Uuid
-  questionnaireId   String                     @db.Uuid
-  questionnaire     Questionnaire              @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
-  versionLabel      String
-  language          String                     @default("fr")
-  status            QuestionnaireVersionStatus @default(draft)
-  description       String?
-  finality          String?
-  openFrom          DateTime?
-  openUntil         DateTime?
-  publishedAt       DateTime?
-  immutableAt       DateTime?
-  createdAt         DateTime                   @default(now())
-  updatedAt         DateTime                   @updatedAt
+  id              String                     @id @default(uuid()) @db.Uuid
+  questionnaireId String                     @db.Uuid
+  questionnaire   Questionnaire              @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
+  versionLabel    String
+  language        String                     @default("fr")
+  status          QuestionnaireVersionStatus @default(draft)
+  description     String?
+  finality        String?
+  openFrom        DateTime?
+  openUntil       DateTime?
+  publishedAt     DateTime?
+  immutableAt     DateTime?
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
 
   groups                    QuestionGroup[]
   conditionalRules          ConditionalRule[]
@@ -283,21 +332,21 @@ model QuestionGroup {
 }
 
 model Question {
-  id             String        @id @default(uuid()) @db.Uuid
-  groupId        String        @db.Uuid
-  group          QuestionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  code           String
-  language       String        @default("fr")
-  label          String
-  helperText     String?
-  responseType   QuestionType
-  isRequired     Boolean       @default(false)
-  displayOrder   Int
-  tags           String[]
+  id                  String        @id @default(uuid()) @db.Uuid
+  groupId             String        @db.Uuid
+  group               QuestionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  code                String
+  language            String        @default("fr")
+  label               String
+  helperText          String?
+  responseType        QuestionType
+  isRequired          Boolean       @default(false)
+  displayOrder        Int
+  tags                String[]
   conditionExpression Json?
-  isArchived     Boolean       @default(false)
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  isArchived          Boolean       @default(false)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 
   likertScale      LikertScale?
   answerOptions    AnswerOption[]
@@ -341,19 +390,20 @@ model LikertScale {
   orientation        String   @default("horizontal")
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+
   @@schema("public")
 }
 
 model GlossaryTerm {
-  id        String   @id @default(uuid()) @db.Uuid
-  termKey   String
-  language  String   @default("fr")
-  label     String
+  id         String   @id @default(uuid()) @db.Uuid
+  termKey    String
+  language   String   @default("fr")
+  label      String
   definition String
-  version   String   @default("1.0")
+  version    String   @default("1.0")
   isArchived Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   popupDefinitions PopupDefinition[]
 
@@ -364,19 +414,19 @@ model GlossaryTerm {
 }
 
 model PopupDefinition {
-  id           String       @id @default(uuid()) @db.Uuid
-  questionId   String       @db.Uuid
-  question     Question     @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  glossaryTermId String?    @db.Uuid
-  glossaryTerm GlossaryTerm? @relation(fields: [glossaryTermId], references: [id], onDelete: SetNull)
-  termKey      String
-  language     String       @default("fr")
-  title        String
-  body         String
-  version      String       @default("1.0")
-  isRequired   Boolean      @default(false)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  id             String        @id @default(uuid()) @db.Uuid
+  questionId     String        @db.Uuid
+  question       Question      @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  glossaryTermId String?       @db.Uuid
+  glossaryTerm   GlossaryTerm? @relation(fields: [glossaryTermId], references: [id], onDelete: SetNull)
+  termKey        String
+  language       String        @default("fr")
+  title          String
+  body           String
+  version        String        @default("1.0")
+  isRequired     Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   telemetryEvents TelemetryEvent[]
 
@@ -404,15 +454,15 @@ model ConditionalRule {
 }
 
 model Invitation {
-  id                     String               @id @default(uuid()) @db.Uuid
-  questionnaireVersionId String               @db.Uuid
-  questionnaireVersion   QuestionnaireVersion @relation(fields: [questionnaireVersionId], references: [id], onDelete: Restrict)
-  siteId                 String?              @db.Uuid
-  site                   Site?                @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  buildingId             String               @db.Uuid
-  building               Building             @relation(fields: [buildingId], references: [id], onDelete: Restrict)
-  createdByUserId        String?              @db.Uuid
-  createdBy              User?                @relation("InvitationCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  id                     String                 @id @default(uuid()) @db.Uuid
+  questionnaireVersionId String                 @db.Uuid
+  questionnaireVersion   QuestionnaireVersion   @relation(fields: [questionnaireVersionId], references: [id], onDelete: Restrict)
+  siteId                 String?                @db.Uuid
+  site                   Site?                  @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  buildingId             String                 @db.Uuid
+  building               Building               @relation(fields: [buildingId], references: [id], onDelete: Restrict)
+  createdByUserId        String?                @db.Uuid
+  createdBy              User?                  @relation("InvitationCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   publicCode             String                 @unique
   tokenHash              String                 @unique
   status                 InvitationStatus       @default(sent)
@@ -421,20 +471,20 @@ model Invitation {
   terminalDevice         TerminalDevice?        @relation(fields: [terminalDeviceId], references: [id], onDelete: SetNull)
   terminalDispatchedAt   DateTime?
   assistanceMode         AssistanceMode         @default(none)
-  notifyModerator        Boolean              @default(false)
-  notifyAdmins           Boolean              @default(false)
+  notifyModerator        Boolean                @default(false)
+  notifyAdmins           Boolean                @default(false)
   expiresAt              DateTime
   sentAt                 DateTime?
   openedAt               DateTime?
   startedAt              DateTime?
   submittedAt            DateTime?
   cancelledAt            DateTime?
-  createdAt              DateTime             @default(now())
-  updatedAt              DateTime             @updatedAt
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
 
-  identityVaultEntry  IdentityVaultEntry?
-  deliveryEvents EmailDeliveryEvent[]
-  responseSession ResponseSession?
+  identityVaultEntry IdentityVaultEntry?
+  deliveryEvents     EmailDeliveryEvent[]
+  responseSession    ResponseSession?
 
   @@index([questionnaireVersionId])
   @@index([buildingId])
@@ -452,19 +502,25 @@ model IdentityVaultEntry {
   invitationId           String     @unique @db.Uuid
   invitation             Invitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
   uniqueCode             String     @unique @map("publicCode")
-  encryptedEmail         String     @map("emailCiphertext")
-  emailHash              String
+  contactChannel         String     @default("email")
+  encryptedEmail         String?    @map("emailCiphertext")
+  emailHash              String?
+  encryptedPhone         String?    @map("phoneCiphertext")
+  phoneHash              String?
   questionnaireVersionId String     @db.Uuid
   buildingId             String     @db.Uuid
   createdByUserId        String?    @db.Uuid
   createdAt              DateTime   @default(now())
   lastEmailSentAt        DateTime?
+  lastSmsSentAt          DateTime?
   deletionScheduledAt    DateTime?
   deletedAt              DateTime?
 
-  @@map("email_identities")
+  @@index([contactChannel])
   @@index([emailHash])
+  @@index([phoneHash])
   @@index([uniqueCode])
+  @@map("email_identities")
   @@schema("identity")
 }
 
@@ -504,27 +560,47 @@ model EmailDeliveryEvent {
   metadata          Json?
   occurredAt        DateTime   @default(now())
 
-  @@map("email_delivery_events")
   @@index([invitationId])
   @@index([publicCode])
   @@index([eventType])
+  @@map("email_delivery_events")
   @@schema("identity")
 }
 
 model IdentityVaultAuditLog {
-  id            String   @id @default(uuid()) @db.Uuid
-  actorUserId   String?  @db.Uuid
-  action        String
-  publicCode    String?
-  requestId     String?  @db.Uuid
-  ipAddress     String?
-  metadata      Json?
-  occurredAt    DateTime @default(now())
+  id          String   @id @default(uuid()) @db.Uuid
+  actorUserId String?  @db.Uuid
+  action      String
+  publicCode  String?
+  requestId   String?  @db.Uuid
+  ipAddress   String?
+  metadata    Json?
+  occurredAt  DateTime @default(now())
 
-  @@map("vault_audit_logs")
   @@index([actorUserId])
   @@index([publicCode])
   @@index([requestId])
+  @@map("vault_audit_logs")
+  @@schema("identity")
+}
+
+model OutboundDeliveryJob {
+  id                String                  @id @default(uuid()) @db.Uuid
+  channel           OutboundDeliveryChannel
+  status            OutboundDeliveryStatus  @default(pending)
+  encryptedPayload  String
+  attempt           Int                     @default(0)
+  maxAttempts       Int
+  availableAt       DateTime                @default(now())
+  lockedAt          DateTime?
+  completedAt       DateTime?
+  providerMessageId String?
+  lastError         String?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  @@index([channel, status, availableAt])
+  @@index([lockedAt])
   @@schema("identity")
 }
 
@@ -564,17 +640,17 @@ model ResponseSession {
 }
 
 model Answer {
-  id                    String          @id @default(uuid()) @db.Uuid
-  responseSessionId     String          @db.Uuid
-  responseSession       ResponseSession @relation(fields: [responseSessionId], references: [id], onDelete: Cascade)
-  questionId            String          @db.Uuid
-  question              Question        @relation(fields: [questionId], references: [id], onDelete: Restrict)
-  value                 Json
-  isDraft               Boolean         @default(true)
-  identifiabilityWarning Boolean        @default(false)
-  warningReason         String?
-  createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @updatedAt
+  id                     String          @id @default(uuid()) @db.Uuid
+  responseSessionId      String          @db.Uuid
+  responseSession        ResponseSession @relation(fields: [responseSessionId], references: [id], onDelete: Cascade)
+  questionId             String          @db.Uuid
+  question               Question        @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  value                  Json
+  isDraft                Boolean         @default(true)
+  identifiabilityWarning Boolean         @default(false)
+  warningReason          String?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
 
   @@unique([responseSessionId, questionId])
   @@index([questionId])
@@ -582,18 +658,18 @@ model Answer {
 }
 
 model TelemetryEvent {
-  id                String          @id @default(uuid()) @db.Uuid
-  responseSessionId String          @db.Uuid
-  responseSession   ResponseSession @relation(fields: [responseSessionId], references: [id], onDelete: Cascade)
-  questionId        String?         @db.Uuid
-  question          Question?       @relation(fields: [questionId], references: [id], onDelete: SetNull)
-  popupDefinitionId String?         @db.Uuid
+  id                String           @id @default(uuid()) @db.Uuid
+  responseSessionId String           @db.Uuid
+  responseSession   ResponseSession  @relation(fields: [responseSessionId], references: [id], onDelete: Cascade)
+  questionId        String?          @db.Uuid
+  question          Question?        @relation(fields: [questionId], references: [id], onDelete: SetNull)
+  popupDefinitionId String?          @db.Uuid
   popupDefinition   PopupDefinition? @relation(fields: [popupDefinitionId], references: [id], onDelete: SetNull)
   eventType         String
   eventPayload      Json?
   durationMs        Int?
-  occurredAt        DateTime        @default(now())
-  createdAt         DateTime        @default(now())
+  occurredAt        DateTime         @default(now())
+  createdAt         DateTime         @default(now())
 
   @@index([responseSessionId])
   @@index([questionId])
@@ -604,18 +680,18 @@ model TelemetryEvent {
 }
 
 model Submission {
-  id                     String              @id @default(uuid()) @db.Uuid
-  responseSessionId      String              @unique @db.Uuid
-  responseSession        ResponseSession     @relation(fields: [responseSessionId], references: [id], onDelete: Cascade)
+  id                     String               @id @default(uuid()) @db.Uuid
+  responseSessionId      String               @unique @db.Uuid
+  responseSession        ResponseSession      @relation(fields: [responseSessionId], references: [id], onDelete: Cascade)
   publicCode             String
-  questionnaireVersionId String              @db.Uuid
+  questionnaireVersionId String               @db.Uuid
   questionnaireVersion   QuestionnaireVersion @relation(fields: [questionnaireVersionId], references: [id], onDelete: Restrict)
-  buildingId             String              @db.Uuid
-  building               Building            @relation(fields: [buildingId], references: [id], onDelete: Restrict)
-  submittedAt            DateTime            @default(now())
+  buildingId             String               @db.Uuid
+  building               Building             @relation(fields: [buildingId], references: [id], onDelete: Restrict)
+  submittedAt            DateTime             @default(now())
   answerCount            Int
   pathFingerprint        String?
-  status                 String              @default("locked")
+  status                 String               @default("locked")
 
   @@index([publicCode])
   @@index([questionnaireVersionId])
@@ -625,20 +701,20 @@ model Submission {
 }
 
 model NotificationSubscription {
-  id                     String               @id @default(uuid()) @db.Uuid
-  userId                 String               @db.Uuid
-  user                   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  questionnaireVersionId String?              @db.Uuid
+  id                     String                @id @default(uuid()) @db.Uuid
+  userId                 String                @db.Uuid
+  user                   User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionnaireVersionId String?               @db.Uuid
   questionnaireVersion   QuestionnaireVersion? @relation(fields: [questionnaireVersionId], references: [id], onDelete: Cascade)
-  buildingId             String?              @db.Uuid
+  buildingId             String?               @db.Uuid
   eventType              String
-  channel                String               @default("email")
-  frequency              String               @default("immediate")
-  digestHour             Int                  @default(8)
-  isEnabled              Boolean              @default(true)
+  channel                String                @default("email")
+  frequency              String                @default("immediate")
+  digestHour             Int                   @default(8)
+  isEnabled              Boolean               @default(true)
   lastDeliveredAt        DateTime?
-  createdAt              DateTime             @default(now())
-  updatedAt              DateTime             @updatedAt
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
 
   @@index([userId])
   @@index([questionnaireVersionId])
@@ -650,45 +726,53 @@ model NotificationSubscription {
 }
 
 model JudicialAccessRequest {
-  id                       String               @id @default(uuid()) @db.Uuid
-  requestReference         String               @unique
-  legalBasisDescription    String
-  courtOrderReference      String?
-  requestedPublicCodes     String[]
-  requestedBy              String
-  receivedAt               DateTime             @default(now())
-  dpoValidationUserId      String?              @db.Uuid
-  dpoValidationUser        User?                @relation("JudicialDpoValidator", fields: [dpoValidationUserId], references: [id], onDelete: SetNull)
-  legalValidationUserId    String?              @db.Uuid
-  legalValidationUser      User?                @relation("JudicialLegalValidator", fields: [legalValidationUserId], references: [id], onDelete: SetNull)
-  executedByUserId         String?              @db.Uuid
-  executedByUser           User?                @relation("JudicialExecutor", fields: [executedByUserId], references: [id], onDelete: SetNull)
-  status                   JudicialAccessStatus @default(received)
-  executedAt               DateTime?
-  exportFingerprint        String?
-  comments                 String?
-  createdAt                DateTime             @default(now())
-  updatedAt                DateTime             @updatedAt
+  id                    String               @id @default(uuid()) @db.Uuid
+  organizationId        String?              @db.Uuid
+  requestReference      String
+  legalBasisDescription String
+  courtOrderReference   String?
+  requestedPublicCodes  String[]
+  requestedBy           String
+  receivedAt            DateTime             @default(now())
+  dpoValidationUserId   String?              @db.Uuid
+  dpoValidationUser     User?                @relation("JudicialDpoValidator", fields: [dpoValidationUserId], references: [id], onDelete: SetNull)
+  legalValidationUserId String?              @db.Uuid
+  legalValidationUser   User?                @relation("JudicialLegalValidator", fields: [legalValidationUserId], references: [id], onDelete: SetNull)
+  executedByUserId      String?              @db.Uuid
+  executedByUser        User?                @relation("JudicialExecutor", fields: [executedByUserId], references: [id], onDelete: SetNull)
+  status                JudicialAccessStatus @default(received)
+  executedAt            DateTime?
+  exportFingerprint     String?
+  exportExpiresAt       DateTime?
+  exportDeletedAt       DateTime?
+  comments              String?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
 
+  @@unique([organizationId, requestReference])
   @@index([status])
+  @@index([organizationId, status])
+  @@index([exportExpiresAt])
   @@index([receivedAt])
   @@schema("public")
 }
 
 model AuditLog {
-  id          String   @id @default(uuid()) @db.Uuid
-  actorUserId String?  @db.Uuid
-  actor       User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
-  action      String
-  entityType  String
-  entityId    String?
-  publicCode  String?
-  metadata    Json?
-  ipAddress   String?
-  userAgent   String?
-  occurredAt  DateTime @default(now())
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String?  @db.Uuid
+  actorUserId    String?  @db.Uuid
+  actor          User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  action         String
+  entityType     String
+  entityId       String?
+  publicCode     String?
+  metadata       Json?
+  ipAddress      String?
+  userAgent      String?
+  occurredAt     DateTime @default(now())
 
   @@index([actorUserId])
+  @@index([organizationId, occurredAt])
   @@index([action])
   @@index([entityType])
   @@index([publicCode])

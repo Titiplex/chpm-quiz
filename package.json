@@ -1,10 +1,10 @@
 {
   "name": "survey-app",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "postinstall": "npm --prefix backend install",
+    "postinstall": "npm --prefix backend ci",
     "dev": "vite",
     "dev:frontend": "vite",
     "dev:backend": "npm --prefix backend run dev",
@@ -30,8 +30,8 @@
     "lint:oxlint": "oxlint . --fix",
     "lint:eslint": "eslint src shared env.d.ts vite.config.ts vitest.config.ts eslint.config.ts --fix --cache",
     "format": "prettier --write --experimental-cli src/",
-    "validate": "run-s content:i18n:check lint typecheck build test prisma:validate",
-    "check": "run-s content:i18n:check lint typecheck test",
+    "validate": "run-s content:i18n:check docs:check openapi:lint lint typecheck build test prisma:validate",
+    "check": "run-s content:i18n:check docs:check lint typecheck test",
     "db:up": "docker compose -f backend/docker-compose.yml up -d",
     "db:seed": "npm --prefix backend run db:seed",
     "prisma:generate": "npm --prefix backend run prisma:generate",
@@ -47,8 +47,21 @@
     "preprod:up": "docker compose -f docker-compose.preprod.yml --env-file .env.preprod up --build -d",
     "preprod:down": "docker compose -f docker-compose.preprod.yml --env-file .env.preprod down",
     "preprod:logs": "docker compose -f docker-compose.preprod.yml --env-file .env.preprod logs -f --tail=200",
+    "prod:config": "sh ops/scripts/validate-production-env.sh .env.production && docker compose -f docker-compose.production.yml --env-file .env.production config",
+    "prod:build": "docker compose -f docker-compose.production.yml --env-file .env.production build --pull",
+    "prod:up": "docker compose -f docker-compose.production.yml --env-file .env.production up -d",
+    "prod:bootstrap": "docker compose -f docker-compose.production.yml --env-file .env.production --profile bootstrap run --rm bootstrap",
+    "prod:logs": "docker compose -f docker-compose.production.yml --env-file .env.production logs -f --tail=200",
+    "prod:backup": "docker compose -f docker-compose.production.yml --env-file .env.production --profile maintenance run --rm encrypted-backup",
     "backup:encrypted": "docker compose -f docker-compose.preprod.yml --env-file .env.preprod run --rm encrypted-backup",
-    "content:i18n:check": "node scripts/validate-i18n-content.mjs"
+    "content:i18n:check": "node scripts/validate-i18n-content.mjs",
+    "content:i18n:manifest": "node scripts/generate-i18n-manifest.mjs",
+    "predev": "npm run content:i18n:manifest",
+    "predev:frontend": "npm run content:i18n:manifest",
+    "prebuild-only": "npm run content:i18n:manifest",
+    "docs:check": "node scripts/validate-documentation.mjs",
+    "openapi:lint": "redocly lint docs/openapi.yaml",
+    "openapi:preview": "redocly preview-docs docs/openapi.yaml"
   },
   "dependencies": {
     "bootstrap": "5.3.8",
@@ -57,6 +70,7 @@
     "vue-router": "5.1.0"
   },
   "devDependencies": {
+    "@redocly/cli": "2.39.0",
     "@tsconfig/node22": "22.0.5",
     "@types/jsdom": "28.0.3",
     "@types/node": "22.19.21",
@@ -85,6 +99,6 @@
     "node": "22.18.x",
     "npm": "10.9.x"
   },
-  "description": "Quiz structuré avec routing par rôle et socle backend/shared.",
+  "description": "Role-based survey platform with adaptive questionnaires and pseudonymized data collection.",
   "packageManager": "npm@10.9.2"
 }
