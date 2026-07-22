@@ -108,7 +108,7 @@
   "respondent.notice.consent": "J’ai lu la notice d’information et je comprends que la soumission finale verrouille mes réponses pseudonymisées.",
   "respondent.actions.previous": "Précédent",
   "respondent.actions.next": "Question suivante",
-  "respondent.actions.prepareSubmit": "Préparer la soumission finale",
+  "respondent.actions.prepareSubmit": "Envoyer les données",
   "respondent.submit.title": "Confirmer la soumission définitive",
   "respondent.submit.body": "Après confirmation, la session sera verrouillée : vous pourrez consulter l’accusé de réception, mais vous ne pourrez plus modifier ni soumettre une deuxième fois.",
   "respondent.submit.confirm": "Je confirme et je verrouille mes réponses",

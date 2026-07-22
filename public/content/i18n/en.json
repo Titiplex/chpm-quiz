@@ -108,7 +108,7 @@
   "respondent.notice.consent": "I have read the information notice and understand that final submission locks my pseudonymized answers.",
   "respondent.actions.previous": "Previous",
   "respondent.actions.next": "Next question",
-  "respondent.actions.prepareSubmit": "Prepare final submission",
+  "respondent.actions.prepareSubmit": "Send data",
   "respondent.submit.title": "Confirm final submission",
   "respondent.submit.body": "After confirmation, the session will be locked: you may view the receipt, but you cannot edit or submit a second time.",
   "respondent.submit.confirm": "I confirm and lock my answers",
