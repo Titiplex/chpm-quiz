@@ -79,6 +79,8 @@ import type {
   UpdateSiteAdminRequest,
   UpdateSiteModeratorRequest,
   UpsertNotificationSubscriptionRequest,
+  ProjectHierarchyNode,
+  ProjectHierarchyResponse,
 } from '@shared/types/api'
 
 interface DemoRequestOptions {
@@ -320,6 +322,10 @@ export async function demoApiRequest<T>(
 
   if (method === 'GET' && route === '/me') {
     return asResponse<T>(getCurrentAuthResponse())
+  }
+
+  if (method === 'GET' && route === '/users/hierarchy') {
+    return asResponse<T>(getProjectHierarchy() satisfies ProjectHierarchyResponse)
   }
 
   if (method === 'POST' && route === '/auth/login') {
@@ -713,6 +719,164 @@ function waitForDemoLatency(): Promise<void> {
 
 function asResponse<T>(payload: unknown): T {
   return clone(payload) as T
+}
+
+function getProjectHierarchy(): ProjectHierarchyResponse {
+  const currentUser = safeCurrentUser()
+  if (!currentUser || !['admin', 'site_manager', 'moderator'].includes(currentUser.role)) {
+    throw new Error('La hiérarchie est réservée aux rôles opérationnels.')
+  }
+
+  const currentSiteId = currentUser.siteId
+    ?? getBuildings().find((building) => building.id === currentUser.buildingId)?.siteId
+    ?? null
+  if (currentUser.role !== 'admin' && !currentSiteId) {
+    throw new Error('Utilisateur opérationnel sans site affecté.')
+  }
+
+  const users = getDemoUsers().filter((user) => {
+    if (!['admin', 'site_manager', 'moderator'].includes(user.role)) return false
+    if (currentUser.role === 'admin') return true
+    if (user.role === 'admin') return true
+    if (currentUser.role === 'site_manager') {
+      return user.id === currentUser.id || (user.role === 'moderator' && user.siteId === currentSiteId)
+    }
+    return (user.role === 'site_manager' && user.siteId === currentSiteId) || user.id === currentUser.id
+  })
+
+  const projectAdmins = users
+    .filter((user) => user.role === 'admin')
+    .map((user) => toDemoHierarchyPersonNode(user, currentUser.id ?? ''))
+  const sites = getDemoSites().filter((site) => currentUser.role === 'admin' || site.id === currentSiteId)
+
+  const siteNodes: ProjectHierarchyNode[] = sites.map((site) => {
+    const managers = users
+      .filter((user) => user.role === 'site_manager' && user.siteId === site.id)
+      .map((user) => toDemoHierarchyPersonNode(user, currentUser.id ?? ''))
+    const moderators = users
+      .filter((user) => user.role === 'moderator' && user.siteId === site.id)
+      .map((user) => toDemoHierarchyPersonNode(user, currentUser.id ?? ''))
+
+    let children: ProjectHierarchyNode[]
+    if (managers.length === 1 && managers[0]) {
+      children = [{ ...managers[0], children: moderators }]
+    } else if (managers.length > 1) {
+      children = [
+        {
+          id: `site-management-${site.id}`,
+          kind: 'team',
+          label: 'Responsables de site',
+          subtitle: `${managers.length} responsables affectés`,
+          role: null,
+          isActive: null,
+          isCurrentUser: managers.some((manager) => manager.isCurrentUser),
+          children: managers,
+        },
+        {
+          id: `site-moderators-${site.id}`,
+          kind: 'team',
+          label: 'Modérateurs',
+          subtitle: `${moderators.length} personnes`,
+          role: null,
+          isActive: null,
+          isCurrentUser: moderators.some((moderator) => moderator.isCurrentUser),
+          children: moderators,
+        },
+      ]
+    } else {
+      children = moderators.length
+        ? [{
+            id: `site-moderators-${site.id}`,
+            kind: 'team',
+            label: 'Modérateurs sans responsable affecté',
+            subtitle: `${moderators.length} personnes`,
+            role: null,
+            isActive: null,
+            isCurrentUser: moderators.some((moderator) => moderator.isCurrentUser),
+            children: moderators,
+          }]
+        : []
+    }
+
+    return {
+      id: `site-${site.id}`,
+      kind: 'site',
+      label: site.name,
+      subtitle: site.code,
+      role: null,
+      isActive: null,
+      isCurrentUser: currentUser.role !== 'admin' && site.id === currentSiteId,
+      children,
+    }
+  })
+
+  const visibleSiteIds = new Set(sites.map((site) => site.id))
+  const unassignedPeople = currentUser.role === 'admin'
+    ? users
+        .filter((user) => user.role !== 'admin' && (!user.siteId || !visibleSiteIds.has(user.siteId)))
+        .map((user) => toDemoHierarchyPersonNode(user, currentUser.id ?? ''))
+    : []
+  const unassignedNode: ProjectHierarchyNode | null = unassignedPeople.length
+    ? {
+        id: `project-unassigned-${DEMO_ORGANIZATION_ID}`,
+        kind: 'team',
+        label: 'Affectations incomplètes',
+        subtitle: `${unassignedPeople.length} personnes à rattacher`,
+        role: null,
+        isActive: null,
+        isCurrentUser: unassignedPeople.some((person) => person.isCurrentUser),
+        children: unassignedPeople,
+      }
+    : null
+
+  return {
+    hierarchy: {
+      id: `project-${DEMO_ORGANIZATION_ID}`,
+      kind: 'project',
+      label: 'CH Montfavet',
+      subtitle: 'CHPM',
+      role: null,
+      isActive: null,
+      isCurrentUser: false,
+      children: [{
+        id: `project-administration-${DEMO_ORGANIZATION_ID}`,
+        kind: 'team',
+        label: 'Administration projet',
+        subtitle: `${projectAdmins.length} administrateur${projectAdmins.length > 1 ? 's' : ''} projet`,
+        role: null,
+        isActive: null,
+        isCurrentUser: projectAdmins.some((admin) => admin.isCurrentUser),
+        children: [...projectAdmins, ...siteNodes, ...(unassignedNode ? [unassignedNode] : [])],
+      }],
+    },
+    scope: currentUser.role === 'admin' ? 'project' : currentUser.role === 'site_manager' ? 'site' : 'self',
+    generatedAt: new Date().toISOString(),
+  }
+}
+
+function toDemoHierarchyPersonNode(user: DemoUserSeed, currentUserId: string): ProjectHierarchyNode {
+  const building = user.buildingId
+    ? getBuildings().find((candidate) => candidate.id === user.buildingId)
+    : undefined
+  const site = user.siteId
+    ? getDemoSites().find((candidate) => candidate.id === user.siteId)
+    : undefined
+  const role = user.role as 'admin' | 'site_manager' | 'moderator'
+
+  return {
+    id: `user-${user.id ?? user.email}`,
+    kind: role === 'admin' ? 'project_admin' : role,
+    label: user.displayName,
+    subtitle: role === 'admin'
+      ? roleProfiles.admin.label
+      : role === 'site_manager'
+        ? (site?.name ?? roleProfiles.site_manager.label)
+        : (building?.label ?? site?.name ?? roleProfiles.moderator.label),
+    role,
+    isActive: user.isActive !== false,
+    isCurrentUser: (user.id ?? '') === currentUserId,
+    children: [],
+  }
 }
 
 function getCurrentAuthResponse(): AuthResponse {

@@ -12,7 +12,7 @@ import { CreateBuildingDto } from './dto/create-building.dto'
 import { CreateSiteModeratorDto } from './dto/create-site-moderator.dto'
 import { UpdateSiteAdminDto } from './dto/update-site-admin.dto'
 import { UpdateSiteModeratorDto } from './dto/update-site-moderator.dto'
-import { UsersService } from './users.service'
+import { UsersService, type ProjectHierarchyResponse } from './users.service'
 
 @UseGuards(SessionAuthGuard, RolesGuard)
 @Controller('admin')
@@ -128,6 +128,12 @@ export class SiteAdministrationController {
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
+
+  @Get('hierarchy')
+  @Roles('admin', 'site_manager', 'moderator')
+  getHierarchy(@CurrentUser() user: AuthenticatedUser): Promise<ProjectHierarchyResponse> {
+    return this.usersService.getProjectHierarchy(user)
+  }
 
   @Get('site-team')
   @Roles('site_manager')

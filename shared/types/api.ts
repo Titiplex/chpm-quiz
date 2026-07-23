@@ -75,6 +75,33 @@ export interface AuthResponse {
   user: AuthUserProfile
 }
 
+export type ProjectHierarchyScope = 'project' | 'site' | 'self'
+
+export type ProjectHierarchyNodeKind =
+  | 'project'
+  | 'project_admin'
+  | 'site'
+  | 'site_manager'
+  | 'moderator'
+  | 'team'
+
+export interface ProjectHierarchyNode {
+  id: string
+  kind: ProjectHierarchyNodeKind
+  label: string
+  subtitle: string | null
+  role: Extract<UserRole, 'admin' | 'site_manager' | 'moderator'> | null
+  isActive: boolean | null
+  isCurrentUser: boolean
+  children: ProjectHierarchyNode[]
+}
+
+export interface ProjectHierarchyResponse {
+  hierarchy: ProjectHierarchyNode
+  scope: ProjectHierarchyScope
+  generatedAt: string
+}
+
 export interface ApiSiteTeamUser {
   id: string
   email: string

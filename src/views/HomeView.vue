@@ -2,10 +2,11 @@
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 
+import ProjectHierarchyTree from '@/components/hierarchy/ProjectHierarchyTree.vue'
 import { defaultPathByRole } from '@/config/navigation'
 import { t } from '@/i18n'
 import { useSessionStore } from '@/stores/session'
-import { hasRoleAccess, type UserRole } from '@shared/types/rbac'
+import { hasRoleAccess, isActiveOperationalRole, type UserRole } from '@shared/types/rbac'
 
 const session = useSessionStore()
 
@@ -50,6 +51,10 @@ const visibleModules = computed(() =>
   moduleDefinitions.filter((module) => hasRoleAccess(session.currentRole, module.roles)),
 )
 
+const showProjectHierarchy = computed(
+  () => Boolean(session.user) && isActiveOperationalRole(session.currentRole),
+)
+
 const defaultPath = computed(() => defaultPathByRole[session.currentRole])
 const primaryAction = computed(() => {
   if (hasRoleAccess(session.currentRole, ['admin'])) {
@@ -84,6 +89,8 @@ const greetingName = computed(() => session.user?.displayName?.split(' ')[0] ?? 
           </RouterLink>
         </div>
       </div>
+
+      <ProjectHierarchyTree v-if="showProjectHierarchy" class="mb-4" />
 
       <div v-if="visibleModules.length" class="mb-4">
         <h2

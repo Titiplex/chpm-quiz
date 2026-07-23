@@ -49,9 +49,203 @@ type UserWithScope = {
   building?: BuildingWithSite | null
 }
 
+export type OperationalHierarchyRole = 'admin' | 'site_manager' | 'moderator'
+
+export type ProjectHierarchyScope = 'project' | 'site' | 'self'
+
+export type HierarchyNode = {
+  id: string
+  kind: 'project' | 'project_admin' | 'site' | 'site_manager' | 'moderator' | 'team'
+  label: string
+  subtitle: string | null
+  role: OperationalHierarchyRole | null
+  isActive: boolean | null
+  isCurrentUser: boolean
+  children: HierarchyNode[]
+}
+
+export type ProjectHierarchyResponse = {
+  hierarchy: HierarchyNode
+  scope: ProjectHierarchyScope
+  generatedAt: string
+}
+
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async getProjectHierarchy(actor: AuthenticatedUser): Promise<ProjectHierarchyResponse> {
+    if (!['admin', 'site_manager', 'moderator'].includes(actor.role)) {
+      throw new ForbiddenException('La hiérarchie opérationnelle est réservée aux rôles projet, site et modération')
+    }
+
+    if (!actor.organizationId) {
+      throw new ForbiddenException('Utilisateur sans organisation affectée')
+    }
+
+    const scopedSiteId = actor.siteId ?? actor.building?.siteId ?? null
+    if (actor.role !== 'admin' && !scopedSiteId) {
+      throw new ForbiddenException('Utilisateur opérationnel sans site affecté')
+    }
+
+    const userWhere: Record<string, unknown> = {
+      organizationId: actor.organizationId,
+      role: { in: ['admin', 'site_manager', 'moderator'] },
+    }
+
+    if (actor.role === 'site_manager') {
+      userWhere.OR = [
+        { role: 'admin' },
+        { id: actor.id },
+        { role: 'moderator', siteId: scopedSiteId },
+      ]
+    } else if (actor.role === 'moderator') {
+      userWhere.OR = [
+        { role: 'admin' },
+        { role: 'site_manager', siteId: scopedSiteId },
+        { id: actor.id },
+      ]
+    }
+
+    const [organization, sites, users] = await Promise.all([
+      this.prisma.organization.findUnique({
+        where: { id: actor.organizationId },
+        select: { id: true, code: true, name: true },
+      }),
+      this.prisma.site.findMany({
+        where: {
+          organizationId: actor.organizationId,
+          ...(actor.role === 'admin' ? {} : { id: scopedSiteId }),
+        },
+        orderBy: [{ name: 'asc' }, { code: 'asc' }],
+      }),
+      this.prisma.user.findMany({
+        where: userWhere,
+        orderBy: [{ displayName: 'asc' }, { email: 'asc' }],
+        include: {
+          site: { select: { id: true, code: true, name: true } },
+          building: { include: { site: { select: { id: true, code: true, name: true } } } },
+        },
+      }),
+    ])
+
+    if (!organization) {
+      throw new NotFoundException('Organisation introuvable')
+    }
+
+    const hierarchyUsers = users as UserWithScope[]
+    const projectAdmins = hierarchyUsers
+      .filter((user) => user.role === 'admin')
+      .map((user) => this.toHierarchyPersonNode(user, actor.id))
+
+    const siteNodes: HierarchyNode[] = (sites as SiteRow[]).map((site) => {
+      const managers = hierarchyUsers
+        .filter((user) => user.role === 'site_manager' && user.siteId === site.id)
+        .map((user) => this.toHierarchyPersonNode(user, actor.id))
+      const moderators = hierarchyUsers
+        .filter((user) => user.role === 'moderator' && user.siteId === site.id)
+        .map((user) => this.toHierarchyPersonNode(user, actor.id))
+
+      let children: HierarchyNode[]
+      if (managers.length === 1 && managers[0]) {
+        children = [{ ...managers[0], children: moderators }]
+      } else if (managers.length > 1) {
+        children = [
+          {
+            id: `site-management-${site.id}`,
+            kind: 'team',
+            label: 'Responsables de site',
+            subtitle: `${managers.length} responsables affectés`,
+            role: null,
+            isActive: null,
+            isCurrentUser: managers.some((manager) => manager.isCurrentUser),
+            children: managers,
+          },
+          {
+            id: `site-moderators-${site.id}`,
+            kind: 'team',
+            label: 'Modérateurs',
+            subtitle: `${moderators.length} personnes`,
+            role: null,
+            isActive: null,
+            isCurrentUser: moderators.some((moderator) => moderator.isCurrentUser),
+            children: moderators,
+          },
+        ]
+      } else {
+        children = moderators.length
+          ? [{
+              id: `site-moderators-${site.id}`,
+              kind: 'team',
+              label: 'Modérateurs sans responsable affecté',
+              subtitle: `${moderators.length} personnes`,
+              role: null,
+              isActive: null,
+              isCurrentUser: moderators.some((moderator) => moderator.isCurrentUser),
+              children: moderators,
+            }]
+          : []
+      }
+
+      return {
+        id: `site-${site.id}`,
+        kind: 'site',
+        label: site.name,
+        subtitle: site.code,
+        role: null,
+        isActive: null,
+        isCurrentUser: site.id === scopedSiteId && actor.role !== 'admin',
+        children,
+      }
+    })
+
+    const visibleSiteIds = new Set((sites as SiteRow[]).map((site) => site.id))
+    const unassignedPeople = actor.role === 'admin'
+      ? hierarchyUsers
+          .filter((user) => user.role !== 'admin' && (!user.siteId || !visibleSiteIds.has(user.siteId)))
+          .map((user) => this.toHierarchyPersonNode(user, actor.id))
+      : []
+    const unassignedNode: HierarchyNode | null = unassignedPeople.length
+      ? {
+          id: `project-unassigned-${organization.id}`,
+          kind: 'team',
+          label: 'Affectations incomplètes',
+          subtitle: `${unassignedPeople.length} personnes à rattacher`,
+          role: null,
+          isActive: null,
+          isCurrentUser: unassignedPeople.some((person) => person.isCurrentUser),
+          children: unassignedPeople,
+        }
+      : null
+
+    const administrationNode: HierarchyNode = {
+      id: `project-administration-${organization.id}`,
+      kind: 'team',
+      label: 'Administration projet',
+      subtitle: `${projectAdmins.length} administrateur${projectAdmins.length > 1 ? 's' : ''} projet`,
+      role: null,
+      isActive: null,
+      isCurrentUser: projectAdmins.some((admin) => admin.isCurrentUser),
+      children: [...projectAdmins, ...siteNodes, ...(unassignedNode ? [unassignedNode] : [])],
+    }
+
+    const hierarchy: HierarchyNode = {
+      id: `project-${organization.id}`,
+      kind: 'project',
+      label: organization.name,
+      subtitle: organization.code,
+      role: null,
+      isActive: null,
+      isCurrentUser: false,
+      children: [administrationNode],
+    }
+
+    return {
+      hierarchy,
+      scope: actor.role === 'admin' ? 'project' : actor.role === 'site_manager' ? 'site' : 'self',
+      generatedAt: new Date().toISOString(),
+    }
+  }
 
   async listManagedSites(actor: AuthenticatedUser) {
     this.assertProjectAdmin(actor)
@@ -705,6 +899,26 @@ export class UsersService {
     }
 
     throw new ForbiddenException('Seul un responsable de site peut gérer les modérateurs de son site')
+  }
+
+  private toHierarchyPersonNode(user: UserWithScope, currentUserId: string): HierarchyNode {
+    const role = user.role as OperationalHierarchyRole
+    const subtitle = role === 'admin'
+      ? roleProfiles.admin.label
+      : role === 'site_manager'
+        ? (user.site?.name ?? roleProfiles.site_manager.label)
+        : (user.building?.label ?? user.site?.name ?? roleProfiles.moderator.label)
+
+    return {
+      id: `user-${user.id}`,
+      kind: role === 'admin' ? 'project_admin' : role,
+      label: user.displayName,
+      subtitle,
+      role,
+      isActive: user.isActive,
+      isCurrentUser: user.id === currentUserId,
+      children: [],
+    }
   }
 
   private toStaffUserDto(user: UserWithScope) {
