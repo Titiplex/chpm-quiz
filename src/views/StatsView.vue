@@ -184,6 +184,20 @@ function closeSubmissionDetail(): void {
                 />
               </div>
               <div class="col-md-3">
+                <KpiCard
+                  label="Refus de répondre"
+                  :value="formatCount(statsStore.stats.fieldTracking.refused)"
+                  tone="danger"
+                />
+              </div>
+              <div class="col-md-3">
+                <KpiCard
+                  label="Expirations sans réponse"
+                  :value="formatCount(statsStore.stats.totals.expired)"
+                  tone="warning"
+                />
+              </div>
+              <div class="col-md-3">
                 <KpiCard label="Démarrage" :value="formatPercent(statsStore.stats.totals.startRate)" />
               </div>
               <div class="col-md-3">
