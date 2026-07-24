@@ -213,6 +213,24 @@ services:
     restart: 'no'
     networks: [internal]
 
+  client-questionnaire-seed:
+    profiles: ['client-seed']
+    image: chpm-backend-build:${CHPM_RELEASE_VERSION:?CHPM_RELEASE_VERSION is required}
+    environment:
+      DATABASE_URL: ${MIGRATION_DATABASE_URL:?MIGRATION_DATABASE_URL is required}
+      OPERATIONAL_DATABASE_URL: ${MIGRATION_DATABASE_URL:?MIGRATION_DATABASE_URL is required}
+      BOOTSTRAP_ORGANIZATION_CODE: ${BOOTSTRAP_ORGANIZATION_CODE:?BOOTSTRAP_ORGANIZATION_CODE is required}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:?BOOTSTRAP_ADMIN_EMAIL is required}
+      CLIENT_QUESTIONNAIRE_CODE: ${CLIENT_QUESTIONNAIRE_CODE:-LEC5-ITQ}
+      CLIENT_QUESTIONNAIRE_TITLE: ${CLIENT_QUESTIONNAIRE_TITLE:-LEC-5 + ITQ}
+      CLIENT_QUESTIONNAIRE_VERSION: ${CLIENT_QUESTIONNAIRE_VERSION:-1.0-client}
+    command: ['npm', 'run', 'db:seed:client-itq-lec5']
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+    restart: 'no'
+    networks: [internal]
+
   encrypted-backup:
     profiles: ['maintenance']
     image: ${POSTGRES_IMAGE:?POSTGRES_IMAGE must be pinned}

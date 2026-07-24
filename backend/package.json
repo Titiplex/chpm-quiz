@@ -30,7 +30,8 @@
     "user:console": "tsx scripts/user-console.ts",
     "dpo:console": "tsx scripts/dpo-console.ts",
     "identity-vault:console": "tsx scripts/dpo-console.ts",
-    "bootstrap:production": "tsx scripts/bootstrap-production.ts"
+    "bootstrap:production": "tsx scripts/bootstrap-production.ts",
+    "db:seed:client-itq-lec5": "tsx scripts/seed-client-itq-lec5.ts"
   },
   "dependencies": {
     "@nestjs/common": "11.1.26",
