@@ -110,7 +110,7 @@
   "respondent.actions.next": "Next question",
   "respondent.actions.prepareSubmit": "Send data",
   "respondent.submit.title": "Confirm final submission",
-  "respondent.submit.body": "After confirmation, the session will be locked: you may view the receipt, but you cannot edit or submit a second time.",
+  "respondent.submit.body": "After confirmation, the session will be locked: you cannot edit your answers or submit a second time.",
   "respondent.submit.confirm": "I confirm and lock my answers",
   "respondent.submit.back": "Return to questionnaire",
   "respondent.submit.loading": "Submitting…",

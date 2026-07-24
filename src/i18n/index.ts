@@ -169,7 +169,7 @@ const fallbackMessages = {
     'respondent.actions.prepareSubmit': 'Préparer la soumission finale',
     'respondent.submit.title': 'Confirmer la soumission définitive',
     'respondent.submit.body':
-      'Après confirmation, la session sera verrouillée : vous pourrez consulter l’accusé de réception, mais vous ne pourrez plus modifier ni soumettre une deuxième fois.',
+      'Après confirmation, la session sera verrouillée : vous ne pourrez plus modifier vos réponses ni soumettre une deuxième fois.',
     'respondent.submit.confirm': 'Je confirme et je verrouille mes réponses',
     'respondent.submit.back': 'Revenir au questionnaire',
     'respondent.submit.loading': 'Soumission…',
@@ -328,7 +328,7 @@ const fallbackMessages = {
     'respondent.actions.prepareSubmit': 'Prepare final submission',
     'respondent.submit.title': 'Confirm final submission',
     'respondent.submit.body':
-      'After confirmation, the session will be locked: you may view the receipt, but you cannot edit or submit a second time.',
+      'After confirmation, the session will be locked: you cannot edit your answers or submit a second time.',
     'respondent.submit.confirm': 'I confirm and lock my answers',
     'respondent.submit.back': 'Return to questionnaire',
     'respondent.submit.loading': 'Submitting…',

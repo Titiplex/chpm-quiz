@@ -256,6 +256,11 @@ function likertValues(scale?: LikertScaleForDisplay | null): number[] {
   return Array.from({ length: scale.points }, (_, index) => minValue + index)
 }
 
+function isLikertSelected(question: RespondentQuestion, value: number): boolean {
+  const current = questionValue(question)
+  return current !== null && current !== undefined && current !== '' && Number(current) === value
+}
+
 function likertLabel(scale: LikertScaleForDisplay, value: number): string {
   const values = likertValues(scale)
   const index = values.indexOf(value)
@@ -598,8 +603,8 @@ async function confirmSubmit(): Promise<void> {
                 <div v-if="respondent.isLocked" class="alert alert-success rounded-4">
                   <div class="d-flex flex-wrap justify-content-between gap-3 align-items-center">
                     <span
-                      >Soumission finale reçue et verrouillée. Une deuxième soumission est
-                      impossible.</span
+                      >Questionnaire terminé. Les réponses sont verrouillées et ne peuvent plus être
+                      modifiées.</span
                     >
                     <RouterLink
                       v-if="isOnsiteTerminal && respondent.terminalToken"
@@ -762,8 +767,8 @@ async function confirmSubmit(): Promise<void> {
                           <button
                             class="likert-dot border-0"
                             role="radio"
-                            :aria-checked="Number(questionValue(question)) === value"
-                            :class="{ active: Number(questionValue(question)) === value }"
+                            :aria-checked="isLikertSelected(question, value)"
+                            :class="{ active: isLikertSelected(question, value) }"
                             type="button"
                             :aria-describedby="questionHelpIds(question)"
                             :aria-label="`${likertLabel(question.likertScale, value)} — valeur ${value}`"

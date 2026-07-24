@@ -90,6 +90,11 @@ function likertValues(question: StaticQuestion): number[] {
   )
 }
 
+function isLikertSelected(question: StaticQuestion, value: number): boolean {
+  const current = questionValue(question)
+  return current !== null && current !== undefined && current !== '' && Number(current) === value
+}
+
 function likertLabel(question: StaticQuestion, value: number): string {
   return question.likertScale?.labels[value] ?? String(value)
 }
@@ -299,7 +304,7 @@ function resetDemo(): void {
                       v-for="value in likertValues(question)"
                       :key="value"
                       class="likert-dot likert-dot-labelled border-0"
-                      :class="{ active: Number(questionValue(question)) === value }"
+                      :class="{ active: isLikertSelected(question, value) }"
                       type="button"
                       :disabled="submitted"
                       @click="save(question, value)"

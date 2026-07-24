@@ -369,41 +369,6 @@ export class NotificationsService implements OnModuleInit {
     }
   }
 
-
-  async notifySubmissionConfirmation(input: SubmissionNotificationInput): Promise<void> {
-    const identity = await this.identityVaultService.loadOutboundEmailForInvitation(input.invitationId)
-    if (!identity) {
-      return
-    }
-
-    const jobId = await this.mailQueue.enqueue({
-      template: 'submission_confirmation',
-      to: { email: identity.email },
-      subject: 'Confirmation de réception de votre questionnaire',
-      text: [
-        'Bonjour,',
-        'Votre questionnaire a bien été soumis et verrouillé.',
-        `Code opérationnel : ${input.publicCode}.`,
-        'Vous ne pouvez plus modifier vos réponses après cette confirmation.',
-        'Les traitements statistiques utilisent ce code pseudonymisé, pas votre adresse email.',
-      ].join('\n'),
-      invitationId: input.invitationId,
-      publicCode: input.publicCode,
-      metadata: {
-        submissionId: input.submissionId,
-        questionnaireVersionId: input.questionnaireVersionId,
-        submittedAt: input.submittedAt.toISOString(),
-      },
-    })
-
-    await this.identityVaultService.recordDeliveryEvent({
-      invitationId: input.invitationId,
-      publicCode: input.publicCode,
-      eventType: 'submission_confirmation_queued',
-      metadata: { jobId },
-    })
-  }
-
   private async normalizeAndAssertScope(user: AuthenticatedUser, dto: UpsertNotificationSubscriptionDto): Promise<UpsertNotificationSubscriptionDto> {
     const allowedRoles = notificationEventPolicy[dto.eventType] ?? []
     if (!allowedRoles.includes(user.role)) {

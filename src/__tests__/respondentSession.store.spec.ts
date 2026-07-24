@@ -30,9 +30,12 @@ describe('useRespondentSessionStore', () => {
     expect(store.progress).toBe(50)
   })
 
-  it('saves an answer, stores warnings and refreshes the session', async () => {
+  it('saves an answer, stores warnings and refreshes without showing the loading screen', async () => {
+    const store = useRespondentSessionStore()
+    const sessionRequestStatuses: string[] = []
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (String(url).endsWith('/respondent/session?token=token-123')) {
+        sessionRequestStatuses.push(store.status)
         return new Response(JSON.stringify(makeRespondentSession()), { status: 200 })
       }
 
@@ -56,12 +59,12 @@ describe('useRespondentSessionStore', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    const store = useRespondentSessionStore()
     await store.load('token-123')
     await store.save('question-p1', 4)
 
     expect(store.status).toBe('ready')
     expect(store.warnings).toEqual([{ questionId: 'question-p1', reason: 'test' }])
+    expect(sessionRequestStatuses).toEqual(['loading', 'saving'])
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 

@@ -30,10 +30,15 @@ export const useRespondentSessionStore = defineStore('respondentSession', () => 
     return Math.round((answeredCount.value / questions.value.length) * 100)
   })
 
-  async function load(rawToken: string): Promise<void> {
+  async function load(
+    rawToken: string,
+    options: { showLoading?: boolean } = {},
+  ): Promise<void> {
     token.value = rawToken
     terminalToken.value = resolveTerminalToken()
-    status.value = 'loading'
+    if (options.showLoading ?? true) {
+      status.value = 'loading'
+    }
     error.value = null
 
     try {
@@ -62,7 +67,7 @@ export const useRespondentSessionStore = defineStore('respondentSession', () => 
         },
       })
       warnings.value = response.warnings
-      await load(token.value)
+      await load(token.value, { showLoading: false })
     } catch (caught) {
       status.value = 'error'
       error.value = caught instanceof Error ? caught.message : 'Sauvegarde impossible.'

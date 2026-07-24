@@ -360,6 +360,11 @@ function paperLikertValues(question: ApiQuestion): number[] {
   return Array.from({ length: question.likertScale.points }, (_, index) => minValue + index)
 }
 
+function isPaperLikertSelected(question: ApiQuestion, value: number): boolean {
+  const current = paperQuestionValue(question)
+  return current !== null && current !== undefined && current !== '' && Number(current) === value
+}
+
 function paperLikertLabel(question: ApiQuestion, value: number): string {
   const scale = question.likertScale
   if (!scale) return String(value)
@@ -741,7 +746,7 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
                     <span class="likert-choice-label">{{ paperLikertLabel(question, value) }}</span>
                     <button
                       class="likert-dot border-0"
-                      :class="Number(paperQuestionValue(question)) === value ? 'active' : ''"
+                      :class="isPaperLikertSelected(question, value) ? 'active' : ''"
                       type="button"
                       @click="setPaperAnswer(question, value)"
                     >

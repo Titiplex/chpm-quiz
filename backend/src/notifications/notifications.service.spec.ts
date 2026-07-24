@@ -158,22 +158,4 @@ describe('NotificationsService', () => {
     expect(mailQueue.enqueue).not.toHaveBeenCalled()
     expect(prisma.notificationSubscription.update).toHaveBeenCalledWith({ where: { id: 'sub-empty' }, data: { lastDeliveredAt: now } })
   })
-
-  it('confirms submitted questionnaires to respondent identity emails when available', async () => {
-    const { service, identityVault, mailQueue } = makeService()
-
-    await service.notifySubmissionConfirmation({ submissionId: 's1', invitationId: 'inv1', publicCode: 'ITQ-0001', questionnaireVersionId: version.id, buildingId: building.id, answerCount: 4, submittedAt: new Date('2026-01-02T12:00:00Z') })
-
-    expect(mailQueue.enqueue).toHaveBeenCalledWith(expect.objectContaining({ template: 'submission_confirmation', to: { email: 'patient@example.test' } }))
-    expect(identityVault.recordDeliveryEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: 'submission_confirmation_queued' }))
-  })
-
-  it('skips respondent confirmation when identity has been removed', async () => {
-    const { service, identityVault, mailQueue } = makeService();
-    (identityVault.loadOutboundEmailForInvitation as any).mockResolvedValue(null)
-
-    await service.notifySubmissionConfirmation({ submissionId: 's1', invitationId: 'inv1', publicCode: 'ITQ-0001', questionnaireVersionId: version.id, buildingId: building.id, answerCount: 4, submittedAt: new Date() })
-
-    expect(mailQueue.enqueue).not.toHaveBeenCalled()
-  })
 })
