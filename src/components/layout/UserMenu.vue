@@ -2,13 +2,13 @@
 import { computed } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
-import { t } from '@/i18n'
+import { roleText, t } from '@/i18n'
 import { useSessionStore } from '@/stores/session'
 
 const router = useRouter()
 const session = useSessionStore()
 
-const roleLabel = computed(() => session.currentProfile.shortLabel)
+const roleLabel = computed(() => roleText(session.currentRole, 'short'))
 const initials = computed(() => {
   const name = session.user?.displayName ?? ''
   return name

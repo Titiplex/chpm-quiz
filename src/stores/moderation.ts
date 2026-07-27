@@ -1,6 +1,8 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
+import { t } from '@/i18n'
+
 import { apiRequest } from '@/services/api'
 import type {
   ApiInvitation,
@@ -56,7 +58,7 @@ export const useModerationStore = defineStore('moderation', () => {
       status.value = 'ready'
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Chargement des invitations impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.moderation.loadInvitationsError')
     }
   }
 
@@ -65,7 +67,7 @@ export const useModerationStore = defineStore('moderation', () => {
       const response = await apiRequest<TerminalDevicesResponse>('/moderation/terminal-devices')
       terminalDevices.value = response.terminalDevices
     } catch (caught) {
-      error.value = caught instanceof Error ? caught.message : 'Chargement des terminaux impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.terminals.loadError')
     }
   }
 
@@ -93,7 +95,7 @@ export const useModerationStore = defineStore('moderation', () => {
       status.value = 'ready'
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Création d’invitation impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.moderation.createInvitationError')
       throw caught
     }
   }
@@ -113,7 +115,7 @@ export const useModerationStore = defineStore('moderation', () => {
       status.value = 'ready'
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Enregistrement du terminal impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.moderation.registerTerminalError')
       throw caught
     }
   }
@@ -144,7 +146,7 @@ export const useModerationStore = defineStore('moderation', () => {
       return response
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Saisie papier impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.moderation.paperEntryError')
       throw caught
     }
   }

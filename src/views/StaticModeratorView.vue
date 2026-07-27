@@ -3,11 +3,13 @@ import { computed, reactive, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
 import KpiCard from '@/components/common/KpiCard.vue'
+import { formatDate, formatPercent, t } from '@/i18n'
 import PageHeader from '@/components/common/PageHeader.vue'
 import {
   staticBuildings,
   staticInvitations,
   staticQuestionnaire,
+  type StaticDeliveryChannel,
   type StaticInvitationStatus,
 } from '@/data/staticPagesDemo'
 
@@ -33,11 +35,11 @@ const totals = computed(() => ({
   active: staticInvitations.filter((invitation) =>
     ['sent', 'opened', 'in_progress'].includes(invitation.status),
   ).length,
-  terminal: staticInvitations.filter((invitation) => invitation.channel === 'Terminal hospitalier')
+  terminal: staticInvitations.filter((invitation) => invitation.channel === 'terminal')
     .length,
 }))
 const responseRate = computed(
-  () => `${Math.round((totals.value.submitted / Math.max(1, totals.value.invitations)) * 100)} %`,
+  () => formatPercent(totals.value.submitted / Math.max(1, totals.value.invitations)),
 )
 
 function generateStaticAccess(): void {
@@ -51,12 +53,16 @@ async function copyPatientLink(): Promise<void> {
   copiedLink.value = true
 }
 
+function channelLabel(channel: StaticDeliveryChannel): string {
+  return t(`common.channel.${channel}`)
+}
+
 function statusLabel(status: StaticInvitationStatus): string {
   return {
-    sent: 'Envoyée',
-    opened: 'Ouverte',
-    in_progress: 'En cours',
-    submitted: 'Soumise',
+    sent: t('moderation.status.sent'),
+    opened: t('moderation.status.opened'),
+    in_progress: t('moderation.status.inProgress'),
+    submitted: t('moderation.status.submitted'),
   }[status]
 }
 
@@ -71,18 +77,16 @@ function statusTone(status: StaticInvitationStatus): 'success' | 'warning' | 'ne
   <section class="demo-page">
     <div class="container-fluid px-4 px-xl-5">
       <PageHeader
-        title="Modération"
-        description="Préparez les accès patient et suivez les questionnaires de votre périmètre."
+        :title="t('moderation.title')"
+        :description="t('staticModerator.description')"
       />
 
       <div class="row g-4">
         <div class="col-xl-5">
           <form class="demo-card h-100" @submit.prevent="generateStaticAccess">
-            <h2 class="h4 fw-bold mb-4">Préparer un accès patient</h2>
+            <h2 class="h4 fw-bold mb-4">{{ t('staticModerator.prepare') }}</h2>
 
-            <label class="form-label fw-bold" for="static-questionnaire-select"
-              >Questionnaire publié</label
-            >
+            <label class="form-label fw-bold" for="static-questionnaire-select">{{ t('staticModerator.publishedQuestionnaire') }}</label>
             <select
               id="static-questionnaire-select"
               v-model="form.questionnaire"
@@ -94,7 +98,7 @@ function statusTone(status: StaticInvitationStatus): 'success' | 'warning' | 'ne
               </option>
             </select>
 
-            <label class="form-label fw-bold" for="static-building-select">Bâtiment / site</label>
+            <label class="form-label fw-bold" for="static-building-select">{{ t('staticModerator.buildingSite') }}</label>
             <select
               id="static-building-select"
               v-model="form.buildingId"
@@ -106,22 +110,20 @@ function statusTone(status: StaticInvitationStatus): 'success' | 'warning' | 'ne
               </option>
             </select>
 
-            <label class="form-label fw-bold" for="static-delivery-mode">Canal de passation</label>
+            <label class="form-label fw-bold" for="static-delivery-mode">{{ t('staticModerator.deliveryMode') }}</label>
             <select
               id="static-delivery-mode"
               v-model="form.deliveryMode"
               class="form-select mb-3"
               required
             >
-              <option value="email_simulation">Email</option>
-              <option value="sms_simulation">SMS</option>
-              <option value="terminal_preview">Terminal hospitalier</option>
+              <option value="email_simulation">{{ t('moderation.delivery.email') }}</option>
+              <option value="sms_simulation">{{ t('moderation.delivery.sms') }}</option>
+              <option value="terminal_preview">{{ t('moderation.delivery.terminal') }}</option>
             </select>
 
             <template v-if="form.deliveryMode === 'sms_simulation'">
-              <label class="form-label fw-bold" for="static-respondent-phone"
-                >Téléphone masqué dans le suivi</label
-              >
+              <label class="form-label fw-bold" for="static-respondent-phone">{{ t('staticModerator.maskedPhone') }}</label>
               <input
                 id="static-respondent-phone"
                 v-model="form.phone"
@@ -131,9 +133,7 @@ function statusTone(status: StaticInvitationStatus): 'success' | 'warning' | 'ne
               />
             </template>
             <template v-else>
-              <label class="form-label fw-bold" for="static-respondent-email"
-                >Adresse email masquée dans le suivi</label
-              >
+              <label class="form-label fw-bold" for="static-respondent-email">{{ t('staticModerator.maskedEmail') }}</label>
               <input
                 id="static-respondent-email"
                 v-model="form.email"
@@ -143,11 +143,11 @@ function statusTone(status: StaticInvitationStatus): 'success' | 'warning' | 'ne
               />
             </template>
             <button class="btn btn-primary w-100 btn-lg" type="submit">
-              Générer le lien patient
+              {{ t('staticModerator.generateLink') }}
             </button>
 
             <div v-if="generated" class="alert alert-info rounded-4 mt-3 mb-0">
-              <strong>Lien patient :</strong>
+              <strong>{{ t('staticModerator.patientLink') }}</strong>
               <RouterLink class="d-block text-break" :to="{ name: 'static-patient-questionnaire' }">
                 {{ patientHref }}
               </RouterLink>
@@ -156,10 +156,10 @@ function statusTone(status: StaticInvitationStatus): 'success' | 'warning' | 'ne
                 type="button"
                 @click="copyPatientLink"
               >
-                {{ copiedLink ? 'Lien copié' : 'Copier le lien' }}
+                {{ copiedLink ? t('staticModerator.linkCopied') : t('common.copyLink') }}
               </button>
               <p class="small muted mt-2 mb-0">
-                Code public : {{ staticQuestionnaire.publicCode }} · Bâtiment :
+                {{ t('moderation.paper.publicCode', { code: staticQuestionnaire.publicCode }) }} · {{ t('common.building') }} :
                 {{ selectedBuilding?.label }}
               </p>
             </div>
@@ -170,14 +170,14 @@ function statusTone(status: StaticInvitationStatus): 'success' | 'warning' | 'ne
           <div class="demo-card h-100">
             <div class="d-flex flex-wrap justify-content-between gap-2 mb-4">
               <div>
-                <p class="section-eyebrow mb-2">Suivi opérationnel</p>
-                <h2 class="h4 fw-bold mb-0">Invitations du périmètre</h2>
+                <p class="section-eyebrow mb-2">{{ t('staticModerator.trackingEyebrow') }}</p>
+                <h2 class="h4 fw-bold mb-0">{{ t('staticModerator.invitationsTitle') }}</h2>
               </div>
               <RouterLink
                 class="btn btn-outline-primary"
                 :to="{ name: 'static-patient-questionnaire' }"
               >
-                Ouvrir le questionnaire patient
+                {{ t('staticModerator.openPatientQuestionnaire') }}
               </RouterLink>
             </div>
 
@@ -185,23 +185,21 @@ function statusTone(status: StaticInvitationStatus): 'success' | 'warning' | 'ne
               <table class="table align-middle">
                 <thead class="table-light">
                   <tr>
-                    <th>Code</th>
-                    <th>Canal</th>
-                    <th>Destination</th>
-                    <th>Questionnaire</th>
-                    <th>Bâtiment</th>
-                    <th>Statut</th>
+                    <th>{{ t('common.code') }}</th>
+                    <th>{{ t('common.channel') }}</th>
+                    <th>{{ t('common.destination') }}</th>
+                    <th>{{ t('common.questionnaire') }}</th>
+                    <th>{{ t('common.building') }}</th>
+                    <th>{{ t('common.status') }}</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="invitation in staticInvitations" :key="invitation.publicCode">
                     <td class="fw-semibold">{{ invitation.publicCode }}</td>
-                    <td>{{ invitation.channel }}</td>
+                    <td>{{ channelLabel(invitation.channel) }}</td>
                     <td>{{ invitation.destination }}</td>
                     <td>
-                      {{ invitation.questionnaireTitle }}<br /><span class="small muted">{{
-                        invitation.sentAt
-                      }}</span>
+                      {{ invitation.questionnaireTitle }}<br /><span class="small muted">{{ formatDate(invitation.sentAt, { dateStyle: 'short', timeStyle: 'short' }) }}</span>
                     </td>
                     <td>{{ invitation.buildingLabel }}</td>
                     <td>
@@ -216,15 +214,15 @@ function statusTone(status: StaticInvitationStatus): 'success' | 'warning' | 'ne
 
             <div class="row g-3">
               <div class="col-md-3">
-                <KpiCard label="Invitations" :value="String(totals.invitations)" />
+                <KpiCard :label="t('moderation.kpi.invitations')" :value="String(totals.invitations)" />
               </div>
               <div class="col-md-3">
-                <KpiCard label="Soumises" :value="String(totals.submitted)" tone="success" />
+                <KpiCard :label="t('moderation.kpi.submitted')" :value="String(totals.submitted)" tone="success" />
               </div>
               <div class="col-md-3">
-                <KpiCard label="Actives" :value="String(totals.active)" tone="warning" />
+                <KpiCard :label="t('staticModerator.active')" :value="String(totals.active)" tone="warning" />
               </div>
-              <div class="col-md-3"><KpiCard label="Taux" :value="responseRate" /></div>
+              <div class="col-md-3"><KpiCard :label="t('moderation.kpi.rate')" :value="responseRate" /></div>
             </div>
           </div>
         </div>

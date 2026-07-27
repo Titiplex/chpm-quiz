@@ -1,8 +1,67 @@
 import { readdirSync, readFileSync } from 'node:fs'
-import { basename, resolve } from 'node:path'
+import { basename, relative, resolve } from 'node:path'
 
 const I18N_DIR = resolve('public/content/i18n')
 const REFERENCE_LOCALE = 'fr'
+
+
+const STATIC_TEMPLATE_ATTRIBUTES = [
+  'alt',
+  'aria-label',
+  'badge',
+  'description',
+  'eyebrow',
+  'hint',
+  'label',
+  'placeholder',
+  'title',
+]
+const ALLOWED_LITERAL_TEMPLATE_TEXT = new Set(['CH', 'i', '×'])
+
+function lineNumber(source, index) {
+  return source.slice(0, index).split('\n').length
+}
+
+function stripTemplateComments(template) {
+  return template.replace(/<!--[\s\S]*?-->/g, (comment) =>
+    comment.replace(/[^\n]/g, ' '),
+  )
+}
+
+function hardcodedTemplateMessages() {
+  const violations = []
+  const attributePattern = new RegExp(
+    `(?<![:@\\w-])(${STATIC_TEMPLATE_ATTRIBUTES.join('|')})\\s*=\\s*(["'])([\\s\\S]*?)\\2`,
+    'g',
+  )
+
+  for (const file of sourceFiles(resolve('src')).filter((path) => path.endsWith('.vue'))) {
+    const source = readFileSync(file, 'utf8')
+    const start = source.indexOf('<template>')
+    const end = source.lastIndexOf('</template>')
+    if (start < 0 || end < 0 || end <= start) continue
+
+    const template = stripTemplateComments(source.slice(start, end))
+
+    for (const match of template.matchAll(attributePattern)) {
+      const value = match[3].trim()
+      if (!/[A-Za-zÀ-ÿ]/.test(value) || ALLOWED_LITERAL_TEMPLATE_TEXT.has(value)) continue
+      violations.push(
+        `${relative(resolve('.'), file)}:${lineNumber(source, start + match.index)} attribut ${match[1]} non traduit : ${JSON.stringify(value)}`,
+      )
+    }
+
+    for (const match of template.matchAll(/>([^<>{}]+)</g)) {
+      const value = match[1].replace(/\s+/g, ' ').trim()
+      if (!/[A-Za-zÀ-ÿ]/.test(value) || ALLOWED_LITERAL_TEMPLATE_TEXT.has(value)) continue
+      violations.push(
+        `${relative(resolve('.'), file)}:${lineNumber(source, start + match.index)} texte non traduit : ${JSON.stringify(value)}`,
+      )
+    }
+  }
+
+  return violations
+}
 
 function localeFiles() {
   return readdirSync(I18N_DIR, { withFileTypes: true })
@@ -75,6 +134,10 @@ const catalogs = Object.fromEntries(
 const referenceCatalog = catalogs[REFERENCE_LOCALE]
 const referenceKeys = referenceCatalog ? Object.keys(referenceCatalog).sort() : []
 const sourceKeys = usedTranslationKeys()
+
+for (const violation of hardcodedTemplateMessages()) {
+  errors.push(violation)
+}
 
 for (const locale of locales) {
   const catalog = catalogs[locale]

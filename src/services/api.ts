@@ -1,4 +1,5 @@
 import { appConfig } from '@/config/env'
+import { t } from '@/i18n'
 
 /** Normalized non-successful API response exposed to Pinia stores and views. */
 export class ApiError extends Error {
@@ -85,12 +86,12 @@ function extractErrorMessage(payload: unknown, status: number): string {
   }
 
   if (status === 401) {
-    return 'Session expirée ou identifiants invalides.'
+    return t('api.error.unauthorized')
   }
 
   if (status === 403) {
-    return 'Accès refusé pour ce rôle.'
+    return t('api.error.forbidden')
   }
 
-  return `Erreur API ${status}`
+  return t('api.error.status', { status })
 }

@@ -3,6 +3,7 @@ import { computed, reactive, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
 // import KpiCard from '@/components/common/KpiCard.vue'
+import { questionTypeText, t, tp } from '@/i18n'
 import {
   staticQuestionnaire,
   type StaticPopup,
@@ -150,18 +151,17 @@ function resetDemo(): void {
     <div class="container-fluid px-4 px-xl-5">
       <div class="hero-card p-4 p-lg-5 mb-4">
         <div class="position-relative z-1">
-          <p class="hero-eyebrow mb-3">Questionnaire patient</p>
+          <p class="hero-eyebrow mb-3">{{ t('staticPatient.eyebrow') }}</p>
           <h1 class="hero-title fw-black mb-4">{{ staticQuestionnaire.title }}</h1>
           <p class="hero-text mb-4">
             {{ staticQuestionnaire.finality }}
           </p>
           <div class="d-flex flex-wrap gap-2 align-items-center">
-            <span class="badge-soft success">Code : {{ staticQuestionnaire.publicCode }}</span>
+            <span class="badge-soft success">{{ t('respondent.session.code', { code: staticQuestionnaire.publicCode }) }}</span>
             <span class="badge-soft"
-              >Durée estimée : {{ staticQuestionnaire.estimatedDuration }}</span
-            >
+>{{ t('staticPatient.estimatedDuration', { duration: staticQuestionnaire.estimatedDuration }) }}</span>
             <RouterLink class="btn btn-outline-primary" to="/moderation">
-              Voir le point de vue modérateur
+              {{ t('staticPatient.viewModerator') }}
             </RouterLink>
           </div>
         </div>
@@ -172,25 +172,24 @@ function resetDemo(): void {
           <div class="demo-card h-100">
             <div class="d-flex flex-wrap justify-content-between gap-3 mb-4">
               <div>
-                <p class="section-eyebrow mb-2">Questionnaire</p>
-                <h2 class="h3 fw-bold mb-1">Parcours répondant sans compte</h2>
+                <p class="section-eyebrow mb-2">{{ t('common.questionnaire') }}</p>
+                <h2 class="h3 fw-bold mb-1">{{ t('staticPatient.title') }}</h2>
               </div>
               <button
                 class="btn btn-outline-primary align-self-start"
                 type="button"
                 @click="resetDemo"
               >
-                Réinitialiser
+                {{ t('common.reset') }}
               </button>
             </div>
 
             <div class="question-help mb-4" role="note">
-              <strong>Notice d’information avant démarrage</strong>
+              <strong>{{ t('respondent.notice.title') }}</strong>
               <ul class="small muted mb-3 mt-2 ps-3">
-                <li>Finalité : {{ staticQuestionnaire.finality }}</li>
+                <li>{{ t('respondent.notice.finality') }} : {{ staticQuestionnaire.finality }}</li>
                 <li>
-                  Confidentialité : évitez toute information directement identifiante dans les
-                  champs libres.
+                  {{ t('staticPatient.privacyNotice') }}
                 </li>
               </ul>
               <label class="form-check d-flex gap-2 align-items-start mb-0" for="static-consent">
@@ -201,12 +200,12 @@ function resetDemo(): void {
                   type="checkbox"
                   :disabled="submitted"
                 />
-                <span class="small">J’ai lu la notice d’information.</span>
+                <span class="small">{{ t('staticPatient.consent') }}</span>
               </label>
             </div>
 
             <div v-if="submitted" class="alert alert-success rounded-4" role="status">
-              Soumission confirmée. Les réponses sont verrouillées.
+              {{ t('staticPatient.submitted') }}
             </div>
 
             <div
@@ -223,8 +222,7 @@ function resetDemo(): void {
               <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
                 <div>
                   <span class="badge-soft">
-                    Page {{ currentPageNumber }} / {{ pages.length }} ·
-                    {{ currentPage.group.title }}
+                    {{ t('staticPatient.page', { current: currentPageNumber, total: pages.length, group: currentPage.group.title }) }}
                   </span>
                 </div>
                 <div class="d-flex gap-2">
@@ -234,7 +232,7 @@ function resetDemo(): void {
                     :disabled="isFirstPage"
                     @click="previousPage"
                   >
-                    Précédent
+                    {{ t('respondent.actions.previous') }}
                   </button>
                   <button
                     class="btn btn-sm btn-outline-primary"
@@ -242,7 +240,7 @@ function resetDemo(): void {
                     :disabled="isLastPage"
                     @click="nextPage"
                   >
-                    Suivant
+                    {{ t('staticPatient.next') }}
                   </button>
                 </div>
               </div>
@@ -254,9 +252,9 @@ function resetDemo(): void {
                 class="question-row mb-3"
               >
                 <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
-                  <span class="badge-soft">{{ question.code }} · {{ question.type }}</span>
-                  <span v-if="question.isRequired" class="badge-soft warning">obligatoire</span>
-                  <span v-if="question.popup" class="badge-soft warning">terme expliqué</span>
+                  <span class="badge-soft">{{ question.code }} · {{ questionTypeText(question.type) }}</span>
+                  <span v-if="question.isRequired" class="badge-soft warning">{{ t('respondent.required') }}</span>
+                  <span v-if="question.popup" class="badge-soft warning">{{ t('staticPatient.explainedTerm') }}</span>
                 </div>
 
                 <h3 class="h5 fw-bold">{{ question.label }}</h3>
@@ -265,7 +263,7 @@ function resetDemo(): void {
                 <div
                   v-if="question.popup"
                   class="info-bubble-list mb-3"
-                  aria-label="Terme expliqué pour cette question"
+                  :aria-label="t('staticPatient.explainedTermAria')"
                 >
                   <button
                     class="info-bubble"
@@ -298,7 +296,7 @@ function resetDemo(): void {
                   <div
                     class="likert-scale likert-scale-labelled"
                     role="group"
-                    :aria-label="`Échelle Likert ${question.likertScale.points} points`"
+                    :aria-label="t('respondent.likert.group', { points: question.likertScale.points, label: question.label })"
                   >
                     <button
                       v-for="value in likertValues(question)"
@@ -335,7 +333,7 @@ function resetDemo(): void {
                   v-else-if="question.type === 'information'"
                   class="alert alert-info rounded-4 mb-3"
                 >
-                  Information affichée, aucune réponse attendue.
+                  {{ t('respondent.informationOnly') }}
                 </div>
 
                 <div v-else-if="question.type === 'free_text_long'">
@@ -347,18 +345,17 @@ function resetDemo(): void {
                     @input="save(question, ($event.target as HTMLTextAreaElement).value)"
                   ></textarea>
                   <p class="small muted mb-3">
-                    Champ libre local. Ne saisissez pas d’information directement identifiante.
+                    {{ t('staticPatient.freeTextHelp') }}
                   </p>
                 </div>
               </div>
 
               <div v-if="unansweredRequiredQuestions.length" class="alert alert-warning rounded-4">
-                {{ unansweredRequiredQuestions.length }} question(s) obligatoire(s) restent à
-                compléter.
+                {{ tp('staticPatient.requiredRemaining', unansweredRequiredQuestions.length) }}
               </div>
 
               <div v-if="!consentAccepted && !submitted" class="alert alert-warning rounded-4">
-                La notice d’information doit être confirmée avant la soumission.
+                {{ t('staticPatient.consentRequired') }}
               </div>
 
               <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
@@ -368,10 +365,10 @@ function resetDemo(): void {
                   :disabled="isFirstPage"
                   @click="previousPage"
                 >
-                  Précédent
+                  {{ t('respondent.actions.previous') }}
                 </button>
                 <button v-if="!isLastPage" class="btn btn-primary" type="button" @click="nextPage">
-                  Question suivante
+                  {{ t('respondent.actions.next') }}
                 </button>
                 <button
                   v-else
@@ -380,7 +377,7 @@ function resetDemo(): void {
                   :disabled="!canSubmit"
                   @click="openSubmitConfirmation"
                 >
-                  Préparer la soumission finale
+                  {{ t('respondent.actions.prepareSubmit') }}
                 </button>
               </div>
 
@@ -392,21 +389,21 @@ function resetDemo(): void {
                 aria-labelledby="static-submit-confirm-title"
               >
                 <h2 id="static-submit-confirm-title" class="h5 fw-bold">
-                  Confirmer la soumission locale
+                  {{ t('staticPatient.confirmTitle') }}
                 </h2>
                 <p class="muted">
-                  Après confirmation, les réponses ne pourront plus être modifiées.
+                  {{ t('staticPatient.confirmBody') }}
                 </p>
                 <div class="d-flex flex-wrap gap-2">
                   <button class="btn btn-primary" type="button" @click="confirmSubmit">
-                    Je confirme et je verrouille mes réponses
+                    {{ t('respondent.submit.confirm') }}
                   </button>
                   <button
                     class="btn btn-outline-primary"
                     type="button"
                     @click="showSubmitConfirmation = false"
                   >
-                    Revenir au questionnaire
+                    {{ t('respondent.submit.back') }}
                   </button>
                 </div>
               </div>

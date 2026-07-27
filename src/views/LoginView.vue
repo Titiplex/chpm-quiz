@@ -127,7 +127,7 @@ async function submit(): Promise<void> {
               type="button"
               @click="startOidc"
             >
-              Sign in with the organization identity provider
+              {{ t('auth.oidc.signIn') }}
             </button>
 
             <div v-if="appConfig.demoMode && authConfig.localLoginEnabled" class="mb-4">

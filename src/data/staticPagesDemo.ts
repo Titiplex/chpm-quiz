@@ -64,10 +64,12 @@ export interface StaticQuestionnaire {
   groups: StaticQuestionGroup[]
 }
 
+export type StaticDeliveryChannel = 'email' | 'sms' | 'terminal'
+
 export interface StaticInvitation {
   publicCode: string
   destination: string
-  channel: string
+  channel: StaticDeliveryChannel
   questionnaireTitle: string
   buildingLabel: string
   status: StaticInvitationStatus
@@ -354,46 +356,46 @@ export const staticInvitations: StaticInvitation[] = [
   {
     publicCode: 'ITQ-0001',
     destination: 'i••••••@exemple.org',
-    channel: 'Email',
+    channel: 'email',
     questionnaireTitle: staticQuestionnaire.title,
     buildingLabel: 'CHPM · Bâtiment A',
     status: 'in_progress',
-    sentAt: '2026-06-24 09:15',
+    sentAt: '2026-06-24T09:15:00+02:00',
   },
   {
     publicCode: 'ITQ-MA-002',
     destination: 'Terminal accueil · Bâtiment A',
-    channel: 'Terminal hospitalier',
+    channel: 'terminal',
     questionnaireTitle: staticQuestionnaire.title,
     buildingLabel: 'CHPM · Bâtiment A',
     status: 'submitted',
-    sentAt: '2026-06-24 10:40',
+    sentAt: '2026-06-24T10:40:00+02:00',
   },
   {
     publicCode: 'ITQ-MB-003',
     destination: 'm••••••@exemple.org',
-    channel: 'Email',
+    channel: 'email',
     questionnaireTitle: staticQuestionnaire.title,
     buildingLabel: 'CHPM · Bâtiment B',
     status: 'opened',
-    sentAt: '2026-06-24 14:05',
+    sentAt: '2026-06-24T14:05:00+02:00',
   },
   {
     publicCode: 'ITQ-SMS-003',
     destination: '•••• 0000',
-    channel: 'SMS',
+    channel: 'sms',
     questionnaireTitle: staticQuestionnaire.title,
     buildingLabel: 'CHPM · Bâtiment B',
     status: 'opened',
-    sentAt: '2026-06-24 14:05',
+    sentAt: '2026-06-24T14:05:00+02:00',
   },
   {
     publicCode: 'ITQ-MA-004',
     destination: 'n••••••@exemple.org',
-    channel: 'Email',
+    channel: 'email',
     questionnaireTitle: staticQuestionnaire.title,
     buildingLabel: 'CHPM · Bâtiment A',
     status: 'sent',
-    sentAt: '2026-06-25 08:25',
+    sentAt: '2026-06-25T08:25:00+02:00',
   },
 ]

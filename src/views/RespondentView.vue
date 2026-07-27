@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
 import KpiCard from '@/components/common/KpiCard.vue'
-import { t } from '@/i18n'
+import { formatDate, formatPercent, questionTypeText, t, tp } from '@/i18n'
 import { useRespondentSessionStore } from '@/stores/respondentSession'
 import type {
   ApiPopupDefinition,
@@ -267,13 +267,16 @@ function likertLabel(scale: LikertScaleForDisplay, value: number): string {
   const lastIndex = values.length - 1
   const neutralIndex = Math.floor(lastIndex / 2)
 
-  if (index <= 0) return scale.leftAnchor || `Valeur ${value}`
-  if (index === lastIndex) return scale.rightAnchor || `Valeur ${value}`
+  if (index <= 0) return scale.leftAnchor || t('common.value', { value })
+  if (index === lastIndex) return scale.rightAnchor || t('common.value', { value })
   if (scale.neutralLabel && index === neutralIndex) return scale.neutralLabel
 
-  return index < neutralIndex
-    ? `Vers « ${scale.leftAnchor || 'le minimum'} »`
-    : `Vers « ${scale.rightAnchor || 'le maximum'} »`
+  return t('common.towards', {
+    anchor:
+      index < neutralIndex
+        ? scale.leftAnchor || t('common.minimum')
+        : scale.rightAnchor || t('common.maximum'),
+  })
 }
 
 function questionDomId(question: RespondentQuestion, suffix: string): string {
@@ -475,8 +478,7 @@ async function closeActivePopup(eventType: 'popup_close' | 'popup_switch'): Prom
 async function openSubmitConfirmation(): Promise<void> {
   submitError.value = null
   if (missingConsent.value) {
-    submitError.value =
-      'Merci de confirmer la notice d’information RGPD avant la soumission définitive.'
+    submitError.value = t('respondent.submit.consentRequired')
     return
   }
   await flushPendingAutosaves()
@@ -504,11 +506,18 @@ async function confirmSubmit(): Promise<void> {
     await respondent.submit()
     showSubmitConfirmation.value = false
   } catch (caught) {
-    submitError.value = caught instanceof Error ? caught.message : 'Soumission impossible.'
+    submitError.value = caught instanceof Error ? caught.message : t('store.respondent.submitError')
   } finally {
     isSubmitting.value = false
   }
 }
+
+function responseSessionStatusLabel(status: string): string {
+  const key = `respondent.status.${status}`
+  const translated = t(key)
+  return translated === key ? status : translated
+}
+
 </script>
 
 <template>
@@ -522,7 +531,7 @@ async function confirmSubmit(): Promise<void> {
 
       <div v-else>
         <div v-if="respondent.status === 'loading'" class="alert alert-info rounded-4">
-          Chargement de la session répondant…
+          {{ t('respondent.loading') }}
         </div>
         <div
           v-else-if="respondent.status === 'error'"
@@ -537,15 +546,14 @@ async function confirmSubmit(): Promise<void> {
               <div class="demo-card h-100">
                 <div class="d-flex flex-wrap justify-content-between gap-3 mb-4">
                   <div>
-                    <p class="section-eyebrow mb-2">Vue répondant par jeton signé</p>
+                    <p class="section-eyebrow mb-2">{{ t('respondent.session.eyebrow') }}</p>
                     <h1 class="h2 fw-bold mb-1">{{ respondent.session.questionnaire.title }}</h1>
                     <p class="muted mb-0">
-                      {{ respondent.session.questionnaire.finality }} La sauvegarde reste possible
-                      tant que la soumission finale n’a pas été confirmée.
+                      {{ respondent.session.questionnaire.finality }} {{ t('respondent.session.autosaveNotice') }}
                     </p>
                   </div>
                   <span class="badge-soft success align-self-start"
-                    >Code : {{ respondent.session.responseSession.publicCode }}</span
+>{{ t('respondent.session.code', { code: respondent.session.responseSession.publicCode }) }}</span
                   >
                 </div>
 
@@ -553,36 +561,35 @@ async function confirmSubmit(): Promise<void> {
                   <strong>{{ t('respondent.notice.title') }}</strong>
                   <ul class="small muted mb-3 mt-2 ps-3">
                     <li>
-                      Finalité :
+                      {{ t('respondent.notice.finality') }} :
                       {{
                         respondent.session.legalNotice?.finality ??
                         respondent.session.questionnaire.finality
                       }}
                     </li>
                     <li>
-                      Durée estimée :
+                      {{ t('respondent.notice.duration') }} :
                       {{
-                        respondent.session.legalNotice?.estimatedDurationMinutes ?? 'quelques'
+                        respondent.session.legalNotice?.estimatedDurationMinutes ?? t('respondent.notice.aFew')
                       }}
-                      minute(s), avec reprise possible depuis le même lien tant que la soumission
-                      finale n’est pas faite.
+                      {{ t('respondent.notice.minutesResume') }}
                     </li>
                     <li>
-                      Confidentialité :
+                      {{ t('respondent.notice.confidentiality') }} :
                       {{
                         respondent.session.legalNotice?.pseudonymizationStatus ??
                         (isOnsiteTerminal
-                          ? 'aucun email n’est collecté pour cette invitation terminal.'
-                          : 'l’email est conservé séparément dans la base identité.')
+                          ? t('respondent.notice.noEmailTerminal')
+                          : t('respondent.notice.emailSeparated'))
                       }}
                     </li>
                     <li>
-                      Droits et contact :
+                      {{ t('respondent.notice.rightsContact') }} :
                       {{
                         respondent.session.legalNotice?.rights ??
-                        'Contactez le DPO pour toute demande RGPD.'
+                        t('respondent.notice.defaultRights')
                       }}
-                      Contact : {{ respondent.session.legalNotice?.dpoContact ?? 'DPO' }}.
+                      {{ t('respondent.notice.contact') }} : {{ respondent.session.legalNotice?.dpoContact ?? t('respondent.notice.dpo') }}.
                     </li>
                   </ul>
                   <label
@@ -603,9 +610,7 @@ async function confirmSubmit(): Promise<void> {
                 <div v-if="respondent.isLocked" class="alert alert-success rounded-4">
                   <div class="d-flex flex-wrap justify-content-between gap-3 align-items-center">
                     <span
-                      >Questionnaire terminé. Les réponses sont verrouillées et ne peuvent plus être
-                      modifiées.</span
-                    >
+>{{ t('respondent.locked') }}</span>
                     <RouterLink
                       v-if="isOnsiteTerminal && respondent.terminalToken"
                       class="btn btn-sm btn-outline-success"
@@ -614,7 +619,7 @@ async function confirmSubmit(): Promise<void> {
                         params: { terminalToken: respondent.terminalToken },
                       }"
                     >
-                      Retour au terminal
+                      {{ t('respondent.actions.backToTerminal') }}
                     </RouterLink>
                   </div>
                 </div>
@@ -637,13 +642,10 @@ async function confirmSubmit(): Promise<void> {
                   >
                     <div>
                       <span class="badge-soft">
-                        Page {{ currentPageNumber }} / {{ pages.length }} ·
-                        {{ currentPage.group.title }} ·
-                        {{ currentPage.group.questionsPerPage }} question(s)/page
+                        {{ t('respondent.page.summary', { current: currentPageNumber, total: pages.length, group: currentPage.group.title, count: currentPage.group.questionsPerPage }) }}
                       </span>
                       <span v-if="currentPage.group.randomize" class="badge-soft warning ms-2"
-                        >ordre randomisé stable</span
-                      >
+>{{ t('respondent.page.stableRandomOrder') }}</span>
                     </div>
                     <div class="d-flex gap-2">
                       <button
@@ -675,13 +677,12 @@ async function confirmSubmit(): Promise<void> {
                   >
                     <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
                       <span class="badge-soft"
-                        >{{ question.code }} · {{ question.responseType }}</span
-                      >
+>{{ question.code }} · {{ questionTypeText(question.responseType) }}</span>
                       <span v-if="question.isRequired" class="badge-soft warning">{{
                         t('respondent.required')
                       }}</span>
                       <span v-if="question.popupDefinitions?.length" class="badge-soft warning">
-                        {{ question.popupDefinitions.length }} terme(s) expliqué(s)
+                        {{ tp('respondent.popup.terms', question.popupDefinitions.length) }}
                       </span>
                     </div>
                     <h2 :id="questionDomId(question, 'label')" class="h5 fw-bold">
@@ -704,7 +705,7 @@ async function confirmSubmit(): Promise<void> {
                     <div
                       v-if="question.popupDefinitions?.length"
                       class="info-bubble-list mb-3"
-                      aria-label="Termes expliqués pour cette question"
+                      :aria-label="t('respondent.popup.ariaLabel')"
                     >
                       <button
                         v-for="popup in question.popupDefinitions"
@@ -731,7 +732,7 @@ async function confirmSubmit(): Promise<void> {
                     >
                       <div class="d-flex flex-wrap justify-content-between gap-3">
                         <strong>{{ popup.title }}</strong>
-                        <span class="badge-soft warning">ouverture tracée</span>
+                        <span class="badge-soft warning">{{ t('respondent.popup.tracked') }}</span>
                       </div>
                       <p class="small muted mb-0 mt-2">{{ popup.body }}</p>
                     </div>
@@ -771,7 +772,7 @@ async function confirmSubmit(): Promise<void> {
                             :class="{ active: isLikertSelected(question, value) }"
                             type="button"
                             :aria-describedby="questionHelpIds(question)"
-                            :aria-label="`${likertLabel(question.likertScale, value)} — valeur ${value}`"
+                            :aria-label="t('respondent.likert.valueLabel', { label: likertLabel(question.likertScale, value), value })"
                             :disabled="respondent.isLocked"
                             @click="save(question, value)"
                           >
@@ -779,7 +780,7 @@ async function confirmSubmit(): Promise<void> {
                           </button>
                         </div>
                         <div v-if="question.likertScale.allowNotApplicable" class="likert-choice">
-                          <span class="likert-choice-label">Sans objet</span>
+                          <span class="likert-choice-label">{{ t('common.notApplicableShort') }}</span>
                           <button
                             class="btn btn-sm likert-extra-button"
                             :class="
@@ -791,7 +792,7 @@ async function confirmSubmit(): Promise<void> {
                             :disabled="respondent.isLocked"
                             @click="save(question, 'not_applicable')"
                           >
-                            Non applicable
+                            {{ t('common.notApplicable') }}
                           </button>
                         </div>
                       </div>
@@ -877,7 +878,7 @@ async function confirmSubmit(): Promise<void> {
                       v-else-if="question.responseType === 'information'"
                       class="alert alert-info rounded-4 mb-3"
                     >
-                      Information affichée, aucune réponse attendue.
+                      {{ t('respondent.informationOnly') }}
                     </div>
 
                     <div
@@ -912,17 +913,15 @@ async function confirmSubmit(): Promise<void> {
                     v-if="unansweredRequiredQuestions.length"
                     class="alert alert-warning rounded-4"
                   >
-                    {{ unansweredRequiredQuestions.length }} question(s) obligatoire(s) doivent
-                    encore recevoir une réponse avant soumission finale.
+                    {{ tp('respondent.validation.requiredRemaining', unansweredRequiredQuestions.length) }}
                   </div>
 
                   <div v-if="missingConsent" class="alert alert-warning rounded-4">
-                    La notice d’information RGPD doit être confirmée avant la soumission finale.
+                    {{ t('respondent.validation.consent') }}
                   </div>
 
                   <div v-if="respondent.warnings.length" class="alert alert-warning rounded-4">
-                    Une réponse libre semble contenir une donnée directement identifiante. Elle est
-                    sauvegardée mais signalée pour information.
+                    {{ t('respondent.validation.piiWarning') }}
                   </div>
 
                   <div v-if="submitError" class="alert alert-danger rounded-4" role="alert">
@@ -1000,35 +999,35 @@ async function confirmSubmit(): Promise<void> {
             <div class="col-xl-4">
               <div class="d-grid gap-4">
                 <div class="demo-card">
-                  <p class="section-eyebrow mb-2">Session</p>
-                  <h2 class="h5 fw-bold">État de passation</h2>
+                  <p class="section-eyebrow mb-2">{{ t('respondent.sidebar.sessionEyebrow') }}</p>
+                  <h2 class="h5 fw-bold">{{ t('respondent.sidebar.sessionTitle') }}</h2>
                   <div class="row g-3">
                     <div class="col-6">
-                      <KpiCard label="Statut" :value="respondent.session.responseSession.status" />
+                      <KpiCard :label="t('common.status')" :value="responseSessionStatusLabel(respondent.session.responseSession.status)" />
                     </div>
                     <div class="col-6">
-                      <KpiCard label="Progression" :value="`${respondent.progress} %`" />
+                      <KpiCard :label="t('common.progress')" :value="formatPercent(respondent.progress / 100)" />
                     </div>
                   </div>
                   <p class="small muted mb-0 mt-3">
-                    Bâtiment : {{ respondent.session.invitation.building.label }}.
+                    {{ t('common.building') }} : {{ respondent.session.invitation.building.label }}.
                     <template v-if="isOnsiteTerminal"
-                      >Terminal :
+>{{ t('common.terminal') }} :
                       {{ respondent.session.invitation.terminalDevice?.label }}. </template
-                    >Expiration :
-                    {{ new Date(respondent.session.invitation.expiresAt).toLocaleDateString() }}.
+                    >{{ t('respondent.sidebar.expiration') }} :
+                    {{ formatDate(respondent.session.invitation.expiresAt, { dateStyle: 'long' }) }}.
                   </p>
                 </div>
 
                 <div class="demo-card">
-                  <p class="section-eyebrow mb-2">Confidentialité</p>
-                  <h2 class="h5 fw-bold">Pseudonymisation</h2>
+                  <p class="section-eyebrow mb-2">{{ t('respondent.sidebar.privacyEyebrow') }}</p>
+                  <h2 class="h5 fw-bold">{{ t('respondent.sidebar.privacyTitle') }}</h2>
                   <p class="muted mb-0">
-                    Les réponses sont rattachées au code public.
+                    {{ t('respondent.sidebar.privacyBase') }}
                     {{
                       isOnsiteTerminal
-                        ? 'Cette passation terminal ne collecte pas d’adresse email.'
-                        : 'La correspondance email-code est isolée et inaccessible depuis cette interface.'
+                        ? t('respondent.sidebar.privacyTerminal')
+                        : t('respondent.sidebar.privacyEmail')
                     }}
                   </p>
                 </div>

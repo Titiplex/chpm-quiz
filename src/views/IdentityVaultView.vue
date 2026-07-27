@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 
 import PageHeader from '@/components/common/PageHeader.vue'
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
+import { formatDate as formatLocaleDate, t, tp } from '@/i18n'
 import { apiRequest } from '@/services/api'
 import { useSessionStore } from '@/stores/session'
 import type {
@@ -50,7 +51,7 @@ async function refresh(): Promise<void> {
     requests.value = requestList.requests
   } catch (caught) {
     error.value =
-      caught instanceof Error ? caught.message : 'Chargement du coffre email impossible.'
+      caught instanceof Error ? caught.message : t('identityVault.error.load')
   } finally {
     isLoading.value = false
   }
@@ -73,7 +74,7 @@ async function createRequest(): Promise<void> {
       method: 'POST',
       body: payload,
     })
-    message.value = `Demande ${response.judicialRequest.requestReference} créée et auditée.`
+    message.value = t('identityVault.request.created', { reference: response.judicialRequest.requestReference })
   })
 }
 
@@ -83,10 +84,10 @@ async function validateDpo(id: string): Promise<void> {
       `/judicial-access/requests/${id}/validate-dpo`,
       {
         method: 'POST',
-        body: { comments: 'Validation DPO.' },
+        body: { comments: t('identityVault.request.dpoComment') },
       },
     )
-    message.value = `Validation DPO enregistrée pour ${response.judicialRequest.requestReference}.`
+    message.value = t('identityVault.request.dpoValidated', { reference: response.judicialRequest.requestReference })
   })
 }
 
@@ -96,10 +97,10 @@ async function validateLegal(id: string): Promise<void> {
       `/judicial-access/requests/${id}/validate-legal`,
       {
         method: 'POST',
-        body: { comments: 'Validation juridique.' },
+        body: { comments: t('identityVault.request.legalComment') },
       },
     )
-    message.value = `Validation juridique enregistrée pour ${response.judicialRequest.requestReference}.`
+    message.value = t('identityVault.request.legalValidated', { reference: response.judicialRequest.requestReference })
   })
 }
 
@@ -112,12 +113,12 @@ async function executeRequest(id: string): Promise<void> {
       },
     )
     if (!response.export) {
-      throw new Error('The API did not return the expected encrypted export.')
+      throw new Error(t('identityVault.error.missingExport'))
     }
     encryptedExport.value = response.export
     encryptedExportReference.value = response.judicialRequest.requestReference
     downloadEncryptedExport(response.export, response.judicialRequest.requestReference)
-    message.value = `Export chiffré téléchargé pour ${response.judicialRequest.requestReference}. Vérifiez son empreinte avant transmission.`
+    message.value = t('identityVault.request.exportDownloaded', { reference: response.judicialRequest.requestReference })
   })
 }
 
@@ -129,16 +130,16 @@ async function closeRequest(id: string): Promise<void> {
         method: 'POST',
         body: {
           comments:
-            'Clôture après transmission sécurisée et vérification de l’empreinte en coffre documentaire.',
+            t('identityVault.request.closeComment'),
         },
       },
     )
-    message.value = `Demande ${response.judicialRequest.requestReference} clôturée.`
+    message.value = t('identityVault.request.closed', { reference: response.judicialRequest.requestReference })
   })
 }
 
 async function rejectRequest(id: string): Promise<void> {
-  const reason = window.prompt('Motif du rejet (obligatoire) :')?.trim()
+  const reason = window.prompt(t('identityVault.request.rejectPrompt'))?.trim()
   if (!reason) return
 
   await runWorkflow(async () => {
@@ -149,7 +150,7 @@ async function rejectRequest(id: string): Promise<void> {
         body: { reason },
       },
     )
-    message.value = `Demande ${response.judicialRequest.requestReference} rejetée et auditée.`
+    message.value = t('identityVault.request.rejected', { reference: response.judicialRequest.requestReference })
   })
 }
 
@@ -161,7 +162,7 @@ async function runWorkflow(action: () => Promise<void>, refreshAfter = true): Pr
     await action()
     if (refreshAfter) await refresh()
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Action coffre email impossible.'
+    error.value = caught instanceof Error ? caught.message : t('identityVault.error.action')
   } finally {
     isLoading.value = false
   }
@@ -189,20 +190,17 @@ function downloadEncryptedExport(value: JudicialEncryptedExport, requestReferenc
 }
 
 function formatDate(value: string | null | undefined): string {
-  if (!value) return '—'
-  return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(
-    new Date(value),
-  )
+  return value ? formatLocaleDate(value, { dateStyle: 'short', timeStyle: 'short' }) : '—'
 }
 
 function statusLabel(value: string): string {
   return (
     {
-      received: 'reçue',
-      validated: 'validée',
-      rejected: 'rejetée',
-      executed: 'exécutée',
-      closed: 'clôturée',
+      received: t('identityVault.status.received'),
+      validated: t('identityVault.status.validated'),
+      rejected: t('identityVault.status.rejected'),
+      executed: t('identityVault.status.executed'),
+      closed: t('identityVault.status.closed'),
     }[value] ?? value
   )
 }
@@ -212,10 +210,10 @@ function statusLabel(value: string): string {
   <section class="demo-page">
     <div class="container-fluid px-4 px-xl-5">
       <PageHeader
-        eyebrow="Coffre email"
-        title="Accès judiciaire contrôlé"
-        description="Console dédiée au workflow exceptionnel d’accès code-contact : demande juridique, double validation indépendante, export chiffré à durée limitée et double journalisation."
-        badge="Accès restreint"
+        :eyebrow="t('identityVault.header.eyebrow')"
+        :title="t('identityVault.header.title')"
+        :description="t('identityVault.header.description')"
+        :badge="t('identityVault.header.badge')"
       />
       <RoleGateInfo class="mb-4" />
 
@@ -225,11 +223,11 @@ function statusLabel(value: string): string {
       <div class="row g-4">
         <div v-if="canCreate" class="col-12">
           <div class="demo-card h-100">
-            <p class="section-eyebrow mb-2">Nouvelle demande</p>
-            <h2 class="h4 fw-bold mb-4">Créer une JudicialAccessRequest</h2>
+            <p class="section-eyebrow mb-2">{{ t('identityVault.create.eyebrow') }}</p>
+            <h2 class="h4 fw-bold mb-4">{{ t('identityVault.create.title') }}</h2>
             <div class="row g-3">
               <div class="col-md-6">
-                <label class="form-label" for="requestReference">Référence</label>
+                <label class="form-label" for="requestReference">{{ t('identityVault.create.reference') }}</label>
                 <input
                   id="requestReference"
                   v-model="form.requestReference"
@@ -237,7 +235,7 @@ function statusLabel(value: string): string {
                 />
               </div>
               <div class="col-md-6">
-                <label class="form-label" for="courtOrderReference">Référence ordonnance</label>
+                <label class="form-label" for="courtOrderReference">{{ t('identityVault.create.courtOrder') }}</label>
                 <input
                   id="courtOrderReference"
                   v-model="form.courtOrderReference"
@@ -246,7 +244,7 @@ function statusLabel(value: string): string {
               </div>
               <div class="col-12">
                 <label class="form-label" for="legalBasisDescription"
-                  >Base légale / justification</label
+                  >{{ t('identityVault.create.legalBasis') }}</label
                 >
                 <textarea
                   id="legalBasisDescription"
@@ -256,7 +254,7 @@ function statusLabel(value: string): string {
                 ></textarea>
               </div>
               <div class="col-md-6">
-                <label class="form-label" for="requestedPublicCodes">Codes concernés</label>
+                <label class="form-label" for="requestedPublicCodes">{{ t('identityVault.create.codes') }}</label>
                 <input
                   id="requestedPublicCodes"
                   v-model="form.requestedPublicCodes"
@@ -264,7 +262,7 @@ function statusLabel(value: string): string {
                 />
               </div>
               <div class="col-md-6">
-                <label class="form-label" for="requestedBy">Demandeur</label>
+                <label class="form-label" for="requestedBy">{{ t('identityVault.create.requestedBy') }}</label>
                 <input id="requestedBy" v-model="form.requestedBy" class="form-control rounded-4" />
               </div>
             </div>
@@ -274,25 +272,25 @@ function statusLabel(value: string): string {
               :disabled="isLoading"
               @click="createRequest"
             >
-              Créer et journaliser
+              {{ t('identityVault.create.submit') }}
             </button>
           </div>
         </div>
 
         <div class="col-12">
           <div class="demo-card">
-            <p class="section-eyebrow mb-2">Workflow</p>
-            <h2 class="h4 fw-bold mb-4">Demandes d’accès judiciaire</h2>
+            <p class="section-eyebrow mb-2">{{ t('identityVault.workflow.eyebrow') }}</p>
+            <h2 class="h4 fw-bold mb-4">{{ t('identityVault.workflow.title') }}</h2>
             <div class="table-card table-card-scroll">
               <table class="table align-middle">
                 <thead class="table-light">
                   <tr>
-                    <th>Référence</th>
-                    <th>Codes</th>
-                    <th>Statut</th>
-                    <th>Validations</th>
-                    <th>Empreinte export</th>
-                    <th>Actions</th>
+                    <th>{{ t('identityVault.create.reference') }}</th>
+                    <th>{{ t('identityVault.table.codes') }}</th>
+                    <th>{{ t('common.status') }}</th>
+                    <th>{{ t('identityVault.table.validations') }}</th>
+                    <th>{{ t('identityVault.table.fingerprint') }}</th>
+                    <th>{{ t('common.actions') }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -307,16 +305,16 @@ function statusLabel(value: string): string {
                     </td>
                     <td>
                       <div class="small">
-                        DPO : {{ request.dpoValidationUserId ? 'oui' : 'non' }}
+                        {{ t('identityVault.validation.dpo', { state: request.dpoValidationUserId ? t('common.yes') : t('common.no') }) }}
                       </div>
                       <div class="small">
-                        Juridique : {{ request.legalValidationUserId ? 'oui' : 'non' }}
+                        {{ t('identityVault.validation.legal', { state: request.legalValidationUserId ? t('common.yes') : t('common.no') }) }}
                       </div>
                     </td>
                     <td class="small muted">
                       <div>{{ request.exportFingerprint ?? '—' }}</div>
                       <div v-if="request.exportExpiresAt">
-                        expiration : {{ formatDate(request.exportExpiresAt) }}
+                        {{ t('identityVault.export.expiration', { date: formatDate(request.exportExpiresAt) }) }}
                       </div>
                     </td>
                     <td>
@@ -332,7 +330,7 @@ function statusLabel(value: string): string {
                           "
                           @click="validateDpo(request.id)"
                         >
-                          Valider DPO
+                          {{ t('identityVault.actions.validateDpo') }}
                         </button>
                         <button
                           class="btn btn-sm btn-outline-primary rounded-pill"
@@ -345,7 +343,7 @@ function statusLabel(value: string): string {
                           "
                           @click="validateLegal(request.id)"
                         >
-                          Valider juridique
+                          {{ t('identityVault.actions.validateLegal') }}
                         </button>
                         <button
                           class="btn btn-sm btn-outline-warning rounded-pill"
@@ -353,7 +351,7 @@ function statusLabel(value: string): string {
                           :disabled="!canExecute || request.status !== 'validated' || isLoading"
                           @click="executeRequest(request.id)"
                         >
-                          Exécuter export
+                          {{ t('identityVault.actions.execute') }}
                         </button>
                         <button
                           class="btn btn-sm btn-outline-secondary rounded-pill"
@@ -361,7 +359,7 @@ function statusLabel(value: string): string {
                           :disabled="!canClose || request.status !== 'executed' || isLoading"
                           @click="closeRequest(request.id)"
                         >
-                          Clôturer
+                          {{ t('identityVault.actions.close') }}
                         </button>
                         <button
                           class="btn btn-sm btn-outline-danger rounded-pill"
@@ -371,7 +369,7 @@ function statusLabel(value: string): string {
                           "
                           @click="rejectRequest(request.id)"
                         >
-                          Rejeter
+                          {{ t('identityVault.actions.reject') }}
                         </button>
                       </div>
                     </td>
@@ -384,24 +382,20 @@ function statusLabel(value: string): string {
 
         <div v-if="encryptedExport" class="col-12">
           <div class="demo-card border border-warning">
-            <p class="section-eyebrow mb-2">Export chiffré en mémoire</p>
-            <h2 class="h5 fw-bold">Empreinte {{ encryptedExport.fingerprint }}</h2>
+            <p class="section-eyebrow mb-2">{{ t('identityVault.export.eyebrow') }}</p>
+            <h2 class="h5 fw-bold">{{ t('identityVault.export.fingerprint', { fingerprint: encryptedExport.fingerprint }) }}</h2>
             <p class="muted mb-3">
-              Le fichier contient uniquement une enveloppe AES-256-GCM. Conservez-le dans le coffre
-              documentaire approuvé, transmettez la clé par un canal séparé et détruisez-le à
-              l’expiration.
+              {{ t('identityVault.export.description') }}
             </p>
             <code class="small d-block text-break mb-3"
-              >{{ encryptedExport.envelope.algorithm }} · {{ encryptedExport.envelope.keyRef }} ·
-              {{ encryptedExport.rowCount }} ligne(s) · expiration
-              {{ formatDate(encryptedExport.expiresAt) }}</code
+              >{{ tp('identityVault.export.metadata', encryptedExport.rowCount, { algorithm: encryptedExport.envelope.algorithm, keyRef: encryptedExport.envelope.keyRef, expiresAt: formatDate(encryptedExport.expiresAt) }) }}</code
             >
             <button
               class="btn btn-outline-warning rounded-pill"
               type="button"
               @click="downloadEncryptedExport(encryptedExport, encryptedExportReference)"
             >
-              Télécharger à nouveau l’enveloppe chiffrée
+              {{ t('identityVault.export.downloadAgain') }}
             </button>
           </div>
         </div>

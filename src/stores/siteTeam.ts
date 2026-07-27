@@ -1,6 +1,8 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
+import { t } from '@/i18n'
+
 import { apiRequest } from '@/services/api'
 import type {
   ApiSiteTeamUser,
@@ -35,7 +37,7 @@ export const useSiteTeamStore = defineStore('siteTeam', () => {
       status.value = 'ready'
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Chargement de l’équipe impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.siteTeam.loadError')
     }
   }
 
@@ -57,7 +59,7 @@ export const useSiteTeamStore = defineStore('siteTeam', () => {
       status.value = 'ready'
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Création du modérateur impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.siteTeam.createModeratorError')
       throw caught
     }
   }
@@ -76,7 +78,7 @@ export const useSiteTeamStore = defineStore('siteTeam', () => {
       status.value = 'ready'
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Mise à jour du modérateur impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.siteTeam.updateModeratorError')
       throw caught
     }
   }
@@ -98,7 +100,7 @@ export const useSiteTeamStore = defineStore('siteTeam', () => {
       status.value = 'ready'
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Réinitialisation du mot de passe impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.common.resetPasswordError')
       throw caught
     }
   }
@@ -117,7 +119,7 @@ export const useSiteTeamStore = defineStore('siteTeam', () => {
       status.value = 'ready'
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Révocation des sessions impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.common.revokeSessionsError')
       throw caught
     }
   }

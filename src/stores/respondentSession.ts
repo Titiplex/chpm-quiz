@@ -1,6 +1,8 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
+import { t } from '@/i18n'
+
 import { apiRequest } from '@/services/api'
 import { TERMINAL_TOKEN_STORAGE_KEY } from '@/stores/terminal'
 import type {
@@ -48,7 +50,7 @@ export const useRespondentSessionStore = defineStore('respondentSession', () => 
     } catch (caught) {
       session.value = null
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Lien répondant invalide ou expiré.'
+      error.value = caught instanceof Error ? caught.message : t('store.respondent.invalidLink')
     }
   }
 
@@ -70,7 +72,7 @@ export const useRespondentSessionStore = defineStore('respondentSession', () => 
       await load(token.value, { showLoading: false })
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Sauvegarde impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.common.saveError')
       throw caught
     }
   }
@@ -104,7 +106,7 @@ export const useRespondentSessionStore = defineStore('respondentSession', () => 
       return void response
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Soumission impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.respondent.submitError')
       throw caught
     }
   }

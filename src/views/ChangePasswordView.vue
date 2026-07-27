@@ -3,6 +3,7 @@ import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { defaultPathByRole } from '@/config/navigation'
+import { t } from '@/i18n'
 import { useSessionStore } from '@/stores/session'
 
 const router = useRouter()
@@ -14,7 +15,7 @@ const saving = ref(false)
 async function submit(): Promise<void> {
   localError.value = null
   if (form.newPassword !== form.confirmation) {
-    localError.value = 'The password confirmation does not match.'
+    localError.value = t('password.confirmationMismatch')
     return
   }
   saving.value = true
@@ -25,7 +26,7 @@ async function submit(): Promise<void> {
     })
     await router.replace(defaultPathByRole[session.currentRole])
   } catch (error) {
-    localError.value = error instanceof Error ? error.message : 'The password could not be changed.'
+    localError.value = error instanceof Error ? error.message : t('password.changeFailed')
   } finally {
     saving.value = false
   }
@@ -38,19 +39,19 @@ async function submit(): Promise<void> {
       <div class="row justify-content-center">
         <div class="col-md-8 col-lg-6 col-xl-4">
           <div class="demo-card">
-            <p class="section-eyebrow mb-2">Account security</p>
-            <h1 class="page-header-title mb-3">Change your password</h1>
-            <p class="mb-4">A temporary password cannot be used as a permanent credential.</p>
+            <p class="section-eyebrow mb-2">{{ t('password.eyebrow') }}</p>
+            <h1 class="page-header-title mb-3">{{ t('password.title') }}</h1>
+            <p class="mb-4">{{ t('password.description') }}</p>
             <form @submit.prevent="submit">
-              <label class="form-label fw-semibold" for="current-password">Current password</label>
+              <label class="form-label fw-semibold" for="current-password">{{ t('password.current') }}</label>
               <input id="current-password" v-model="form.currentPassword" class="form-control mb-3" autocomplete="current-password" type="password" required />
-              <label class="form-label fw-semibold" for="new-password">New password</label>
+              <label class="form-label fw-semibold" for="new-password">{{ t('password.new') }}</label>
               <input id="new-password" v-model="form.newPassword" class="form-control mb-3" autocomplete="new-password" type="password" minlength="12" required />
-              <label class="form-label fw-semibold" for="password-confirmation">Confirm the new password</label>
+              <label class="form-label fw-semibold" for="password-confirmation">{{ t('password.confirm') }}</label>
               <input id="password-confirmation" v-model="form.confirmation" class="form-control mb-3" autocomplete="new-password" type="password" minlength="12" required />
               <div v-if="localError" class="alert alert-danger" role="alert">{{ localError }}</div>
               <button class="btn btn-primary w-100" type="submit" :disabled="saving">
-                {{ saving ? 'Saving…' : 'Save password' }}
+                {{ saving ? t('common.saving') : t('password.save') }}
               </button>
             </form>
           </div>

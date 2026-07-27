@@ -1,6 +1,8 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
+import { t } from '@/i18n'
+
 import { apiRequest } from '@/services/api'
 import type { ApiInvitation, ApiTerminalDevice, OpenTerminalInvitationResponse, TerminalSessionResponse } from '@shared/types/api'
 
@@ -22,7 +24,7 @@ export const useTerminalStore = defineStore('terminal', () => {
 
     if (!resolvedToken) {
       status.value = 'error'
-      error.value = 'Aucun jeton terminal fourni.'
+      error.value = t('store.terminal.missingToken')
       return
     }
 
@@ -40,12 +42,12 @@ export const useTerminalStore = defineStore('terminal', () => {
       terminalDevice.value = null
       invitations.value = []
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Terminal hospitalier invalide ou désactivé.'
+      error.value = caught instanceof Error ? caught.message : t('store.terminal.invalid')
     }
   }
 
   async function openInvitation(invitationId: string): Promise<OpenTerminalInvitationResponse> {
-    if (!terminalToken.value) throw new Error('Jeton terminal manquant.')
+    if (!terminalToken.value) throw new Error(t('store.terminal.missingToken'))
     status.value = 'opening'
     error.value = null
 
@@ -59,7 +61,7 @@ export const useTerminalStore = defineStore('terminal', () => {
       return response
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Ouverture du questionnaire impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.terminal.openError')
       throw caught
     }
   }
