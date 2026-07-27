@@ -5,6 +5,7 @@ These runbooks describe the repository's operational baseline. They must be adap
 | Document | Purpose |
 | --- | --- |
 | [Installation](installation.md) | Install, configure, validate, bootstrap, upgrade, and hand over production |
+| [Bêta HDS France](beta-hds-deployment.md) | Choix fournisseur, architecture, configuration et recette d’une bêta avec données de santé |
 | [Go-live record](go-live-checklist.md) | Client evidence checklist and formal go/no-go signatures |
 | [Operations](exploitation.md) | Services, health, metrics, alerts, logs, maintenance, and routine checks |
 | [Backup and restore](backup-restore.md) | Encrypted backups and isolated restoration tests |

@@ -120,6 +120,9 @@ describe('NotificationsService', () => {
 
     expect(mailQueue.enqueue).toHaveBeenCalledTimes(1)
     expect(mailQueue.enqueue).toHaveBeenCalledWith(expect.objectContaining({ template: 'submission_notification', to: { email: 'admin@example.test', name: 'Admin' } }))
+    const immediatePayload = mailQueue.enqueue.mock.calls[0]?.[0]
+    expect(immediatePayload.text).not.toContain('ITQ-0001')
+    expect(immediatePayload.text).not.toContain('Nombre de réponses')
     expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'notification.submission_queued' }) }))
     expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'notification.digest_queued' }) }))
     expect(identityVault.recordDeliveryEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: 'notification_submission_queued' }))
@@ -144,6 +147,9 @@ describe('NotificationsService', () => {
     const sent = await service.processDueDailyDigests({ now })
     expect(sent.delivered[0]).toMatchObject({ subscriptionId: 'sub-daily', queuedEventCount: 2, publicCodes: ['ITQ-0001', 'ITQ-0002'] })
     expect(mailQueue.enqueue).toHaveBeenCalledWith(expect.objectContaining({ template: 'daily_digest' }))
+    const digestPayload = mailQueue.enqueue.mock.calls[0]?.[0]
+    expect(digestPayload.text).not.toContain('ITQ-0001')
+    expect(digestPayload.text).not.toContain('ITQ-0002')
     expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'notification.digest_sent' }) }))
     expect(prisma.notificationSubscription.update).toHaveBeenCalledWith({ where: { id: 'sub-daily' }, data: { lastDeliveredAt: now } })
   })

@@ -146,7 +146,11 @@ describe('ModerationService', () => {
 
     expect(prisma.invitation.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ deliveryMode: 'email_simulation', status: 'sent', notifyModerator: true }) }))
     expect(identityVault.createEmailIdentity).toHaveBeenCalledWith(expect.objectContaining({ email: 'patient@example.test', invitationId: 'invitation-1' }))
-    expect(mailQueue.enqueue).toHaveBeenCalledWith(expect.objectContaining({ template: 'invitation', subject: expect.stringContaining('Invitation à répondre') }))
+    expect(mailQueue.enqueue).toHaveBeenCalledWith(expect.objectContaining({ template: 'invitation', subject: 'Votre invitation sécurisée' }))
+    const mailPayload = mailQueue.enqueue.mock.calls[0]?.[0]
+    expect(mailPayload.text).toContain('https://app.example.test/r/')
+    expect(mailPayload.text).not.toContain('ITQ')
+    expect(mailPayload.text).not.toContain('ABCD-1234')
     expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'invitation.create' }))
     expect(result.accessToken).toContain('.signed-token')
     expect(result.devAccessLink).toContain('https://app.example.test/r/')
@@ -166,6 +170,10 @@ describe('ModerationService', () => {
     expect(prisma.invitation.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ deliveryMode: 'sms_simulation', status: 'sent', notifyModerator: true }) }))
     expect(identityVault.createPhoneIdentity).toHaveBeenCalledWith(expect.objectContaining({ phone: '+33600000000', invitationId: 'invitation-1' }))
     expect(smsQueue.enqueue).toHaveBeenCalledWith(expect.objectContaining({ template: 'invitation', to: { phone: '+33600000000' } }))
+    const smsPayload = smsQueue.enqueue.mock.calls[0]?.[0]
+    expect(smsPayload.text).toContain('https://app.example.test/r/')
+    expect(smsPayload.text).not.toContain('ITQ')
+    expect(smsPayload.text).not.toContain('ABCD-1234')
     expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'invitation.create' }))
     expect(result.accessToken).toContain('.signed-token')
   })

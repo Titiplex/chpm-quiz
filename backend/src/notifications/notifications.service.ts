@@ -203,10 +203,8 @@ export class NotificationsService implements OnModuleInit {
             subject: 'Nouvelle soumission questionnaire CHPM',
             text: [
               'Bonjour,',
-              'Une nouvelle soumission pseudonymisée a été reçue.',
-              `Code opérationnel : ${input.publicCode}.`,
-              `Nombre de réponses : ${input.answerCount}.`,
-              'Aucun email répondant n’est inclus dans cette notification.',
+              'Une nouvelle soumission est disponible dans l’espace sécurisé CHPM.',
+              'Connectez-vous à l’application pour la consulter selon vos habilitations.',
             ].join('\n'),
             metadata: {
               subscriptionId: subscription.id,
@@ -320,9 +318,8 @@ export class NotificationsService implements OnModuleInit {
             subject: 'Résumé quotidien CHPM — soumissions questionnaires',
             text: [
               'Bonjour,',
-              `${matchingEvents.length} événement(s) questionnaire nécessitent votre attention.`,
-              `Codes pseudonymisés : ${publicCodes.join(', ')}.`,
-              'Aucun email répondant n’est inclus dans ce résumé.',
+              `${matchingEvents.length} nouvelle(s) soumission(s) nécessitent votre attention.`,
+              'Connectez-vous à l’espace sécurisé CHPM pour les consulter selon vos habilitations.',
             ].join('\n'),
             metadata: {
               subscriptionId: subscription.id,
