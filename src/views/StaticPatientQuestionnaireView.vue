@@ -2,7 +2,7 @@
 import { computed, reactive, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
-import KpiCard from '@/components/common/KpiCard.vue'
+// import KpiCard from '@/components/common/KpiCard.vue'
 import {
   staticQuestionnaire,
   type StaticPopup,
@@ -414,26 +414,26 @@ function resetDemo(): void {
           </div>
         </div>
 
-        <div class="col-xl-4">
-          <div class="d-grid gap-4">
-            <div class="demo-card">
-              <p class="section-eyebrow mb-2">Session</p>
-              <h2 class="h5 fw-bold">État local</h2>
-              <div class="row g-3">
-                <div class="col-6">
-                  <KpiCard :value="submitted ? 'verrouillée' : 'brouillon'" label="Statut" />
-                </div>
-                <div class="col-6">
-                  <KpiCard :value="`${progress} %`" label="Progression" />
-                </div>
-              </div>
-              <p class="small muted mb-0 mt-3">
-                Bâtiment : {{ staticQuestionnaire.buildingLabel }}. Version :
-                {{ staticQuestionnaire.versionLabel }}.
-              </p>
-            </div>
-          </div>
-        </div>
+        <!--        <div class="col-xl-4">-->
+        <!--          <div class="d-grid gap-4">-->
+        <!--            <div class="demo-card">-->
+        <!--              <p class="section-eyebrow mb-2">Session</p>-->
+        <!--              <h2 class="h5 fw-bold">État local</h2>-->
+        <!--              <div class="row g-3">-->
+        <!--                <div class="col-6">-->
+        <!--                  <KpiCard :value="submitted ? 'verrouillée' : 'brouillon'" label="Statut" />-->
+        <!--                </div>-->
+        <!--                <div class="col-6">-->
+        <!--                  <KpiCard :value="`${progress} %`" label="Progression" />-->
+        <!--                </div>-->
+        <!--              </div>-->
+        <!--              <p class="small muted mb-0 mt-3">-->
+        <!--                Bâtiment : {{ staticQuestionnaire.buildingLabel }}. Version :-->
+        <!--                {{ staticQuestionnaire.versionLabel }}.-->
+        <!--              </p>-->
+        <!--            </div>-->
+        <!--          </div>-->
+        <!--        </div>-->
       </div>
     </div>
   </section>
