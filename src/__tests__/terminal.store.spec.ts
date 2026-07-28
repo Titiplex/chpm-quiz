@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
+import { t } from '@/i18n'
 import { TERMINAL_TOKEN_STORAGE_KEY, useTerminalStore } from '@/stores/terminal'
 
 const terminalSessionPayload = {
@@ -103,9 +104,9 @@ describe('useTerminalStore', () => {
 
     await store.load()
     expect(store.status).toBe('error')
-    expect(store.error).toBe('Aucun jeton terminal fourni.')
+    expect(store.error).toBe(t('store.terminal.missingToken'))
 
-    await expect(store.openInvitation('invitation-1')).rejects.toThrow('Jeton terminal manquant.')
+    await expect(store.openInvitation('invitation-1')).rejects.toThrow(t('store.terminal.missingToken'))
 
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ message: 'Terminal désactivé' }), { status: 403 })))
     await store.load('bad-token')

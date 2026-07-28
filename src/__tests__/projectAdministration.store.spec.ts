@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
+import { t } from '@/i18n'
 import { apiRequest } from '@/services/api'
 import { useProjectAdministrationStore } from '@/stores/projectAdministration'
 import type { ApiSite, ApiSiteAdminUser } from '@shared/types/api'
@@ -93,7 +94,7 @@ describe('useProjectAdministrationStore', () => {
 
   it.each([
     [new Error('API indisponible'), 'API indisponible'],
-    ['network-failure', 'Chargement de l’administration projet impossible.'],
+    ['network-failure', t('store.projectAdmin.loadError')],
   ])('reports administration loading failures', async (reason, expectedMessage) => {
     apiRequestMock.mockRejectedValueOnce(reason)
 
