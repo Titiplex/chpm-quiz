@@ -57,13 +57,12 @@ export class MailProviderService {
         htmlContent: payload.html ?? this.textToHtml(payload.text),
         textContent: payload.text,
         tags: ['chpm', payload.template],
-        params: payload.metadata ?? {},
       }),
     })
 
     const body = await this.readBody(response)
     if (!response.ok) {
-      throw new ServiceUnavailableException(`Brevo a refusé l'email (${response.status}) : ${body}`)
+      throw new ServiceUnavailableException(`Brevo a refusé l'email (HTTP ${response.status})`)
     }
 
     const parsed = this.tryParse(body)
@@ -79,7 +78,7 @@ export class MailProviderService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        personalizations: [{ to: [payload.to], custom_args: this.stringifyMetadata(payload.metadata) }],
+        personalizations: [{ to: [payload.to] }],
         from: this.sender(),
         subject: payload.subject,
         content: [
@@ -90,9 +89,9 @@ export class MailProviderService {
       }),
     })
 
-    const body = await this.readBody(response)
+    await this.readBody(response)
     if (!response.ok) {
-      throw new ServiceUnavailableException(`SendGrid a refusé l'email (${response.status}) : ${body}`)
+      throw new ServiceUnavailableException(`SendGrid a refusé l'email (HTTP ${response.status})`)
     }
 
     return { provider: 'sendgrid', providerMessageId: response.headers.get('x-message-id'), simulated: false }
@@ -117,7 +116,6 @@ export class MailProviderService {
             TextPart: payload.text,
             HTMLPart: payload.html ?? this.textToHtml(payload.text),
             CustomCampaign: `chpm-${payload.template}`,
-            CustomID: payload.publicCode ?? payload.invitationId ?? undefined,
           },
         ],
       }),
@@ -125,7 +123,7 @@ export class MailProviderService {
 
     const body = await this.readBody(response)
     if (!response.ok) {
-      throw new ServiceUnavailableException(`Mailjet a refusé l'email (${response.status}) : ${body}`)
+      throw new ServiceUnavailableException(`Mailjet a refusé l'email (HTTP ${response.status})`)
     }
 
     const parsed = this.tryParse(body) as { Messages?: Array<{ To?: Array<{ MessageID?: string | number }> }> } | null
@@ -195,11 +193,6 @@ export class MailProviderService {
     if (typeof payload !== 'object' || payload === null || !(key in payload)) return null
     const value = (payload as Record<string, unknown>)[key]
     return typeof value === 'string' ? value : null
-  }
-
-  private stringifyMetadata(metadata: Record<string, unknown> | undefined): Record<string, string> | undefined {
-    if (!metadata) return undefined
-    return Object.fromEntries(Object.entries(metadata).map(([key, value]) => [key, String(value)]))
   }
 
   private mask(email: string): string {

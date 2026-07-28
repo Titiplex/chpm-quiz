@@ -7,6 +7,7 @@ import ModalPanel from '@/components/common/ModalPanel.vue'
 import PageSectionNav from '@/components/common/PageSectionNav.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
+import { formatDate as formatLocaleDate, formatNumber, languageText, questionTypeText, t, tp } from '@/i18n'
 import { useCatalogStore } from '@/stores/catalog'
 import { useSessionStore } from '@/stores/session'
 import { useStatsStore } from '@/stores/stats'
@@ -22,14 +23,14 @@ const session = useSessionStore()
 const statsStore = useStatsStore()
 const selectedQuestionnaireId = ref('')
 
-const statsSections: PageSectionNavItem[] = [
-  { id: 'stats-overview', label: 'Synthèse', hint: 'KPI et seuil' },
-  { id: 'stats-field-tracking', label: 'Terrain', hint: 'Refus, papier, terminal' },
-  { id: 'stats-segments', label: 'Segments', hint: 'Versions, sites, bâtiments' },
-  { id: 'stats-submissions', label: 'Soumissions', hint: 'Codes pseudonymisés' },
-  { id: 'stats-popups', label: 'Popups', hint: 'Termes ouverts' },
-  { id: 'stats-questions', label: 'Questions', hint: 'Temps et signaux' },
-]
+const statsSections = computed<PageSectionNavItem[]>(() => [
+  { id: 'stats-overview', label: t('stats.nav.overview'), hint: t('stats.nav.overviewHint') },
+  { id: 'stats-field-tracking', label: t('stats.nav.field'), hint: t('stats.nav.fieldHint') },
+  { id: 'stats-segments', label: t('stats.nav.segments'), hint: t('stats.nav.segmentsHint') },
+  { id: 'stats-submissions', label: t('stats.nav.submissions'), hint: t('stats.nav.submissionsHint') },
+  { id: 'stats-popups', label: t('stats.nav.popups'), hint: t('stats.nav.popupsHint') },
+  { id: 'stats-questions', label: t('stats.nav.questions'), hint: t('stats.nav.questionsHint') },
+])
 
 const selectedQuestionnaire = computed(
   () =>
@@ -56,26 +57,25 @@ watch(
 function formatDuration(durationMs?: number | null): string {
   if (!durationMs) return '—'
   const seconds = Math.round(durationMs / 1000)
-  if (seconds < 60) return `${seconds} s`
+  if (seconds < 60) return t('stats.duration.seconds', { seconds: formatNumber(seconds) })
   const minutes = Math.floor(seconds / 60)
   const remainder = seconds % 60
-  return remainder ? `${minutes} min ${remainder} s` : `${minutes} min`
+  return remainder
+    ? t('stats.duration.minutesSeconds', { minutes: formatNumber(minutes), seconds: formatNumber(remainder) })
+    : t('stats.duration.minutes', { minutes: formatNumber(minutes) })
 }
 
 function formatCount(value?: number | null): string {
-  return value === null || value === undefined ? '—' : String(value)
+  return value === null || value === undefined ? '—' : formatNumber(value)
 }
 
 function formatPercent(value?: number | null): string {
-  return value === null || value === undefined ? '—' : `${value} %`
+  return value === null || value === undefined ? '—' : t('stats.percent', { value: formatNumber(value) })
 }
 
 function formatDate(value?: string | Date | null): string {
   if (!value) return '—'
-  return new Intl.DateTimeFormat('fr-FR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(new Date(value))
+  return formatLocaleDate(value, { dateStyle: 'short', timeStyle: 'short' })
 }
 
 function formatAnswer(value: unknown): string {
@@ -94,8 +94,8 @@ function closeSubmissionDetail(): void {
   <section class="demo-page">
     <div class="container-fluid px-4 px-xl-5">
       <PageHeader
-        title="Statistiques"
-        description="Indicateurs de participation et signaux de compréhension — sans exposition d'identité."
+        :title="t('stats.title')"
+        :description="t('stats.description')"
       />
       <RoleGateInfo />
 
@@ -103,7 +103,7 @@ function closeSubmissionDetail(): void {
       <div class="demo-card mb-4">
         <div class="row g-3 align-items-end">
           <div class="col-lg-8">
-            <label class="form-label fw-semibold" for="questionnaire-select">Questionnaire</label>
+            <label class="form-label fw-semibold" for="questionnaire-select">{{ t('common.questionnaire') }}</label>
             <select
               id="questionnaire-select"
               v-model="selectedQuestionnaireId"
@@ -120,8 +120,7 @@ function closeSubmissionDetail(): void {
           </div>
           <div class="col-lg-4">
             <p class="small mb-0" style="color: var(--chm-muted)">
-              Les données affichées sont pseudonymisées — aucun email ni identité directe n'apparaît
-              ici.
+              {{ t('stats.privacyNotice') }}
             </p>
           </div>
         </div>
@@ -135,19 +134,17 @@ function closeSubmissionDetail(): void {
         v-if="statsStore.status === 'loading'"
         class="demo-card text-center py-5"
         style="color: var(--chm-muted)"
-      >
-        Chargement des statistiques…
-      </div>
+      >{{ t('stats.loading') }}</div>
 
       <template v-if="statsStore.stats">
         <div class="page-workspace">
-          <PageSectionNav title="Navigation statistiques" :sections="statsSections" />
+          <PageSectionNav :title="t('stats.navigation')" :sections="statsSections" />
           <div class="page-workspace-main">
             <!-- Suppression-threshold information -->
             <div id="stats-overview" class="page-section d-flex align-items-center gap-2 mb-4">
-              <span class="badge-soft warning">Seuil n ≥ {{ statsStore.stats.threshold }}</span>
+              <span class="badge-soft warning">{{ t('stats.threshold', { value: statsStore.stats.threshold }) }}</span>
               <span class="small" style="color: var(--chm-muted)"
-                >En dessous, les détails sont masqués pour préserver la confidentialité.</span
+                >{{ t('stats.thresholdHelp') }}</span
               >
             </div>
 
@@ -155,21 +152,21 @@ function closeSubmissionDetail(): void {
             <div class="row g-3 mb-4">
               <div class="col-md-3">
                 <KpiCard
-                  label="Invitations"
+                  :label="t('stats.kpi.invitations')"
                   :value="formatCount(statsStore.stats.totals.invited)"
                   icon="📨"
                 />
               </div>
               <div class="col-md-3">
                 <KpiCard
-                  label="Taux d'ouverture"
+                  :label="t('stats.kpi.openingRate')"
                   :value="formatPercent(statsStore.stats.totals.openingRate)"
                   icon="📬"
                 />
               </div>
               <div class="col-md-3">
                 <KpiCard
-                  label="Taux de soumission"
+                  :label="t('stats.kpi.submissionRate')"
                   :value="formatPercent(statsStore.stats.totals.submissionRate)"
                   tone="success"
                   icon="✅"
@@ -177,72 +174,83 @@ function closeSubmissionDetail(): void {
               </div>
               <div class="col-md-3">
                 <KpiCard
-                  label="Taux d'abandon"
+                  :label="t('stats.kpi.abandonmentRate')"
                   :value="formatPercent(statsStore.stats.totals.abandonmentRate)"
                   tone="warning"
                   icon="⚠️"
                 />
               </div>
               <div class="col-md-3">
-                <KpiCard label="Démarrage" :value="formatPercent(statsStore.stats.totals.startRate)" />
+                <KpiCard
+                  :label="t('stats.kpi.refusals')"
+                  :value="formatCount(statsStore.stats.fieldTracking.refused)"
+                  tone="danger"
+                />
               </div>
               <div class="col-md-3">
                 <KpiCard
-                  label="Temps médian"
+                  :label="t('stats.kpi.expired')"
+                  :value="formatCount(statsStore.stats.totals.expired)"
+                  tone="warning"
+                />
+              </div>
+              <div class="col-md-3">
+                <KpiCard :label="t('stats.kpi.startRate')" :value="formatPercent(statsStore.stats.totals.startRate)" />
+              </div>
+              <div class="col-md-3">
+                <KpiCard
+                  :label="t('stats.kpi.medianTime')"
                   :value="formatDuration(statsStore.stats.totals.medianTotalDurationMs)"
                   icon="⏱️"
                 />
               </div>
               <div class="col-md-3">
                 <KpiCard
-                  label="Popups ouvertes"
+                  :label="t('stats.kpi.popupOpens')"
                   :value="formatCount(statsStore.stats.totals.popupOpens)"
                   tone="warning"
                   icon="💬"
                 />
               </div>
               <div class="col-md-3">
-                <KpiCard label="Reprises" :value="formatCount(statsStore.stats.totals.resumes)" />
+                <KpiCard :label="t('stats.kpi.resumes')" :value="formatCount(statsStore.stats.totals.resumes)" />
               </div>
             </div>
 
             <div id="stats-field-tracking" class="page-section demo-card mb-4">
               <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
                 <div>
-                  <h2 class="page-header-title mb-1" style="font-size: 1rem">
-                    Suivi terrain hors réponse
-                  </h2>
+                  <h2 class="page-header-title mb-1" style="font-size: 1rem">{{ t('stats.field.title') }}</h2>
                   <p class="small mb-0" style="color: var(--chm-muted)">
-                    Ces indicateurs sont saisis par les modérateurs. Ils mesurent l’inclusion
-                    terrain, pas le contenu des réponses.
+                    {{ t('stats.field.description') }}
                   </p>
                 </div>
-                <span class="badge-soft warning">Sans email/SMS = terminal + papier</span>
+                <span class="badge-soft warning">{{ t('stats.field.noDigitalFormula') }}</span>
               </div>
               <div class="row g-3">
                 <div class="col-md-3">
                   <KpiCard
-                    label="Personnes approchées"
+                    :label="t('stats.field.approached')"
                     :value="formatCount(statsStore.stats.fieldTracking.approached)"
                   />
                 </div>
                 <div class="col-md-3">
                   <KpiCard
-                    label="Refus déclarés"
+                    :label="t('stats.field.refusals')"
                     :value="formatCount(statsStore.stats.fieldTracking.refused)"
                     tone="danger"
                   />
                 </div>
                 <div class="col-md-3">
                   <KpiCard
-                    label="Taux de refus"
+                    :label="t('stats.field.refusalRate')"
                     :value="formatPercent(statsStore.stats.fieldTracking.refusalRate)"
                     tone="warning"
                   />
                 </div>
                 <div class="col-md-3">
                   <KpiCard
-                    label="Sans contact numérique"
+                    :label="t('stats.field.noDigitalContact')"
                     :value="formatCount(statsStore.stats.fieldTracking.noDigitalContact)"
                     tone="warning"
                   />
@@ -251,25 +259,25 @@ function closeSubmissionDetail(): void {
               <div class="row g-3 mt-1">
                 <div class="col-md-3">
                   <KpiCard
-                    label="Terminaux"
+                    :label="t('stats.field.terminals')"
                     :value="formatCount(statsStore.stats.fieldTracking.onsiteTerminal)"
                   />
                 </div>
                 <div class="col-md-3">
                   <KpiCard
-                    label="Versions papier"
+                    :label="t('stats.field.paper')"
                     :value="formatCount(statsStore.stats.fieldTracking.paperForms)"
                   />
                 </div>
                 <div class="col-md-3">
                   <KpiCard
-                    label="Contacts numériques"
+                    :label="t('stats.field.digital')"
                     :value="formatCount(statsStore.stats.fieldTracking.digitalContact)"
                   />
                 </div>
                 <div class="col-md-3">
                   <KpiCard
-                    label="Sans contact en attente"
+                    :label="t('stats.field.pendingNoDigital')"
                     :value="formatCount(statsStore.stats.fieldTracking.pendingWithoutDigitalContact)"
                     tone="warning"
                   />
@@ -281,17 +289,17 @@ function closeSubmissionDetail(): void {
               <!-- Versions -->
               <div class="col-xl-6">
                 <div class="demo-card h-100">
-                  <h2 class="page-header-title mb-4" style="font-size: 1rem">Versions</h2>
+                  <h2 class="page-header-title mb-4" style="font-size: 1rem">{{ t('stats.section.versions') }}</h2>
                   <div class="table-card table-card-scroll">
                     <table class="table align-middle">
                       <thead>
                         <tr>
-                          <th>Version</th>
-                          <th>Invités</th>
-                          <th>Ouverts</th>
-                          <th>Démarrés</th>
-                          <th>Soumis</th>
-                          <th>Abandon</th>
+                          <th>{{ t('common.version') }}</th>
+                          <th>{{ t('stats.table.invited') }}</th>
+                          <th>{{ t('stats.table.opened') }}</th>
+                          <th>{{ t('stats.table.started') }}</th>
+                          <th>{{ t('stats.table.submitted') }}</th>
+                          <th>{{ t('stats.table.abandonment') }}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -316,18 +324,16 @@ function closeSubmissionDetail(): void {
               <!-- Delivery channels -->
               <div class="col-xl-6">
                 <div class="demo-card h-100">
-                  <h2 class="page-header-title mb-4" style="font-size: 1rem">
-                    Canaux de passation
-                  </h2>
+                  <h2 class="page-header-title mb-4" style="font-size: 1rem">{{ t('stats.section.channels') }}</h2>
                   <div class="table-card table-card-scroll">
                     <table class="table align-middle">
                       <thead>
                         <tr>
-                          <th>Canal</th>
-                          <th>Invités</th>
-                          <th>Ouverts</th>
-                          <th>Démarrés</th>
-                          <th>Soumis</th>
+                          <th>{{ t('common.channel') }}</th>
+                          <th>{{ t('stats.table.invited') }}</th>
+                          <th>{{ t('stats.table.opened') }}</th>
+                          <th>{{ t('stats.table.started') }}</th>
+                          <th>{{ t('stats.table.submitted') }}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -351,16 +357,16 @@ function closeSubmissionDetail(): void {
               <!-- Sites -->
               <div class="col-xl-6">
                 <div class="demo-card h-100">
-                  <h2 class="page-header-title mb-4" style="font-size: 1rem">Sites</h2>
+                  <h2 class="page-header-title mb-4" style="font-size: 1rem">{{ t('stats.section.sites') }}</h2>
                   <div class="table-card table-card-scroll">
                     <table class="table align-middle">
                       <thead>
                         <tr>
-                          <th>Site</th>
-                          <th>Invités</th>
-                          <th>Ouverture</th>
-                          <th>Démarrage</th>
-                          <th>Soumission</th>
+                          <th>{{ t('common.site') }}</th>
+                          <th>{{ t('stats.table.invited') }}</th>
+                          <th>{{ t('stats.table.opening') }}</th>
+                          <th>{{ t('stats.table.start') }}</th>
+                          <th>{{ t('stats.table.submission') }}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -384,16 +390,16 @@ function closeSubmissionDetail(): void {
               <!-- Languages -->
               <div class="col-xl-6">
                 <div class="demo-card h-100">
-                  <h2 class="page-header-title mb-4" style="font-size: 1rem">Langues</h2>
+                  <h2 class="page-header-title mb-4" style="font-size: 1rem">{{ t('stats.section.languages') }}</h2>
                   <div class="table-card table-card-scroll">
                     <table class="table align-middle">
                       <thead>
                         <tr>
-                          <th>Langue</th>
-                          <th>Versions</th>
-                          <th>Invités</th>
-                          <th>Soumis</th>
-                          <th>Taux</th>
+                          <th>{{ t('common.language') }}</th>
+                          <th>{{ t('stats.section.versions') }}</th>
+                          <th>{{ t('stats.table.invited') }}</th>
+                          <th>{{ t('stats.table.submitted') }}</th>
+                          <th>{{ t('stats.table.rate') }}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -401,7 +407,7 @@ function closeSubmissionDetail(): void {
                           v-for="language in statsStore.stats.languages ?? []"
                           :key="language.language"
                         >
-                          <td class="fw-semibold text-uppercase">{{ language.language }}</td>
+                          <td class="fw-semibold">{{ languageText(language.language) }}</td>
                           <td>{{ language.versionCount }}</td>
                           <td>{{ formatCount(language.invited) }}</td>
                           <td>{{ formatCount(language.submitted) }}</td>
@@ -420,16 +426,16 @@ function closeSubmissionDetail(): void {
               <!-- Buildings -->
               <div class="col-xl-6">
                 <div class="demo-card h-100">
-                  <h2 class="page-header-title mb-4" style="font-size: 1rem">Bâtiments</h2>
+                  <h2 class="page-header-title mb-4" style="font-size: 1rem">{{ t('stats.section.buildings') }}</h2>
                   <div class="table-card table-card-scroll">
                     <table class="table align-middle">
                       <thead>
                         <tr>
-                          <th>Bâtiment</th>
-                          <th>Invités</th>
-                          <th>Ouverture</th>
-                          <th>Démarrage</th>
-                          <th>Soumission</th>
+                          <th>{{ t('common.building') }}</th>
+                          <th>{{ t('stats.table.invited') }}</th>
+                          <th>{{ t('stats.table.opening') }}</th>
+                          <th>{{ t('stats.table.start') }}</th>
+                          <th>{{ t('stats.table.submission') }}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -440,10 +446,10 @@ function closeSubmissionDetail(): void {
                           <td class="fw-semibold">{{ building.label }}</td>
                           <td>{{ building.invited ?? '—' }}</td>
                           <td>
-                            {{ building.openingRate === null ? '—' : `${building.openingRate} %` }}
+                            {{ formatPercent(building.openingRate) }}
                           </td>
                           <td>
-                            {{ building.startRate === null ? '—' : `${building.startRate} %` }}
+                            {{ formatPercent(building.startRate) }}
                           </td>
                           <td>
                             <span
@@ -455,7 +461,7 @@ function closeSubmissionDetail(): void {
                             >
                               {{
                                 building.effectifSufficient
-                                  ? `${building.submissionRate} %`
+                                  ? formatPercent(building.submissionRate)
                                   : building.displayValue
                               }}
                             </span>
@@ -470,18 +476,16 @@ function closeSubmissionDetail(): void {
               <!-- Groups -->
               <div class="col-xl-6">
                 <div class="demo-card h-100">
-                  <h2 class="page-header-title mb-4" style="font-size: 1rem">
-                    Groupes de questions
-                  </h2>
+                  <h2 class="page-header-title mb-4" style="font-size: 1rem">{{ t('stats.section.groups') }}</h2>
                   <div class="table-card table-card-scroll">
                     <table class="table align-middle">
                       <thead>
                         <tr>
-                          <th>Groupe</th>
-                          <th>Questions</th>
-                          <th>Répondants</th>
-                          <th>Temps médian</th>
-                          <th>Popups</th>
+                          <th>{{ t('common.group') }}</th>
+                          <th>{{ t('common.questions') }}</th>
+                          <th>{{ t('stats.table.respondents') }}</th>
+                          <th>{{ t('stats.kpi.medianTime') }}</th>
+                          <th>{{ t('stats.nav.popups') }}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -501,26 +505,25 @@ function closeSubmissionDetail(): void {
               <!-- Pseudonymized submissions -->
               <div id="stats-submissions" class="page-section col-12">
                 <CollapsibleSection
-                  title="Soumissions pseudonymisées"
-                  :badge="`${statsStore.stats.submissions.length} code(s)`"
+                  :title="t('stats.submissions.title')"
+                  :badge="tp('stats.submissions.codes', statsStore.stats.submissions.length)"
                   :default-open="false"
                   body-class="compact"
                 >
                   <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
                     <p class="muted mb-0">
-                      Table déplacée en section déroulante : elle sert au support ponctuel, pas au
-                      pilotage quotidien.
+                      {{ t('stats.submissions.description') }}
                     </p>
-                    <span class="badge-soft warning">Pas d’email affiché</span>
+                    <span class="badge-soft warning">{{ t('stats.submissions.noEmail') }}</span>
                   </div>
                   <div class="table-card table-card-scroll table-card-scroll-lg stats-table-card">
                     <table class="table align-middle">
                       <thead>
                         <tr>
-                          <th>Code</th>
-                          <th>Bâtiment</th>
-                          <th>Statut</th>
-                          <th>Temps</th>
+                          <th>{{ t('common.code') }}</th>
+                          <th>{{ t('common.building') }}</th>
+                          <th>{{ t('common.status') }}</th>
+                          <th>{{ t('stats.table.time') }}</th>
                           <th></th>
                         </tr>
                       </thead>
@@ -548,9 +551,7 @@ function closeSubmissionDetail(): void {
                                 !canReadSubmissions || statsStore.submissionStatus === 'loading'
                               "
                               @click="statsStore.fetchSubmission(submission.publicCode)"
-                            >
-                              Voir
-                            </button>
+                            >{{ t('common.view') }}</button>
                           </td>
                         </tr>
                       </tbody>
@@ -558,37 +559,35 @@ function closeSubmissionDetail(): void {
                   </div>
                   <div class="stats-list-actions">
                     <span class="small" style="color: var(--chm-muted)">
-                      Liste complète · {{ statsStore.stats.submissions.length }} soumission(s)
+                      {{ tp('stats.submissions.completeList', statsStore.stats.submissions.length) }}
                     </span>
                   </div>
                   <p
                     v-if="!canReadSubmissions"
                     class="small mt-3 mb-0"
                     style="color: var(--chm-muted)"
-                  >
-                    Votre rôle accède aux indicateurs agrégés uniquement.
-                  </p>
+                  >{{ t('stats.submissions.aggregatesOnly') }}</p>
                 </CollapsibleSection>
               </div>
 
               <!-- Popups -->
               <div id="stats-popups" class="page-section col-12">
                 <CollapsibleSection
-                  title="Termes nécessitant une explication"
+                  :title="t('stats.popups.title')"
                   badge-tone="warning"
-                  :badge="`Seuil n ≥ ${statsStore.stats.threshold}`"
+                  :badge="t('stats.threshold', { value: statsStore.stats.threshold })"
                   body-class="compact"
                 >
                   <div class="table-card table-card-scroll table-card-scroll-lg stats-table-card">
                     <table class="table align-middle">
                       <thead>
                         <tr>
-                          <th>Terme</th>
-                          <th>Question</th>
-                          <th>Groupe</th>
-                          <th>Version</th>
-                          <th>Ouvertures</th>
-                          <th>Répondants</th>
+                          <th>{{ t('stats.table.term') }}</th>
+                          <th>{{ t('common.question') }}</th>
+                          <th>{{ t('common.group') }}</th>
+                          <th>{{ t('common.version') }}</th>
+                          <th>{{ t('stats.table.opens') }}</th>
+                          <th>{{ t('stats.table.respondents') }}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -623,8 +622,7 @@ function closeSubmissionDetail(): void {
                   </div>
                   <div class="stats-list-actions">
                     <span class="small" style="color: var(--chm-muted)">
-                      Liste complète · {{ statsStore.stats.popups?.length ?? 0 }} terme(s) défini(s)
-                      · {{ formatCount(statsStore.stats.totals.popupOpens) }} ouverture(s) enregistrée(s)
+                      {{ t('stats.popups.completeList', { terms: formatCount(statsStore.stats.popups?.length ?? 0), opens: formatCount(statsStore.stats.totals.popupOpens) }) }}
                     </span>
                   </div>
                 </CollapsibleSection>
@@ -633,9 +631,9 @@ function closeSubmissionDetail(): void {
               <!-- Detailed questions -->
               <div id="stats-questions" class="page-section col-12">
                 <CollapsibleSection
-                  title="Signaux de compréhension par question"
+                  :title="t('stats.questions.title')"
                   badge-tone="warning"
-                  :badge="`${formatCount(statsStore.stats.totals.popupOpens)} ouverture(s) popup`"
+                  :badge="t('stats.questions.popupOpens', { count: formatCount(statsStore.stats.totals.popupOpens) })"
                   :default-open="false"
                   body-class="compact"
                 >
@@ -645,12 +643,12 @@ function closeSubmissionDetail(): void {
                     <table class="table align-middle">
                       <thead>
                         <tr>
-                          <th>Question</th>
-                          <th>Réponses</th>
-                          <th>Temps médian</th>
-                          <th>Likert</th>
-                          <th>Texte libre</th>
-                          <th>Signal</th>
+                          <th>{{ t('common.question') }}</th>
+                          <th>{{ t('stats.table.responses') }}</th>
+                          <th>{{ t('stats.kpi.medianTime') }}</th>
+                          <th>{{ t('stats.table.likert') }}</th>
+                          <th>{{ t('stats.table.freeText') }}</th>
+                          <th>{{ t('stats.table.signal') }}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -661,7 +659,7 @@ function closeSubmissionDetail(): void {
                               {{ question.label }}
                             </div>
                             <div class="small" style="color: var(--chm-muted)">
-                              {{ question.responseType }}
+                              {{ questionTypeText(question.responseType) }}
                             </div>
                           </td>
                           <td>{{ question.answerCount ?? question.displayValue }}</td>
@@ -680,8 +678,7 @@ function closeSubmissionDetail(): void {
                                 :key="`${question.id}-${bucket.value}`"
                                 class="small"
                               >
-                                <strong>{{ bucket.value }}</strong> · {{ bucket.count }} rép. ·
-                                {{ bucket.rate }} %
+                                <strong>{{ bucket.value }}</strong> · {{ t('stats.questions.bucket', { count: formatCount(bucket.count), rate: formatCount(bucket.rate) }) }}
                                 <span style="color: var(--chm-muted)">{{ bucket.label }}</span>
                               </div>
                             </div>
@@ -693,7 +690,7 @@ function closeSubmissionDetail(): void {
                               class="free-text-response-list"
                             >
                               <summary>
-                                {{ question.freeTextResponses.length }} réponse(s) libre(s)
+                                {{ tp('stats.questions.freeTextResponses', question.freeTextResponses.length) }}
                               </summary>
                               <div class="d-grid gap-2 mt-2 content-scroll content-scroll-sm">
                                 <blockquote
@@ -704,7 +701,7 @@ function closeSubmissionDetail(): void {
                                   <span class="badge-soft me-1">{{ response.publicCode }}</span>
                                   {{ response.value }}
                                   <span v-if="response.warning" class="badge-soft warning ms-1"
-                                    >alerte PII</span
+                                    >{{ t('stats.question.piiAlert') }}</span
                                   >
                                 </blockquote>
                               </div>
@@ -712,7 +709,7 @@ function closeSubmissionDetail(): void {
                             <span
                               v-else-if="question.freeTextAccess === 'forbidden'"
                               class="badge-soft warning"
-                              >permission requise</span
+                              >{{ t('stats.question.permissionRequired') }}</span
                             >
                             <span v-else style="color: var(--chm-muted)">—</span>
                           </td>
@@ -728,7 +725,7 @@ function closeSubmissionDetail(): void {
                                 }"
                               >
                                 {{
-                                  question.difficultQuestion ? 'difficile' : question.displayValue
+                                  question.difficultQuestion ? t('stats.questions.difficult') : question.displayValue
                                 }}
                               </span>
                               <span
@@ -746,9 +743,7 @@ function closeSubmissionDetail(): void {
                   </div>
                   <div class="stats-list-actions">
                     <span class="small" style="color: var(--chm-muted)">
-                      Liste complète · {{ statsStore.stats.questions.length }} question(s)
-                      analysée(s) · {{ formatCount(statsStore.stats.totals.popupOpens) }} ouverture(s) de popup
-                      au total
+                      {{ t('stats.questions.completeList', { questions: formatCount(statsStore.stats.questions.length), opens: formatCount(statsStore.stats.totals.popupOpens) }) }}
                     </span>
                   </div>
                 </CollapsibleSection>
@@ -764,11 +759,11 @@ function closeSubmissionDetail(): void {
               :model-value="Boolean(statsStore.selectedSubmission)"
               :title="
                 statsStore.selectedSubmission
-                  ? `Détail — Code ${statsStore.selectedSubmission.publicCode}`
-                  : 'Détail de soumission'
+                  ? t('stats.detail.titleWithCode', { code: statsStore.selectedSubmission.publicCode })
+                  : t('stats.detail.title')
               "
-              eyebrow="Soumission pseudonymisée"
-              description="Ouverture ponctuelle en fenêtre dédiée pour éviter un bloc massif dans le tableau de bord."
+              :eyebrow="t('stats.detail.eyebrow')"
+              :description="t('stats.detail.description')"
               size="xl"
               @update:model-value="closeSubmissionDetail"
               @close="closeSubmissionDetail"
@@ -776,25 +771,25 @@ function closeSubmissionDetail(): void {
               <template v-if="statsStore.selectedSubmission">
                 <div class="row g-3 mb-4">
                   <div class="col-md-3">
-                    <strong>Bâtiment</strong>
+                    <strong>{{ t('common.building') }}</strong>
                     <div style="color: var(--chm-muted)">
                       {{ statsStore.selectedSubmission.building }}
                     </div>
                   </div>
                   <div class="col-md-3">
-                    <strong>Soumis le</strong>
+                    <strong>{{ t('stats.detail.submittedAt') }}</strong>
                     <div style="color: var(--chm-muted)">
                       {{ formatDate(statsStore.selectedSubmission.submittedAt) }}
                     </div>
                   </div>
                   <div class="col-md-3">
-                    <strong>Temps total</strong>
+                    <strong>{{ t('stats.detail.totalTime') }}</strong>
                     <div style="color: var(--chm-muted)">
                       {{ formatDuration(statsStore.selectedSubmission.totalDurationMs) }}
                     </div>
                   </div>
                   <div class="col-md-3">
-                    <strong>Événements</strong>
+                    <strong>{{ t('stats.detail.events') }}</strong>
                     <div style="color: var(--chm-muted)">
                       {{ statsStore.selectedSubmission.telemetry.totalEvents }}
                     </div>
@@ -804,9 +799,9 @@ function closeSubmissionDetail(): void {
                   <table class="table align-middle">
                     <thead>
                       <tr>
-                        <th>Question</th>
-                        <th>Réponse</th>
-                        <th>Alerte</th>
+                        <th>{{ t('common.question') }}</th>
+                        <th>{{ t('common.response') }}</th>
+                        <th>{{ t('common.alert') }}</th>
                       </tr>
                     </thead>
                     <tbody>

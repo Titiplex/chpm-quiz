@@ -637,6 +637,44 @@ components:
               const: site
             passwordReturnedOnce:
               const: true
+    ProjectHierarchyNode:
+      type: object
+      additionalProperties: false
+      required: [id, kind, label, subtitle, role, isActive, isCurrentUser, children]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [project, project_admin, site, site_manager, moderator, team]
+        label:
+          type: string
+        subtitle:
+          type: [string, 'null']
+        role:
+          type: [string, 'null']
+          enum: [admin, site_manager, moderator, null]
+        isActive:
+          type: [boolean, 'null']
+        isCurrentUser:
+          type: boolean
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectHierarchyNode'
+    ProjectHierarchyResponse:
+      type: object
+      additionalProperties: false
+      required: [hierarchy, scope, generatedAt]
+      properties:
+        hierarchy:
+          $ref: '#/components/schemas/ProjectHierarchyNode'
+        scope:
+          type: string
+          enum: [project, site, self]
+        generatedAt:
+          type: string
+          format: date-time
     CreateSiteAdminRequest:
       type: object
       additionalProperties: false
@@ -2625,6 +2663,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RevokeSessionsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /users/hierarchy:
+    get:
+      tags: [Site administration]
+      operationId: getProjectHierarchy
+      summary: Return the caller-visible operational project hierarchy
+      description: |
+        Builds a collapsible project tree without exposing staff emails. Project administrators
+        see every operational user in their organization; site managers see project administrators,
+        their own site, themselves, and their moderators; moderators see only their upward chain and themselves.
+      x-required-roles: [admin, site_manager, moderator]
+      responses:
+        '200':
+          description: Role- and scope-filtered project hierarchy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectHierarchyResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':

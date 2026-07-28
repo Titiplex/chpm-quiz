@@ -87,6 +87,8 @@ describe('RespondentView functional flow', () => {
 
     const zeroButton = wrapper.findAll('button').find((button) => button.text().trim() === '0')
     expect(zeroButton).toBeTruthy()
+    expect(zeroButton?.classes()).not.toContain('active')
+    expect(zeroButton?.attributes('aria-checked')).toBe('false')
     await zeroButton?.trigger('click')
     await flushPromises()
 

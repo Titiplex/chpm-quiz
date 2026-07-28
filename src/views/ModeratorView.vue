@@ -8,7 +8,7 @@ import PageHeader from '@/components/common/PageHeader.vue'
 import NotificationPreferencesCard from '@/components/notifications/NotificationPreferencesCard.vue'
 import SiteTeamPanel from '@/components/moderation/SiteTeamPanel.vue'
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
-import { t } from '@/i18n'
+import { formatDate, formatPercent, questionTypeText, t, tp } from '@/i18n'
 import { useCatalogStore } from '@/stores/catalog'
 import { downloadQuestionnairePdf } from '@/services/questionnairePdf'
 import { useModerationStore } from '@/stores/moderation'
@@ -44,7 +44,7 @@ const form = reactive({
 
 const terminalForm = reactive({
   buildingId: '',
-  label: 'Tablette accueil · bâtiment',
+  label: t('moderation.terminal.defaultLabel'),
 })
 
 onMounted(async () => {
@@ -64,7 +64,7 @@ const questionnaires = computed(() =>
 )
 const total = computed(() => moderation.totals)
 const responseRate = computed(
-  () => `${Math.round((total.value.submitted / Math.max(1, total.value.sent)) * 100)} %`,
+  () => formatPercent(total.value.submitted / Math.max(1, total.value.sent)),
 )
 const canAdministerTerminals = computed(() =>
   ['admin', 'site_manager', 'technical_admin'].includes(session.currentRole),
@@ -222,7 +222,7 @@ async function submitPaperEntry(): Promise<void> {
   paperEntrySuccess.value = null
 
   if (missingPaperEntryRequiredQuestions.value.length) {
-    paperEntryError.value = `${missingPaperEntryRequiredQuestions.value.length} question(s) obligatoire(s) restent sans réponse.`
+    paperEntryError.value = tp('moderation.paper.missingRequired', missingPaperEntryRequiredQuestions.value.length)
     return
   }
 
@@ -231,11 +231,11 @@ async function submitPaperEntry(): Promise<void> {
       answers: paperAnswersPayload(),
       moderatorNote: paperEntryNote.value.trim() || undefined,
     })
-    paperEntrySuccess.value = `Saisie papier verrouillée pour le code ${response.submission.publicCode}.`
+    paperEntrySuccess.value = t('moderation.paper.locked', { code: response.submission.publicCode })
     showPaperEntryModal.value = false
     await moderation.refresh()
   } catch (caught) {
-    paperEntryError.value = caught instanceof Error ? caught.message : 'Saisie papier impossible.'
+    paperEntryError.value = caught instanceof Error ? caught.message : t('moderation.paper.error')
   }
 }
 
@@ -347,17 +347,22 @@ function canResend(invitation: ApiInvitation): boolean {
 }
 
 function invitationSubmitLabel(): string {
-  if (moderation.status === 'creating') return 'Enregistrement…'
-  if (requiresTerminal.value) return 'Envoyer au terminal'
-  if (isPaperForm.value) return 'Enregistrer la version papier'
-  if (isRefusalRecord.value) return 'Enregistrer le refus'
-  return "Envoyer l'invitation"
+  if (moderation.status === 'creating') return t('common.saving')
+  if (requiresTerminal.value) return t('moderation.form.submitTerminal')
+  if (isPaperForm.value) return t('moderation.form.submitPaper')
+  if (isRefusalRecord.value) return t('moderation.form.submitRefusal')
+  return t('moderation.form.submitInvitation')
 }
 
 function paperLikertValues(question: ApiQuestion): number[] {
   if (!question.likertScale) return []
   const minValue = question.likertScale.minValue ?? 1
   return Array.from({ length: question.likertScale.points }, (_, index) => minValue + index)
+}
+
+function isPaperLikertSelected(question: ApiQuestion, value: number): boolean {
+  const current = paperQuestionValue(question)
+  return current !== null && current !== undefined && current !== '' && Number(current) === value
 }
 
 function paperLikertLabel(question: ApiQuestion, value: number): string {
@@ -368,10 +373,10 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
   const lastIndex = values.length - 1
   const neutralIndex = Math.floor(lastIndex / 2)
 
-  if (index <= 0) return scale.leftAnchor || `Valeur ${value}`
-  if (index === lastIndex) return scale.rightAnchor || `Valeur ${value}`
+  if (index <= 0) return scale.leftAnchor || t('common.value', { value })
+  if (index === lastIndex) return scale.rightAnchor || t('common.value', { value })
   if (scale.neutralLabel && index === neutralIndex) return scale.neutralLabel
-  return `Valeur ${value}`
+  return t('common.value', { value })
 }
 </script>
 
@@ -401,14 +406,14 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
         size="lg"
       >
         <form @submit.prevent="submitInvitation">
-          <label class="form-label fw-semibold" for="questionnaire-select">Questionnaire</label>
+          <label class="form-label fw-semibold" for="questionnaire-select">{{ t('moderation.form.questionnaire') }}</label>
           <select
             id="questionnaire-select"
             v-model="form.questionnaireVersionId"
             class="form-select mb-2"
             required
           >
-            <option value="" disabled>Choisir un questionnaire</option>
+            <option value="" disabled>{{ t('moderation.form.chooseQuestionnaire') }}</option>
             <option
               v-for="questionnaire in questionnaires"
               :key="questionnaire.versionId"
@@ -424,16 +429,16 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
               :disabled="!selectedQuestionnaire"
               @click="downloadBlankQuestionnairePdf"
             >
-              Télécharger le PDF vierge
+              {{ t('moderation.pdf.blank') }}
             </button>
             <span class="small" style="color: var(--chm-muted)"
-              >Support imprimable généré depuis la version publiée sélectionnée.</span
+              >{{ t('moderation.pdf.help') }}</span
             >
           </div>
 
-          <label class="form-label fw-semibold" for="building-select">Bâtiment</label>
+          <label class="form-label fw-semibold" for="building-select">{{ t('common.building') }}</label>
           <select id="building-select" v-model="form.buildingId" class="form-select mb-3" required>
-            <option value="" disabled>Choisir un bâtiment</option>
+            <option value="" disabled>{{ t('moderation.form.chooseBuilding') }}</option>
             <option v-for="building in catalog.buildings" :key="building.id" :value="building.id">
               {{ building.label }} · {{ building.country }}
             </option>
@@ -451,33 +456,33 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
           </select>
 
           <template v-if="requiresTerminal">
-            <label class="form-label fw-semibold" for="terminal-select">Terminal cible</label>
+            <label class="form-label fw-semibold" for="terminal-select">{{ t('moderation.form.targetTerminal') }}</label>
             <select
               id="terminal-select"
               v-model="form.terminalDeviceId"
               class="form-select mb-3"
               required
             >
-              <option value="" disabled>Choisir un terminal actif</option>
+              <option value="" disabled>{{ t('moderation.form.chooseTerminal') }}</option>
               <option
                 v-for="device in compatibleTerminalDevices"
                 :key="device.id"
                 :value="device.id"
               >
-                {{ device.label }} · {{ device.pendingInvitationCount }} en attente
+                {{ device.label }} · {{ tp('moderation.pending', device.pendingInvitationCount) }}
               </option>
             </select>
 
-            <label class="form-label fw-semibold" for="assistance-mode">Accompagnement</label>
+            <label class="form-label fw-semibold" for="assistance-mode">{{ t('moderation.form.assistance') }}</label>
             <select id="assistance-mode" v-model="form.assistanceMode" class="form-select mb-4">
-              <option value="none">Autonome</option>
-              <option value="technical_help">Aide technique</option>
-              <option value="full_assisted_entry">Saisie assistée</option>
+              <option value="none">{{ t('moderation.assistance.none') }}</option>
+              <option value="technical_help">{{ t('moderation.assistance.technical') }}</option>
+              <option value="full_assisted_entry">{{ t('moderation.assistance.full') }}</option>
             </select>
           </template>
 
           <template v-else-if="requiresEmail">
-            <label class="form-label fw-semibold" for="respondent-email">Email du répondant</label>
+            <label class="form-label fw-semibold" for="respondent-email">{{ t('moderation.form.respondentEmail') }}</label>
             <input
               id="respondent-email"
               v-model="form.email"
@@ -488,32 +493,26 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
           </template>
           <template v-else-if="isPaperForm">
             <div class="alert alert-warning rounded-3 mb-4">
-              Aucune donnée de contact n’est collectée. La ligne sert uniquement à compter une
-              passation papier dans les statistiques terrain.
+              {{ t('moderation.form.paperNotice') }}
             </div>
           </template>
           <template v-else-if="isRefusalRecord">
-            <label class="form-label fw-semibold" for="refusal-reason"
-              >Motif interne optionnel</label
-            >
+            <label class="form-label fw-semibold" for="refusal-reason">{{ t('moderation.form.refusalReason') }}</label>
             <textarea
               id="refusal-reason"
               v-model="form.refusalReason"
               class="form-control mb-4"
               rows="2"
               maxlength="300"
-              placeholder="Ex. refuse de donner un email/téléphone, refuse le questionnaire, indisponible…"
+              :placeholder="t('moderation.form.refusalPlaceholder')"
             ></textarea>
             <div class="alert alert-warning rounded-3 mb-4">
-              Le refus est agrégé dans les statistiques. Aucun email, SMS, téléphone ou identité
-              patient n’est demandé.
+              {{ t('moderation.form.refusalNotice') }}
             </div>
           </template>
 
           <template v-else-if="requiresPhone">
-            <label class="form-label fw-semibold" for="respondent-phone"
-              >Téléphone du répondant</label
-            >
+            <label class="form-label fw-semibold" for="respondent-phone">{{ t('moderation.form.respondentPhone') }}</label>
             <input
               id="respondent-phone"
               v-model="form.phone"
@@ -525,8 +524,7 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
               required
             />
             <p class="small mb-4" style="color: var(--chm-muted)">
-              Format recommandé : E.164, par exemple +33600000000. Le numéro est conservé dans le
-              coffre identité, pas dans les tableaux métier.
+              {{ t('moderation.form.phoneHelp') }}
             </p>
           </template>
 
@@ -539,9 +537,7 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
                   class="form-check-input"
                   type="checkbox"
                 />
-                <label class="form-check-label fw-semibold" for="notifyModerator"
-                  >Notifier le modérateur</label
-                >
+                <label class="form-check-label fw-semibold" for="notifyModerator">{{ t('moderation.form.notifyModerator') }}</label>
               </div>
             </div>
             <div class="col-md-6">
@@ -552,9 +548,7 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
                   class="form-check-input"
                   type="checkbox"
                 />
-                <label class="form-check-label fw-semibold" for="notifyAdmin"
-                  >Notifier les admins</label
-                >
+                <label class="form-check-label fw-semibold" for="notifyAdmin">{{ t('moderation.form.notifyAdmins') }}</label>
               </div>
             </div>
           </div>
@@ -572,7 +566,7 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
             class="alert alert-info rounded-3 mt-3 mb-0"
           >
             <template v-if="moderation.lastCreatedLink">
-              <strong>Lien répondant :</strong>
+              <strong>{{ t('moderation.links.respondent') }}</strong>
               <a class="d-block text-break small mt-1" :href="moderation.lastCreatedLink">{{
                 moderation.lastCreatedLink
               }}</a>
@@ -581,16 +575,16 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
                 type="button"
                 @click="copyLink('respondent', moderation.lastCreatedLink)"
               >
-                {{ copiedLink === 'respondent' ? '✓ Copié' : 'Copier le lien' }}
+                {{ copiedLink === 'respondent' ? `✓ ${t('common.copied')}` : t('common.copyLink') }}
               </button>
             </template>
             <template v-else>
               <strong>{{
                 moderation.lastCreatedInvitation?.deliveryMode === 'refusal_record'
-                  ? 'Refus enregistré.'
+                  ? t('moderation.created.refusal')
                   : moderation.lastCreatedInvitation?.deliveryMode === 'paper_form'
-                    ? 'Version papier enregistrée.'
-                    : 'Invitation affectée au terminal.'
+                    ? t('moderation.created.paper')
+                    : t('moderation.created.terminal')
               }}</strong>
               <template v-if="moderation.lastCreatedInvitation?.deliveryMode === 'paper_form'">
                 <button
@@ -598,14 +592,14 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
                   type="button"
                   @click="downloadInvitationQuestionnairePdf(moderation.lastCreatedInvitation)"
                 >
-                  Télécharger le PDF avec code
+                  {{ t('moderation.pdf.withCode') }}
                 </button>
                 <button
                   class="btn btn-sm btn-primary mt-2"
                   type="button"
                   @click="openPaperEntry(moderation.lastCreatedInvitation)"
                 >
-                  Saisir les réponses papier
+                  {{ t('moderation.paper.enter') }}
                 </button>
               </template>
               <template v-if="moderation.lastCreatedTerminalLink">
@@ -619,7 +613,7 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
                   type="button"
                   @click="copyLink('terminal', moderation.lastCreatedTerminalLink)"
                 >
-                  {{ copiedLink === 'terminal' ? '✓ Copié' : 'Copier le lien' }}
+                  {{ copiedLink === 'terminal' ? `✓ ${t('common.copied')}` : t('common.copyLink') }}
                 </button>
               </template>
             </template>
@@ -628,7 +622,7 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
               class="small mb-0 mt-2"
               style="color: var(--chm-muted)"
             >
-              Code : {{ moderation.lastCreatedInvitation.publicCode }} ·
+              {{ t('common.code') }} : {{ moderation.lastCreatedInvitation.publicCode }} ·
               {{ invitationStatusLabel(moderation.lastCreatedInvitation) }}
             </p>
           </div>
@@ -638,13 +632,13 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
       <ModalPanel
         v-if="canAdministerTerminals"
         v-model="showTerminalRegistrationModal"
-        title="Enregistrer un terminal"
-        eyebrow="Appairage local"
-        description="À utiliser seulement pour créer un lien d’appairage destiné à l’appareil hospitalier cible."
+        :title="t('moderation.terminal.registerTitle')"
+        :eyebrow="t('moderation.terminal.pairingEyebrow')"
+        :description="t('moderation.terminal.pairingDescription')"
         size="md"
       >
         <form @submit.prevent="registerTerminal">
-          <label class="form-label fw-semibold" for="moderation-terminal-building">Bâtiment</label>
+          <label class="form-label fw-semibold" for="moderation-terminal-building">{{ t('common.building') }}</label>
           <select
             id="moderation-terminal-building"
             v-model="terminalForm.buildingId"
@@ -655,21 +649,19 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
               {{ building.label }}
             </option>
           </select>
-          <label class="form-label fw-semibold" for="moderation-terminal-label"
-            >Libellé de l'appareil</label
-          >
+          <label class="form-label fw-semibold" for="moderation-terminal-label">{{ t('moderation.terminal.deviceLabel') }}</label>
           <input
             id="moderation-terminal-label"
             v-model="terminalForm.label"
             class="form-control mb-3"
             required
           />
-          <button class="btn btn-primary w-100" type="submit">Créer le lien d'appairage</button>
+          <button class="btn btn-primary w-100" type="submit">{{ t('moderation.terminal.createPairing') }}</button>
           <div
             v-if="moderation.lastRegisteredTerminalLink"
             class="alert alert-info rounded-3 mt-3 mb-0"
           >
-            <strong>Lien d'appairage :</strong>
+            <strong>{{ t('moderation.links.pairing') }}</strong>
             <a
               class="d-block text-break small mt-1"
               :href="moderation.lastRegisteredTerminalLink"
@@ -680,7 +672,7 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
               type="button"
               @click="copyLink('registered', moderation.lastRegisteredTerminalLink)"
             >
-              {{ copiedLink === 'registered' ? '✓ Copié' : 'Copier le lien' }}
+              {{ copiedLink === 'registered' ? `✓ ${t('common.copied')}` : t('common.copyLink') }}
             </button>
           </div>
         </form>
@@ -688,16 +680,16 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
 
       <ModalPanel
         v-model="showPaperEntryModal"
-        title="Saisie des réponses papier"
-        eyebrow="Double saisie modérateur"
-        description="Recopiez uniquement les réponses inscrites sur le formulaire papier. La soumission sera verrouillée sous le code public, sans contact email/SMS."
+        :title="t('moderation.paper.title')"
+        :eyebrow="t('moderation.paper.eyebrow')"
+        :description="t('moderation.paper.description')"
         size="xl"
       >
         <div v-if="paperEntryInvitation && paperEntryQuestionnaire">
           <div class="alert alert-info rounded-3">
-            <strong>Code public : {{ paperEntryInvitation.publicCode }}</strong
+            <strong>{{ t('moderation.paper.publicCode', { code: paperEntryInvitation.publicCode }) }}</strong
             ><br />
-            Questionnaire : {{ paperEntryQuestionnaire.title }} · Bâtiment :
+            {{ t('common.questionnaire') }} : {{ paperEntryQuestionnaire.title }} · {{ t('common.building') }} :
             {{ paperEntryInvitation.building.label }}
           </div>
 
@@ -721,8 +713,8 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
 
               <div v-for="question in group.questions" :key="question.id" class="question-row mb-3">
                 <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
-                  <span class="badge-soft">{{ question.code }} · {{ question.responseType }}</span>
-                  <span v-if="question.isRequired" class="badge-soft warning">Obligatoire</span>
+                  <span class="badge-soft">{{ question.code }} · {{ questionTypeText(question.responseType) }}</span>
+                  <span v-if="question.isRequired" class="badge-soft warning">{{ t('respondent.required') }}</span>
                 </div>
                 <label class="form-label fw-semibold">{{ question.label }}</label>
                 <p v-if="question.helperText" class="small" style="color: var(--chm-muted)">
@@ -741,7 +733,7 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
                     <span class="likert-choice-label">{{ paperLikertLabel(question, value) }}</span>
                     <button
                       class="likert-dot border-0"
-                      :class="Number(paperQuestionValue(question)) === value ? 'active' : ''"
+                      :class="isPaperLikertSelected(question, value) ? 'active' : ''"
                       type="button"
                       @click="setPaperAnswer(question, value)"
                     >
@@ -749,7 +741,7 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
                     </button>
                   </div>
                   <div v-if="question.likertScale.allowNotApplicable" class="likert-choice">
-                    <span class="likert-choice-label">Sans objet</span>
+                    <span class="likert-choice-label">{{ t('common.notApplicableShort') }}</span>
                     <button
                       class="btn btn-sm likert-extra-button"
                       :class="
@@ -760,7 +752,7 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
                       type="button"
                       @click="setPaperAnswer(question, 'not_applicable')"
                     >
-                      Non applicable
+                      {{ t('common.notApplicable') }}
                     </button>
                   </div>
                 </div>
@@ -825,7 +817,7 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
                   v-else-if="question.responseType === 'information'"
                   class="alert alert-info rounded-3 mb-2"
                 >
-                  Information seulement, aucune réponse à saisir.
+                  {{ t('moderation.paper.informationOnly') }}
                 </div>
 
                 <textarea
@@ -838,24 +830,21 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
               </div>
             </div>
 
-            <label class="form-label fw-semibold" for="paper-entry-note"
-              >Note interne optionnelle</label
-            >
+            <label class="form-label fw-semibold" for="paper-entry-note">{{ t('moderation.paper.note') }}</label>
             <textarea
               id="paper-entry-note"
               v-model="paperEntryNote"
               class="form-control mb-3"
               rows="2"
               maxlength="500"
-              placeholder="Ex. formulaire relu avec le répondant, rature illisible à la question X…"
+              :placeholder="t('moderation.paper.notePlaceholder')"
             ></textarea>
 
             <div
               v-if="missingPaperEntryRequiredQuestions.length"
               class="alert alert-warning rounded-3"
             >
-              {{ missingPaperEntryRequiredQuestions.length }} question(s) obligatoire(s) restent
-              sans réponse.
+              {{ tp('moderation.paper.missingRequired', missingPaperEntryRequiredQuestions.length) }}
             </div>
 
             <div class="d-flex flex-wrap gap-2 justify-content-between">
@@ -866,7 +855,7 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
                   paperEntryInvitation && downloadInvitationQuestionnairePdf(paperEntryInvitation)
                 "
               >
-                Retélécharger le PDF
+                {{ t('moderation.pdf.downloadAgain') }}
               </button>
               <button
                 class="btn btn-primary"
@@ -875,16 +864,15 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
               >
                 {{
                   moderation.status === 'creating'
-                    ? 'Verrouillage…'
-                    : 'Verrouiller la saisie papier'
+                    ? t('moderation.paper.locking')
+                    : t('moderation.paper.lock')
                 }}
               </button>
             </div>
           </form>
         </div>
         <div v-else class="alert alert-warning rounded-3">
-          Questionnaire introuvable dans le catalogue local. Actualisez le catalogue ou vérifiez que
-          la version est publiée.
+          {{ t('moderation.paper.questionnaireMissing') }}
         </div>
       </ModalPanel>
 
@@ -899,34 +887,34 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
 
       <div class="row g-3 mb-4">
         <div class="col-md-3">
-          <KpiCard label="Invitations" :value="String(total.sent)" icon="📨" />
+          <KpiCard :label="t('moderation.kpi.invitations')" :value="String(total.sent)" icon="📨" />
         </div>
         <div class="col-md-3">
-          <KpiCard label="Soumises" :value="String(total.submitted)" tone="success" icon="✅" />
+          <KpiCard :label="t('moderation.kpi.submitted')" :value="String(total.submitted)" tone="success" icon="✅" />
         </div>
         <div class="col-md-3">
           <KpiCard
-            label="Sans email/SMS"
+            :label="t('moderation.kpi.noDigitalContact')"
             :value="String(total.noDigitalContact)"
             tone="warning"
             icon="🖥️"
           />
         </div>
         <div class="col-md-3">
-          <KpiCard label="Refus" :value="String(total.refused)" tone="danger" />
+          <KpiCard :label="t('moderation.kpi.refused')" :value="String(total.refused)" tone="danger" />
         </div>
         <div class="col-md-6 col-xl">
-          <KpiCard label="SMS" :value="String(total.sms)" tone="warning" icon="📱" />
+          <KpiCard :label="t('moderation.kpi.sms')" :value="String(total.sms)" tone="warning" icon="📱" />
         </div>
         <div class="col-md-6 col-xl">
           <KpiCard
-            label="Terminal"
+            :label="t('moderation.kpi.terminal')"
             :value="String(total.onsiteTerminal)"
             tone="warning"
             icon="🖥️"
           />
         </div>
-        <div class="col-md-6 col-xl"><KpiCard label="Taux" :value="responseRate" /></div>
+        <div class="col-md-6 col-xl"><KpiCard :label="t('moderation.kpi.rate')" :value="responseRate" /></div>
       </div>
 
       <div v-if="canAdministerTerminals" class="action-strip mb-4">
@@ -953,8 +941,8 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
       <CollapsibleSection
         v-if="canAdministerTerminals"
         id="moderation-terminals"
-        title="Terminaux actifs du périmètre"
-        :badge="`${moderation.terminalDevices.length} terminal(aux)`"
+        :title="t('moderation.terminals.activeTitle')"
+        :badge="tp('moderation.terminals.count', moderation.terminalDevices.length)"
         :default-open="false"
         body-class="compact"
       >
@@ -962,10 +950,10 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
           <table class="table align-middle">
             <thead>
               <tr>
-                <th>Terminal</th>
-                <th>Bâtiment</th>
-                <th>En attente</th>
-                <th>Dernière activité</th>
+                <th>{{ t('common.terminal') }}</th>
+                <th>{{ t('common.building') }}</th>
+                <th>{{ t('common.pending') }}</th>
+                <th>{{ t('common.lastActivity') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -989,14 +977,14 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
                 <td class="small" style="color: var(--chm-muted)">
                   {{
                     device.lastSeenAt
-                      ? new Date(device.lastSeenAt).toLocaleString('fr-FR')
-                      : 'Jamais'
+                      ? formatDate(device.lastSeenAt, { dateStyle: 'short', timeStyle: 'short' })
+                      : t('common.never')
                   }}
                 </td>
               </tr>
               <tr v-if="!moderation.terminalDevices.length">
                 <td colspan="4" class="text-center py-4" style="color: var(--chm-muted)">
-                  Aucun terminal enregistré.
+                  {{ t('moderation.terminals.empty') }}
                 </td>
               </tr>
             </tbody>
@@ -1007,14 +995,14 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
       <CollapsibleSection
         id="moderation-invitations"
         class="mt-4 moderation-invitations-section"
-        title="Invitations"
-        :badge="`${moderation.invitations.length} ligne(s)`"
+        :title="t('moderation.invitations.title')"
+        :badge="tp('moderation.invitations.rows', moderation.invitations.length)"
         :default-open="false"
         body-class="compact"
       >
         <div class="d-flex flex-wrap justify-content-end align-items-center gap-2 mb-3">
           <button class="btn btn-outline-primary btn-sm" type="button" @click="moderation.refresh">
-            Actualiser
+            {{ t('common.refresh') }}
           </button>
         </div>
         <div
@@ -1023,12 +1011,12 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
           <table class="table align-middle">
             <thead>
               <tr>
-                <th>Code</th>
-                <th>Canal</th>
-                <th>Destination</th>
-                <th>Questionnaire</th>
-                <th>Bâtiment</th>
-                <th>Statut</th>
+                <th>{{ t('common.code') }}</th>
+                <th>{{ t('common.channel') }}</th>
+                <th>{{ t('common.destination') }}</th>
+                <th>{{ t('common.questionnaire') }}</th>
+                <th>{{ t('common.building') }}</th>
+                <th>{{ t('common.status') }}</th>
                 <th></th>
               </tr>
             </thead>
@@ -1058,7 +1046,7 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
                       type="button"
                       @click="downloadInvitationQuestionnairePdf(invitation)"
                     >
-                      PDF
+                      {{ t('common.pdf') }}
                     </button>
                     <button
                       v-if="canEnterPaperResponses(invitation)"
@@ -1066,7 +1054,7 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
                       type="button"
                       @click="openPaperEntry(invitation)"
                     >
-                      Saisir
+                      {{ t('common.enter') }}
                     </button>
                     <button
                       v-if="canResend(invitation)"
@@ -1074,14 +1062,14 @@ function paperLikertLabel(question: ApiQuestion, value: number): string {
                       type="button"
                       @click="resend(invitation)"
                     >
-                      Relancer
+                      {{ t('common.resend') }}
                     </button>
                   </div>
                 </td>
               </tr>
               <tr v-if="!moderation.invitations.length">
                 <td colspan="7" class="text-center py-4" style="color: var(--chm-muted)">
-                  Aucune invitation pour ce périmètre.
+                  {{ t('moderation.invitations.empty') }}
                 </td>
               </tr>
             </tbody>

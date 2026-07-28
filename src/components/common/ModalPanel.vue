@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
+import { t } from '@/i18n'
+
 interface Props {
   modelValue: boolean
   title: string
@@ -40,7 +42,7 @@ function close(): void {
           <h2 :id="labelledBy" class="modal-panel-title">{{ title }}</h2>
           <p v-if="description" class="modal-panel-description mb-0">{{ description }}</p>
         </div>
-        <button class="modal-panel-close" type="button" aria-label="Fermer la fenêtre" @click="close">×</button>
+        <button class="modal-panel-close" type="button" :aria-label="t('common.closeWindow')" @click="close">×</button>
       </header>
       <div class="modal-panel-body">
         <slot />

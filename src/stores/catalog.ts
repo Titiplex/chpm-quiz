@@ -1,6 +1,8 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
+import { t } from '@/i18n'
+
 import { apiRequest } from '@/services/api'
 import type {
   ApiBuilding,
@@ -49,7 +51,7 @@ export const useCatalogStore = defineStore('catalog', () => {
       status.value = 'ready'
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Chargement des données impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.catalog.loadError')
     }
   }
 
@@ -68,7 +70,7 @@ export const useCatalogStore = defineStore('catalog', () => {
       return response.building
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Création du bâtiment impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.catalog.createBuildingError')
       throw caught
     }
   }
@@ -100,7 +102,7 @@ export const useCatalogStore = defineStore('catalog', () => {
       return response.questionnaire
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Création de la traduction impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.catalog.createTranslationError')
       throw caught
     }
   }
@@ -207,7 +209,7 @@ export const useCatalogStore = defineStore('catalog', () => {
       return response.questionnaire
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Sauvegarde impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.common.saveError')
       throw caught
     }
   }

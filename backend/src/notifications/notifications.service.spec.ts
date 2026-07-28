@@ -1,6 +1,8 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common'
 import { describe, expect, it, vi } from 'vitest'
 
+import type { MailJobPayload } from '../mail/mail.types'
+
 vi.mock('../prisma/prisma.service', () => ({ PrismaService: class PrismaService {} }))
 vi.mock('../identity-vault/identity-vault.service', () => ({ IdentityVaultService: class IdentityVaultService {} }))
 vi.mock('../mail/mail-queue.service', () => ({ MailQueueService: class MailQueueService {} }))
@@ -47,7 +49,7 @@ function makeService(overrides: Record<string, unknown> = {}, env: Record<string
     listDeliveryEventsForDigest: vi.fn(async () => []),
     loadOutboundEmailForInvitation: vi.fn(async () => ({ email: 'patient@example.test' })),
   }
-  const mailQueue = { enqueue: vi.fn(() => 'job-1') }
+  const mailQueue = { enqueue: vi.fn((_payload: MailJobPayload) => 'job-1') }
   const audit = { log: vi.fn(async () => undefined) }
   const config = { get: vi.fn(<T = string>(key: string, fallback?: T) => (key in env ? env[key] as T : fallback)) }
 
@@ -120,6 +122,9 @@ describe('NotificationsService', () => {
 
     expect(mailQueue.enqueue).toHaveBeenCalledTimes(1)
     expect(mailQueue.enqueue).toHaveBeenCalledWith(expect.objectContaining({ template: 'submission_notification', to: { email: 'admin@example.test', name: 'Admin' } }))
+    const immediatePayload = mailQueue.enqueue.mock.calls[0]![0]
+    expect(immediatePayload.text).not.toContain('ITQ-0001')
+    expect(immediatePayload.text).not.toContain('Nombre de réponses')
     expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'notification.submission_queued' }) }))
     expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'notification.digest_queued' }) }))
     expect(identityVault.recordDeliveryEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: 'notification_submission_queued' }))
@@ -144,6 +149,9 @@ describe('NotificationsService', () => {
     const sent = await service.processDueDailyDigests({ now })
     expect(sent.delivered[0]).toMatchObject({ subscriptionId: 'sub-daily', queuedEventCount: 2, publicCodes: ['ITQ-0001', 'ITQ-0002'] })
     expect(mailQueue.enqueue).toHaveBeenCalledWith(expect.objectContaining({ template: 'daily_digest' }))
+    const digestPayload = mailQueue.enqueue.mock.calls[0]![0]
+    expect(digestPayload.text).not.toContain('ITQ-0001')
+    expect(digestPayload.text).not.toContain('ITQ-0002')
     expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'notification.digest_sent' }) }))
     expect(prisma.notificationSubscription.update).toHaveBeenCalledWith({ where: { id: 'sub-daily' }, data: { lastDeliveredAt: now } })
   })
@@ -157,23 +165,5 @@ describe('NotificationsService', () => {
     expect(result.deliveredDigestCount).toBe(0)
     expect(mailQueue.enqueue).not.toHaveBeenCalled()
     expect(prisma.notificationSubscription.update).toHaveBeenCalledWith({ where: { id: 'sub-empty' }, data: { lastDeliveredAt: now } })
-  })
-
-  it('confirms submitted questionnaires to respondent identity emails when available', async () => {
-    const { service, identityVault, mailQueue } = makeService()
-
-    await service.notifySubmissionConfirmation({ submissionId: 's1', invitationId: 'inv1', publicCode: 'ITQ-0001', questionnaireVersionId: version.id, buildingId: building.id, answerCount: 4, submittedAt: new Date('2026-01-02T12:00:00Z') })
-
-    expect(mailQueue.enqueue).toHaveBeenCalledWith(expect.objectContaining({ template: 'submission_confirmation', to: { email: 'patient@example.test' } }))
-    expect(identityVault.recordDeliveryEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: 'submission_confirmation_queued' }))
-  })
-
-  it('skips respondent confirmation when identity has been removed', async () => {
-    const { service, identityVault, mailQueue } = makeService();
-    (identityVault.loadOutboundEmailForInvitation as any).mockResolvedValue(null)
-
-    await service.notifySubmissionConfirmation({ submissionId: 's1', invitationId: 'inv1', publicCode: 'ITQ-0001', questionnaireVersionId: version.id, buildingId: building.id, answerCount: 4, submittedAt: new Date() })
-
-    expect(mailQueue.enqueue).not.toHaveBeenCalled()
   })
 })

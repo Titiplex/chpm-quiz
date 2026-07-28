@@ -1,6 +1,8 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
+import { t } from '@/i18n'
+
 import { apiRequest } from '@/services/api'
 import type {
   ApiNotificationSubscription,
@@ -31,7 +33,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
       status.value = 'ready'
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Chargement des préférences de notification impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.notifications.loadError')
     }
   }
 
@@ -49,7 +51,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
       return response.subscription
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Sauvegarde des préférences impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.notifications.saveError')
       throw caught
     }
   }
@@ -69,7 +71,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
       return response.result
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Exécution du digest quotidien impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.notifications.digestError')
       throw caught
     }
   }

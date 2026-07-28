@@ -6,6 +6,7 @@ import ModalPanel from '@/components/common/ModalPanel.vue'
 import PageSectionNav from '@/components/common/PageSectionNav.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
+import { languageText, questionTypeText, t, tp } from '@/i18n'
 import { useCatalogStore } from '@/stores/catalog'
 import type { ApiQuestion, ApiQuestionGroup, ConditionExpression } from '@shared/types/api'
 import type { LanguageCode, QuestionType } from '@shared/types/domain'
@@ -36,16 +37,14 @@ type LanguageOption = {
 
 const catalog = useCatalogStore()
 
-const adminSections: PageSectionNavItem[] = [
-  { id: 'admin-editor', label: 'Édition', hint: 'Métadonnées et questions' },
-  { id: 'admin-preview', label: 'Aperçu', hint: 'Parcours répondant' },
-]
+const adminSections = computed<PageSectionNavItem[]>(() => [
+  { id: 'admin-editor', label: t('builder.nav.edit'), hint: t('builder.nav.editHint') },
+  { id: 'admin-preview', label: t('builder.nav.preview'), hint: t('builder.nav.previewHint') },
+])
 
-const supportedLanguages: LanguageOption[] = [
-  { code: 'fr', label: 'Français' },
-  { code: 'en', label: 'Anglais' },
-  { code: 'es', label: 'Espagnol' },
-]
+const supportedLanguages = computed<LanguageOption[]>(() =>
+  (['fr', 'en', 'es'] as LanguageCode[]).map((code) => ({ code, label: languageText(code) })),
+)
 
 const selectedQuestionnaireId = ref<string>('')
 const selectedGroupId = ref<string>('')
@@ -80,8 +79,8 @@ const translationForm = reactive({
 })
 
 const groupForm = reactive({
-  title: 'Informations générales',
-  description: 'Questions de contexte placées au début du questionnaire.',
+  title: t('builder.defaults.groupTitle'),
+  description: t('builder.defaults.groupDescription'),
   questionsPerPage: 2,
   randomize: false,
   conditionQuestionCode: '',
@@ -99,19 +98,19 @@ const groupEditForm = reactive({
 
 const questionForm = reactive({
   code: 'Q-LANGUE',
-  label: 'Langue souhaitée',
-  helperText: 'Indiquez la langue dans laquelle vous préférez répondre.',
+  label: t('builder.defaults.questionLabel'),
+  helperText: t('builder.defaults.questionHelp'),
   responseType: 'free_text_short' as BuilderQuestionType,
   isRequired: false,
   likertPoints: 5,
   likertMinValue: 1,
-  likertLeftAnchor: 'Pas du tout d’accord',
-  likertRightAnchor: 'Tout à fait d’accord',
-  likertNeutralLabel: 'Neutre',
+  likertLeftAnchor: t('builder.defaults.likertLeft'),
+  likertRightAnchor: t('builder.defaults.likertRight'),
+  likertNeutralLabel: t('builder.defaults.likertNeutral'),
   popupTitle: '',
   popupBody: '',
   popupTerms: '',
-  answerOptionsText: 'fr|Français\nen|Anglais',
+  answerOptionsText: t('builder.defaults.languageOptions'),
   conditionQuestionCode: '',
   conditionValue: '',
 })
@@ -215,7 +214,7 @@ async function createQuestionnaire(): Promise<void> {
     const questionnaire = await catalog.createQuestionnaire({ ...createQuestionnaireForm })
     selectedQuestionnaireId.value = questionnaire.id
     selectedGroupId.value = ''
-    return `Questionnaire “${questionnaire.title}” créé en brouillon.`
+    return t('builder.message.questionnaireCreated', { title: questionnaire.title })
   })
 }
 
@@ -229,7 +228,7 @@ async function saveMetadata(): Promise<void> {
       defaultLanguage: metadataForm.defaultLanguage,
       finality: metadataForm.finality,
     })
-    return `Métadonnées de “${questionnaire.title}” sauvegardées en brouillon.`
+    return t('builder.message.metadataSaved', { title: questionnaire.title })
   })
 }
 
@@ -245,7 +244,7 @@ async function addLanguageVersion(): Promise<void> {
     })
     selectedQuestionnaireId.value = translation.id
     selectedGroupId.value = translation.groups[0]?.id ?? ''
-    return `Brouillon ${languageLabel(translation.language)} créé pour “${translation.title}”.`
+    return t('builder.message.translationCreated', { language: languageLabel(translation.language), title: translation.title })
   })
 }
 
@@ -267,13 +266,13 @@ async function createGroup(): Promise<void> {
       (left, right) => right.displayOrder - left.displayOrder,
     )[0]
     selectedGroupId.value = createdGroup?.id ?? ''
-    groupForm.title = 'Nouveau groupe'
+    groupForm.title = t('builder.defaults.newGroup')
     groupForm.description = ''
     groupForm.questionsPerPage = 3
     groupForm.randomize = false
     groupForm.conditionQuestionCode = ''
     groupForm.conditionValue = ''
-    return 'Groupe ajouté et persisté en base.'
+    return t('builder.message.groupAdded')
   })
 }
 
@@ -296,14 +295,14 @@ async function saveSelectedGroup(): Promise<void> {
         groupEditForm.conditionValue,
       ),
     })
-    return 'Paramètres du groupe sauvegardés.'
+    return t('builder.message.groupSaved')
   })
 }
 
 async function archiveSelectedGroup(): Promise<void> {
   if (!selectedQuestionnaire.value || !selectedGroup.value) return
 
-  if (!window.confirm(`Archiver le groupe “${selectedGroup.value.title}” ?`)) {
+  if (!window.confirm(t('builder.confirm.archiveGroup', { title: selectedGroup.value.title }))) {
     return
   }
 
@@ -313,7 +312,7 @@ async function archiveSelectedGroup(): Promise<void> {
       selectedGroup.value!.id,
     )
     selectedGroupId.value = questionnaire.groups[0]?.id ?? ''
-    return 'Groupe archivé dans le brouillon.'
+    return t('builder.message.groupArchived')
   })
 }
 
@@ -331,13 +330,13 @@ async function submitQuestion(): Promise<void> {
       )
       const editedCode = payload.code
       resetQuestionForm()
-      return `Question ${editedCode} mise à jour.`
+      return t('builder.message.questionUpdated', { code: editedCode })
     }
 
     await catalog.createQuestion(selectedQuestionnaire.value!.id, selectedGroup.value!.id, payload)
     const createdCode = payload.code
     resetQuestionForm()
-    return `Question ${createdCode} ajoutée au groupe.`
+    return t('builder.message.questionAdded', { code: createdCode })
   })
 }
 
@@ -349,8 +348,8 @@ async function validatePublication(): Promise<void> {
       selectedQuestionnaire.value!.versionId,
     )
     return publicationReport.value.canPublish
-      ? 'Validation de publication réussie : la version brouillon peut être publiée.'
-      : `Publication bloquée : ${publicationReport.value.errors.length} anomalie(s) détectée(s).`
+      ? t('builder.message.publicationValid')
+      : tp('builder.message.publicationBlocked', publicationReport.value.errors.length)
   })
 }
 
@@ -361,17 +360,17 @@ async function publishSelectedVersion(): Promise<void> {
     const report = await catalog.validatePublication(selectedQuestionnaire.value!.versionId)
     publicationReport.value = report
     if (!report.canPublish) {
-      throw new Error(`Publication impossible : ${report.errors.join(' ; ')}`)
+      throw new Error(t('builder.error.publicationImpossible', { errors: report.errors.join(' ; ') }))
     }
     await catalog.publishVersion(selectedQuestionnaire.value!.versionId)
-    return 'Version publiée et rendue immuable. Les prochaines modifications créeront un nouveau brouillon.'
+    return t('builder.message.published')
   })
 }
 
 async function archiveQuestion(question: ApiQuestion): Promise<void> {
   if (!selectedQuestionnaire.value) return
 
-  if (!window.confirm(`Archiver la question ${question.code} ?`)) {
+  if (!window.confirm(t('builder.confirm.archiveQuestion', { code: question.code }))) {
     return
   }
 
@@ -380,7 +379,7 @@ async function archiveQuestion(question: ApiQuestion): Promise<void> {
     if (editingQuestionId.value === question.id) {
       resetQuestionForm()
     }
-    return `Question ${question.code} archivée.`
+    return t('builder.message.questionArchived', { code: question.code })
   })
 }
 
@@ -393,16 +392,16 @@ function editQuestion(question: ApiQuestion): void {
   questionForm.isRequired = Boolean(question.isRequired)
   questionForm.likertPoints = question.likertScale?.points ?? 5
   questionForm.likertMinValue = question.likertScale?.minValue ?? 1
-  questionForm.likertLeftAnchor = question.likertScale?.leftAnchor ?? 'Pas du tout d’accord'
-  questionForm.likertRightAnchor = question.likertScale?.rightAnchor ?? 'Tout à fait d’accord'
-  questionForm.likertNeutralLabel = question.likertScale?.neutralLabel ?? 'Neutre'
+  questionForm.likertLeftAnchor = question.likertScale?.leftAnchor ?? t('builder.defaults.likertLeft')
+  questionForm.likertRightAnchor = question.likertScale?.rightAnchor ?? t('builder.defaults.likertRight')
+  questionForm.likertNeutralLabel = question.likertScale?.neutralLabel ?? t('builder.defaults.likertNeutral')
   questionForm.popupTitle = question.popupDefinitions?.[0]?.title ?? ''
   questionForm.popupBody = question.popupDefinitions?.[0]?.body ?? ''
   questionForm.popupTerms =
     question.popupDefinitions?.map((popup) => popup.termLabel ?? popup.termKey).join('\n') ?? ''
   questionForm.answerOptionsText =
     question.options?.map((option) => `${option.value}|${option.label}`).join('\n') ??
-    'oui|Oui\nnon|Non'
+    t('builder.defaults.yesNoOptions')
   const condition = conditionToFields(question.conditionExpression)
   questionForm.conditionQuestionCode = condition.questionCode
   questionForm.conditionValue = condition.value
@@ -417,13 +416,13 @@ function resetQuestionForm(): void {
   questionForm.isRequired = false
   questionForm.likertPoints = 5
   questionForm.likertMinValue = 1
-  questionForm.likertLeftAnchor = 'Pas du tout d’accord'
-  questionForm.likertRightAnchor = 'Tout à fait d’accord'
-  questionForm.likertNeutralLabel = 'Neutre'
+  questionForm.likertLeftAnchor = t('builder.defaults.likertLeft')
+  questionForm.likertRightAnchor = t('builder.defaults.likertRight')
+  questionForm.likertNeutralLabel = t('builder.defaults.likertNeutral')
   questionForm.popupTitle = ''
   questionForm.popupBody = ''
   questionForm.popupTerms = ''
-  questionForm.answerOptionsText = 'oui|Oui\nnon|Non'
+  questionForm.answerOptionsText = t('builder.defaults.yesNoOptions')
   questionForm.conditionQuestionCode = ''
   questionForm.conditionValue = ''
 }
@@ -459,7 +458,7 @@ function buildQuestionPayload() {
   }
 
   if (!payload.label.trim()) {
-    throw new Error('Le libellé de la question est obligatoire.')
+    throw new Error(t('builder.error.questionLabelRequired'))
   }
 
   return payload
@@ -477,7 +476,7 @@ function buildPopupPayload() {
   }
 
   if (!questionForm.popupTitle.trim() || !questionForm.popupBody.trim()) {
-    throw new Error('La popup doit avoir un titre et un texte explicatif.')
+    throw new Error(t('builder.error.popupIncomplete'))
   }
 
   return {
@@ -505,7 +504,7 @@ function answerOptionsFromText(value: string) {
 
   if (options.length < 2) {
     throw new Error(
-      'Une question à choix doit contenir au moins deux options, une par ligne au format valeur|libellé.',
+      t('builder.error.choiceOptions'),
     )
   }
 
@@ -564,19 +563,19 @@ function normalizeQuestionCode(value: string): string {
 }
 
 function conditionLabel(expression?: ConditionExpression | null): string {
-  if (!expression) return 'Toujours affiché'
-  if (Array.isArray(expression.all)) return expression.all.map(conditionLabel).join(' ET ')
-  if (Array.isArray(expression.any)) return expression.any.map(conditionLabel).join(' OU ')
-  if (expression.not) return `NON (${conditionLabel(expression.not)})`
+  if (!expression) return t('builder.condition.always')
+  if (Array.isArray(expression.all)) return expression.all.map(conditionLabel).join(` ${t('builder.condition.and')} `)
+  if (Array.isArray(expression.any)) return expression.any.map(conditionLabel).join(` ${t('builder.condition.or')} `)
+  if (expression.not) return t('builder.condition.not', { condition: conditionLabel(expression.not) })
 
-  const expected = expression.value ?? expression.equals ?? 'renseigné'
+  const expected = expression.value ?? expression.equals ?? t('builder.condition.answeredValue')
   const operator =
     expression.operator ??
     (Object.prototype.hasOwnProperty.call(expression, 'equals') ? 'equals' : 'answered')
-  const questionCode = expression.questionCode ?? expression.questionId ?? 'question'
+  const questionCode = expression.questionCode ?? expression.questionId ?? t('common.question').toLowerCase()
 
-  if (operator === 'answered') return `${questionCode} renseignée`
-  if (operator === 'not_answered') return `${questionCode} non renseignée`
+  if (operator === 'answered') return t('builder.condition.answered', { question: questionCode })
+  if (operator === 'not_answered') return t('builder.condition.notAnswered', { question: questionCode })
   return `${questionCode} ${operator} ${String(expected)}`
 }
 
@@ -684,36 +683,21 @@ function likertLabel(scale: LikertScaleForDisplay, value: number): string {
   const lastIndex = values.length - 1
   const neutralIndex = Math.floor(lastIndex / 2)
 
-  if (index <= 0) return scale.leftAnchor || `Valeur ${value}`
-  if (index === lastIndex) return scale.rightAnchor || `Valeur ${value}`
+  if (index <= 0) return scale.leftAnchor || t('common.value', { value })
+  if (index === lastIndex) return scale.rightAnchor || t('common.value', { value })
   if (scale.neutralLabel && index === neutralIndex) return scale.neutralLabel
 
-  return index < neutralIndex
-    ? `Vers « ${scale.leftAnchor || 'le minimum'} »`
-    : `Vers « ${scale.rightAnchor || 'le maximum'} »`
+  return t('common.towards', {
+    anchor: index < neutralIndex ? scale.leftAnchor || t('common.minimum') : scale.rightAnchor || t('common.maximum'),
+  })
 }
 
 function languageLabel(language: LanguageCode): string {
-  return (
-    supportedLanguages.find((candidate) => candidate.code === language)?.label ??
-    language.toUpperCase()
-  )
+  return languageText(language)
 }
 
 function questionTypeLabel(type?: QuestionType): string {
-  const labels: Record<QuestionType, string> = {
-    single_choice: 'Choix unique',
-    multiple_choice: 'Choix multiple',
-    likert: 'Échelle Likert',
-    free_text: 'Réponse libre',
-    free_text_short: 'Réponse libre courte',
-    free_text_long: 'Réponse libre longue',
-    number: 'Nombre',
-    date: 'Date',
-    information: 'Information',
-  }
-
-  return type ? labels[type] : 'Question'
+  return questionTypeText(type)
 }
 
 async function performAction(action: () => Promise<string>): Promise<void> {
@@ -723,7 +707,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
   try {
     localMessage.value = await action()
   } catch (caught) {
-    localError.value = caught instanceof Error ? caught.message : 'Action impossible.'
+    localError.value = caught instanceof Error ? caught.message : t('common.error.action')
   }
 }
 </script>
@@ -732,47 +716,37 @@ async function performAction(action: () => Promise<string>): Promise<void> {
   <section class="demo-page">
     <div class="container-fluid px-4 px-xl-5">
       <PageHeader
-        title="Constructeur de questionnaire"
-        description="Créez et modifiez vos questionnaires sans code : groupes, questions, popups et prévisualisation intégrée."
+        :title="t('builder.title')"
+        :description="t('builder.description')"
       >
         <template #actions>
-          <button class="btn btn-outline-primary" type="button" @click="showStructureModal = true">
-            Structure / groupes
-          </button>
+          <button class="btn btn-outline-primary" type="button" @click="showStructureModal = true">{{ t('builder.actions.structure') }}</button>
           <button class="btn btn-outline-primary" type="button" @click="showPreview = !showPreview">
-            {{ showPreview ? 'Masquer' : 'Afficher' }} l’aperçu répondant
+            {{ showPreview ? t('builder.actions.hidePreview') : t('builder.actions.showPreview') }}
           </button>
           <button
             class="btn btn-outline-secondary"
             type="button"
             :disabled="!selectedQuestionnaire || isSaving || selectedQuestionnaire.isPublished"
             @click="validatePublication"
-          >
-            Valider publication
-          </button>
+          >{{ t('builder.actions.validate') }}</button>
           <button
             class="btn btn-success"
             type="button"
             :disabled="!selectedQuestionnaire || isSaving || selectedQuestionnaire.isPublished"
             @click="publishSelectedVersion"
-          >
-            Publier version immuable
-          </button>
+          >{{ t('builder.actions.publish') }}</button>
           <button
             class="btn btn-primary"
             type="button"
             :disabled="!selectedQuestionnaire || isSaving || selectedQuestionnaire.isPublished"
             @click="saveMetadata"
-          >
-            Sauvegarder le brouillon
-          </button>
+          >{{ t('builder.actions.saveDraft') }}</button>
         </template>
       </PageHeader>
       <RoleGateInfo class="mb-4" />
 
-      <div v-if="catalog.status === 'loading'" class="alert alert-info rounded-4" role="status">
-        Chargement du catalogue questionnaire…
-      </div>
+      <div v-if="catalog.status === 'loading'" class="alert alert-info rounded-4" role="status">{{ t('builder.loading') }}</div>
       <div v-if="catalog.error" class="alert alert-danger rounded-4" role="alert">
         {{ catalog.error }}
       </div>
@@ -789,7 +763,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
         role="status"
       >
         <strong>{{
-          publicationReport.canPublish ? 'Publication autorisée' : 'Publication bloquée'
+          publicationReport.canPublish ? t('builder.status.publicationAllowed') : t('builder.status.publicationBlocked')
         }}</strong>
         <ul v-if="publicationReport.errors.length" class="mb-0 mt-2">
           <li v-for="error in publicationReport.errors" :key="error">{{ error }}</li>
@@ -798,25 +772,25 @@ async function performAction(action: () => Promise<string>): Promise<void> {
 
       <ModalPanel
         v-model="showStructureModal"
-        title="Structure du questionnaire"
-        eyebrow="Questionnaires et groupes"
-        description="Sélectionnez le brouillon, créez un questionnaire ou ajoutez un groupe sans compresser l’éditeur principal."
+        :title="t('builder.structure.title')"
+        :eyebrow="t('builder.structure.eyebrow')"
+        :description="t('builder.structure.description')"
         size="lg"
       >
         <aside class="builder-sidebar admin-structure-panel p-3 border-0 shadow-none">
           <div class="d-flex align-items-center justify-content-between mb-3">
-            <h2 class="h5 fw-bold mb-0">Structure</h2>
+            <h2 class="h5 fw-bold mb-0">{{ t('builder.structure.heading') }}</h2>
             <span class="badge-soft"
-              >{{ selectedQuestionnaire?.questionCount ?? 0 }} questions</span
+>{{ tp('common.questionsCount', selectedQuestionnaire?.questionCount ?? 0) }}</span
             >
           </div>
 
-          <label class="form-label fw-bold" for="questionnaire-select">Questionnaire</label>
+          <label class="form-label fw-bold" for="questionnaire-select">{{ t('common.questionnaire') }}</label>
           <select
             id="questionnaire-select"
             v-model="selectedQuestionnaireId"
             class="form-select mb-3"
-            aria-label="Questionnaire en base"
+            :aria-label="t('builder.structure.questionnaireAria')"
           >
             <option
               v-for="questionnaire in catalog.questionnaires"
@@ -824,21 +798,21 @@ async function performAction(action: () => Promise<string>): Promise<void> {
               :value="questionnaire.id"
             >
               {{ questionnaire.title }} · v{{ questionnaire.version }} ·
-              {{ questionnaire.isPublished ? 'publié' : 'brouillon' }}
+              {{ questionnaire.isPublished ? t('builder.status.published') : t('builder.status.draft') }}
             </option>
           </select>
 
           <details class="question-row mb-4" open>
-            <summary class="builder-disclosure-summary">Créer un questionnaire</summary>
-            <label class="form-label small fw-bold" for="new-code">Code</label>
+            <summary class="builder-disclosure-summary">{{ t('builder.structure.createQuestionnaire') }}</summary>
+            <label class="form-label small fw-bold" for="new-code">{{ t('common.code') }}</label>
             <input id="new-code" v-model="createQuestionnaireForm.code" class="form-control mb-2" />
-            <label class="form-label small fw-bold" for="new-title">Titre</label>
+            <label class="form-label small fw-bold" for="new-title">{{ t('common.title') }}</label>
             <input
               id="new-title"
               v-model="createQuestionnaireForm.title"
               class="form-control mb-2"
             />
-            <label class="form-label small fw-bold" for="new-language">Langue par défaut</label>
+            <label class="form-label small fw-bold" for="new-language">{{ t('builder.field.defaultLanguage') }}</label>
             <select
               id="new-language"
               v-model="createQuestionnaireForm.defaultLanguage"
@@ -857,13 +831,11 @@ async function performAction(action: () => Promise<string>): Promise<void> {
               type="button"
               :disabled="isSaving"
               @click="createQuestionnaire"
-            >
-              + Créer le brouillon
-            </button>
+            >{{ t('builder.actions.createDraft') }}</button>
           </details>
 
           <div class="d-flex align-items-center justify-content-between mb-2">
-            <h3 class="h6 fw-bold mb-0">Groupes</h3>
+            <h3 class="h6 fw-bold mb-0">{{ t('common.groups') }}</h3>
             <span class="badge-soft">{{ selectedQuestionnaire?.groupCount ?? 0 }}</span>
           </div>
           <div class="d-grid gap-2 mb-4">
@@ -881,10 +853,10 @@ async function performAction(action: () => Promise<string>): Promise<void> {
           </div>
 
           <details class="question-row" open>
-            <summary class="builder-disclosure-summary">Ajouter un groupe</summary>
-            <label class="form-label small fw-bold" for="group-title">Nom du groupe</label>
+            <summary class="builder-disclosure-summary">{{ t('builder.group.add') }}</summary>
+            <label class="form-label small fw-bold" for="group-title">{{ t('builder.field.groupName') }}</label>
             <input id="group-title" v-model="groupForm.title" class="form-control mb-2" />
-            <label class="form-label small fw-bold" for="group-description">Description</label>
+            <label class="form-label small fw-bold" for="group-description">{{ t('common.description') }}</label>
             <textarea
               id="group-description"
               v-model="groupForm.description"
@@ -892,7 +864,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
               rows="2"
             ></textarea>
             <label class="form-label small fw-bold" for="group-questions-per-page"
-              >Questions par page</label
+              >{{ t('builder.field.questionsPerPage') }}</label
             >
             <input
               id="group-questions-per-page"
@@ -910,69 +882,65 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                 type="checkbox"
               />
               <label class="form-check-label fw-semibold" for="group-randomize"
-                >Randomiser ce groupe</label
+                >{{ t('builder.field.randomizeGroup') }}</label
               >
             </div>
             <div class="condition-line mb-3">
-              <p class="page-header-eyebrow mb-2">Condition simple</p>
+              <p class="page-header-eyebrow mb-2">{{ t('builder.condition.simple') }}</p>
               <label class="form-label small fw-bold" for="group-condition-code"
-                >Code question déclencheuse</label
+                >{{ t('builder.condition.triggerCode') }}</label
               >
               <input
                 id="group-condition-code"
                 v-model="groupForm.conditionQuestionCode"
                 class="form-control mb-2"
-                placeholder="Q-001"
+                :placeholder="t('builder.placeholder.questionCode')"
               />
               <label class="form-label small fw-bold" for="group-condition-value"
-                >Valeur attendue</label
+                >{{ t('builder.condition.expectedValue') }}</label
               >
               <input
                 id="group-condition-value"
                 v-model="groupForm.conditionValue"
                 class="form-control"
-                placeholder="fr ou en"
+                :placeholder="t('builder.placeholder.languageExamples')"
               />
-              <p class="form-text mb-0">Laisser vide pour toujours afficher le groupe.</p>
+              <p class="form-text mb-0">{{ t('builder.condition.emptyHelp') }}</p>
             </div>
             <button
               class="btn btn-outline-primary w-100"
               type="button"
               :disabled="!selectedQuestionnaire || isSaving"
               @click="createGroup"
-            >
-              + Ajouter le groupe
-            </button>
+            >{{ t('builder.actions.addGroup') }}</button>
           </details>
         </aside>
       </ModalPanel>
 
       <div class="action-strip admin-structure-strip mb-4">
         <div>
-          <p class="section-eyebrow mb-1">Structure active</p>
+          <p class="section-eyebrow mb-1">{{ t('builder.structure.active') }}</p>
           <h2 class="action-strip-title">
-            {{ selectedQuestionnaire?.title ?? 'Aucun questionnaire sélectionné' }}
+            {{ selectedQuestionnaire?.title ?? t('builder.structure.noneSelected') }}
           </h2>
           <p class="action-strip-description">
-            {{ selectedQuestionnaire?.groupCount ?? 0 }} groupe(s) ·
-            {{ selectedQuestionnaire?.questionCount ?? 0 }} question(s)
-            <template v-if="selectedGroup"> · groupe courant : {{ selectedGroup.title }}</template>
+            {{ tp('common.groupsCount', selectedQuestionnaire?.groupCount ?? 0) }} ·
+            {{ tp('common.questionsCount', selectedQuestionnaire?.questionCount ?? 0) }}
+            <template v-if="selectedGroup"> · {{ t('builder.structure.currentGroup', { title: selectedGroup.title }) }}</template>
           </p>
         </div>
-        <button class="btn btn-primary" type="button" @click="showStructureModal = true">
-          Ouvrir la structure
-        </button>
+        <button class="btn btn-primary" type="button" @click="showStructureModal = true">{{ t('builder.actions.openStructure') }}</button>
       </div>
 
       <div class="page-workspace">
-        <PageSectionNav title="Navigation admin" :sections="adminSections" />
+        <PageSectionNav :title="t('builder.navigation')" :sections="adminSections" />
         <div class="page-workspace-main admin-builder-flow">
           <div class="admin-builder-shell admin-builder-shell-single">
             <CollapsibleSection
               id="admin-editor"
               class="page-section"
-              title="Édition du brouillon"
-              :badge="selectedQuestionnaire?.isPublished ? 'Publié' : 'Brouillon'"
+              :title="t('builder.editor.title')"
+              :badge="selectedQuestionnaire?.isPublished ? t('builder.status.published') : t('builder.status.draft')"
               :badge-tone="selectedQuestionnaire?.isPublished ? 'success' : 'warning'"
               body-class="compact"
             >
@@ -981,7 +949,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                   <span class="window-dot"></span>
                   <span class="window-dot"></span>
                   <span class="window-dot"></span>
-                  <strong class="ms-2 small muted">Éditeur connecté au brouillon</strong>
+                  <strong class="ms-2 small muted">{{ t('builder.editor.connected') }}</strong>
                 </div>
 
                 <div class="p-3 p-lg-4">
@@ -991,17 +959,17 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                         {{
                           selectedQuestionnaire
                             ? `${selectedQuestionnaire.code} · v${selectedQuestionnaire.version}`
-                            : 'Aucun brouillon'
+                            : t('builder.status.noDraft')
                         }}
                       </p>
-                      <h2 class="h4 fw-bold mb-0">Paramètres du questionnaire</h2>
+                      <h2 class="h4 fw-bold mb-0">{{ t('builder.editor.settings') }}</h2>
                     </div>
-                    <span class="badge-soft warning">Version brouillon</span>
+                    <span class="badge-soft warning">{{ t('builder.editor.draftVersion') }}</span>
                   </div>
 
                   <div class="row g-3 mb-4">
                     <div class="col-md-8">
-                      <label class="form-label fw-bold" for="metadata-title">Titre affiché</label>
+                      <label class="form-label fw-bold" for="metadata-title">{{ t('builder.field.displayTitle') }}</label>
                       <input
                         id="metadata-title"
                         v-model="metadataForm.title"
@@ -1009,7 +977,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                       />
                     </div>
                     <div class="col-md-4">
-                      <label class="form-label fw-bold" for="metadata-language">Langue</label>
+                      <label class="form-label fw-bold" for="metadata-language">{{ t('common.language') }}</label>
                       <select
                         id="metadata-language"
                         v-model="metadataForm.defaultLanguage"
@@ -1026,7 +994,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                     </div>
                     <div class="col-12">
                       <label class="form-label fw-bold" for="metadata-description"
-                        >Description</label
+                        >{{ t('common.description') }}</label
                       >
                       <textarea
                         id="metadata-description"
@@ -1037,7 +1005,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                     </div>
                     <div class="col-12">
                       <label class="form-label fw-bold" for="metadata-finality"
-                        >Finalité métier</label
+                        >{{ t('builder.field.finality') }}</label
                       >
                       <textarea
                         id="metadata-finality"
@@ -1051,20 +1019,18 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                   <div class="question-row mb-4">
                     <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
                       <div>
-                        <p class="section-eyebrow mb-1">Langues et traductions</p>
-                        <h3 class="h5 fw-bold mb-0">Ajouter une langue au questionnaire</h3>
+                        <p class="section-eyebrow mb-1">{{ t('builder.translation.eyebrow') }}</p>
+                        <h3 class="h5 fw-bold mb-0">{{ t('builder.translation.title') }}</h3>
                       </div>
-                      <span class="badge-soft">Version courante : {{ currentLanguageLabel }}</span>
+                      <span class="badge-soft">{{ t('builder.translation.currentVersion', { language: currentLanguageLabel }) }}</span>
                     </div>
                     <p class="small muted mb-3">
-                      Changer la langue ci-dessus ne traduit pas le contenu. Utilisez cette action
-                      pour créer un brouillon de traduction séparé, avec la même structure, les
-                      mêmes codes questions et les textes à adapter.
+                      {{ t('builder.translation.help') }}
                     </p>
                     <div class="row g-3 align-items-end">
                       <div class="col-md-3">
                         <label class="form-label small fw-bold" for="translation-language"
-                          >Nouvelle langue</label
+                          >{{ t('builder.translation.newLanguage') }}</label
                         >
                         <select
                           id="translation-language"
@@ -1082,7 +1048,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                       </div>
                       <div class="col-md-5">
                         <label class="form-label small fw-bold" for="translation-title"
-                          >Titre de la traduction</label
+                          >{{ t('builder.translation.translationTitle') }}</label
                         >
                         <input
                           id="translation-title"
@@ -1100,13 +1066,11 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                             selectedQuestionnaire.language === translationForm.language
                           "
                           @click="addLanguageVersion"
-                        >
-                          + Créer le brouillon de langue
-                        </button>
+                        >{{ t('builder.translation.createDraft') }}</button>
                       </div>
                       <div class="col-md-6">
                         <label class="form-label small fw-bold" for="translation-description"
-                          >Description traduite</label
+                          >{{ t('builder.translation.description') }}</label
                         >
                         <input
                           id="translation-description"
@@ -1116,7 +1080,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                       </div>
                       <div class="col-md-6">
                         <label class="form-label small fw-bold" for="translation-finality"
-                          >Finalité traduite</label
+                          >{{ t('builder.translation.finality') }}</label
                         >
                         <input
                           id="translation-finality"
@@ -1130,17 +1094,17 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                   <div v-if="selectedGroup" class="question-row mb-4">
                     <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
                       <div>
-                        <p class="section-eyebrow mb-1">Groupe sélectionné</p>
+                        <p class="section-eyebrow mb-1">{{ t('builder.group.selected') }}</p>
                         <h3 class="h5 fw-bold mb-0">{{ selectedGroup.title }}</h3>
                       </div>
                       <span class="badge-soft"
-                        >{{ selectedGroup.questions.length }} question(s)</span
+>{{ tp('common.questionsCount', selectedGroup.questions.length) }}</span
                       >
                     </div>
                     <div class="row g-3">
                       <div class="col-md-7">
                         <label class="form-label small fw-bold" for="edit-group-title"
-                          >Titre du groupe</label
+                          >{{ t('builder.field.groupTitle') }}</label
                         >
                         <input
                           id="edit-group-title"
@@ -1150,7 +1114,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                       </div>
                       <div class="col-md-5">
                         <label class="form-label small fw-bold" for="edit-group-qpp"
-                          >Questions par page</label
+                          >{{ t('builder.field.questionsPerPage') }}</label
                         >
                         <input
                           id="edit-group-qpp"
@@ -1163,7 +1127,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                       </div>
                       <div class="col-12">
                         <label class="form-label small fw-bold" for="edit-group-description"
-                          >Description</label
+                          >{{ t('common.description') }}</label
                         >
                         <textarea
                           id="edit-group-description"
@@ -1181,30 +1145,30 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                             type="checkbox"
                           />
                           <label class="form-check-label fw-semibold" for="edit-group-randomize"
-                            >Randomisation par groupe</label
+                            >{{ t('builder.field.groupRandomization') }}</label
                           >
                         </div>
                       </div>
                       <div class="col-md-6">
                         <label class="form-label small fw-bold" for="edit-group-condition-code"
-                          >Condition · question</label
+                          >{{ t('builder.condition.question') }}</label
                         >
                         <input
                           id="edit-group-condition-code"
                           v-model="groupEditForm.conditionQuestionCode"
                           class="form-control"
-                          placeholder="Q-001"
+                          :placeholder="t('builder.placeholder.questionCode')"
                         />
                       </div>
                       <div class="col-md-6">
                         <label class="form-label small fw-bold" for="edit-group-condition-value"
-                          >Condition · valeur</label
+                          >{{ t('builder.condition.value') }}</label
                         >
                         <input
                           id="edit-group-condition-value"
                           v-model="groupEditForm.conditionValue"
                           class="form-control"
-                          placeholder="fr"
+                          :placeholder="t('builder.placeholder.languageCode')"
                         />
                       </div>
                       <div
@@ -1218,17 +1182,13 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                           type="button"
                           :disabled="isSaving"
                           @click="archiveSelectedGroup"
-                        >
-                          Archiver
-                        </button>
+                        >{{ t('common.archive') }}</button>
                         <button
                           class="btn btn-outline-primary"
                           type="button"
                           :disabled="isSaving"
                           @click="saveSelectedGroup"
-                        >
-                          Sauvegarder le groupe
-                        </button>
+                        >{{ t('builder.actions.saveGroup') }}</button>
                       </div>
                     </div>
                   </div>
@@ -1236,23 +1196,21 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                   <div class="question-row mb-4">
                     <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
                       <div>
-                        <p class="section-eyebrow mb-1">Questions</p>
+                        <p class="section-eyebrow mb-1">{{ t('common.questions') }}</p>
                         <h3 class="h5 fw-bold mb-0">
-                          {{ editingQuestionId ? 'Modifier la question' : 'Créer une question' }}
+                          {{ editingQuestionId ? t('builder.questions.edit') : t('builder.questions.create') }}
                         </h3>
                       </div>
                       <button
                         class="btn btn-sm btn-outline-secondary"
                         type="button"
                         @click="resetQuestionForm"
-                      >
-                        Réinitialiser
-                      </button>
+                      >{{ t('common.reset') }}</button>
                     </div>
 
                     <div class="row g-3">
                       <div class="col-md-4">
-                        <label class="form-label small fw-bold" for="question-code">Code</label>
+                        <label class="form-label small fw-bold" for="question-code">{{ t('common.code') }}</label>
                         <input
                           id="question-code"
                           v-model="questionForm.code"
@@ -1261,27 +1219,27 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                       </div>
                       <div class="col-md-8">
                         <label class="form-label small fw-bold" for="question-type"
-                          >Type de réponse</label
+                          >{{ t('builder.field.responseType') }}</label
                         >
                         <select
                           id="question-type"
                           v-model="questionForm.responseType"
                           class="form-select"
                         >
-                          <option value="free_text_short">Réponse libre courte</option>
-                          <option value="free_text">Réponse libre</option>
-                          <option value="free_text_long">Réponse libre longue</option>
-                          <option value="single_choice">Choix unique</option>
-                          <option value="multiple_choice">Choix multiple</option>
-                          <option value="likert">Échelle Likert</option>
-                          <option value="number">Nombre</option>
-                          <option value="date">Date</option>
-                          <option value="information">Bloc informatif</option>
+                          <option value="free_text_short">{{ t('questionType.free_text_short') }}</option>
+                          <option value="free_text">{{ t('questionType.free_text') }}</option>
+                          <option value="free_text_long">{{ t('questionType.free_text_long') }}</option>
+                          <option value="single_choice">{{ t('questionType.single_choice') }}</option>
+                          <option value="multiple_choice">{{ t('questionType.multiple_choice') }}</option>
+                          <option value="likert">{{ t('questionType.likert') }}</option>
+                          <option value="number">{{ t('questionType.number') }}</option>
+                          <option value="date">{{ t('questionType.date') }}</option>
+                          <option value="information">{{ t('questionType.information') }}</option>
                         </select>
                       </div>
                       <div class="col-12">
                         <label class="form-label small fw-bold" for="question-label"
-                          >Libellé affiché</label
+                          >{{ t('builder.field.questionLabel') }}</label
                         >
                         <textarea
                           id="question-label"
@@ -1292,7 +1250,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                       </div>
                       <div class="col-12">
                         <label class="form-label small fw-bold" for="question-helper"
-                          >Aide courte</label
+                          >{{ t('builder.field.helperText') }}</label
                         >
                         <input
                           id="question-helper"
@@ -1303,7 +1261,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
 
                       <template v-if="questionForm.responseType === 'likert'">
                         <div class="col-md-3">
-                          <label class="form-label small fw-bold" for="likert-points">Points</label>
+                          <label class="form-label small fw-bold" for="likert-points">{{ t('builder.field.points') }}</label>
                           <input
                             id="likert-points"
                             v-model.number="questionForm.likertPoints"
@@ -1315,7 +1273,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                         </div>
                         <div class="col-md-3">
                           <label class="form-label small fw-bold" for="likert-min-value"
-                            >Première valeur</label
+                            >{{ t('builder.field.firstValue') }}</label
                           >
                           <input
                             id="likert-min-value"
@@ -1328,7 +1286,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                         </div>
                         <div class="col-md-3">
                           <label class="form-label small fw-bold" for="likert-left"
-                            >Libellé gauche</label
+                            >{{ t('builder.field.leftLabel') }}</label
                           >
                           <input
                             id="likert-left"
@@ -1338,7 +1296,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                         </div>
                         <div class="col-md-3">
                           <label class="form-label small fw-bold" for="likert-right"
-                            >Libellé droit</label
+                            >{{ t('builder.field.rightLabel') }}</label
                           >
                           <input
                             id="likert-right"
@@ -1356,41 +1314,40 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                       >
                         <div class="col-12">
                           <label class="form-label small fw-bold" for="question-options"
-                            >Options de réponse</label
+                            >{{ t('builder.field.answerOptions') }}</label
                           >
                           <textarea
                             id="question-options"
                             v-model="questionForm.answerOptionsText"
                             class="form-control"
                             rows="4"
-                            placeholder="fr|Français\nen|Anglais"
+                            :placeholder="t('builder.defaults.languageOptions')"
                           ></textarea>
-                          <p class="form-text mb-0">
-                            Une option par ligne : <code>valeur|libellé affiché</code>.
+                          <p class="form-text mb-0">{{ t('builder.field.optionPerLine') }}<code>{{ t('builder.field.optionFormat') }}</code>.
                           </p>
                         </div>
                       </template>
 
                       <div class="col-md-6">
                         <label class="form-label small fw-bold" for="question-condition-code"
-                          >Condition question</label
+                          >{{ t('builder.condition.question') }}</label
                         >
                         <input
                           id="question-condition-code"
                           v-model="questionForm.conditionQuestionCode"
                           class="form-control"
-                          placeholder="Q-001"
+                          :placeholder="t('builder.placeholder.questionCode')"
                         />
                       </div>
                       <div class="col-md-6">
                         <label class="form-label small fw-bold" for="question-condition-value"
-                          >Valeur attendue</label
+                          >{{ t('builder.condition.expectedValue') }}</label
                         >
                         <input
                           id="question-condition-value"
                           v-model="questionForm.conditionValue"
                           class="form-control"
-                          placeholder="fr"
+                          :placeholder="t('builder.placeholder.languageCode')"
                         />
                       </div>
 
@@ -1403,7 +1360,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                             type="checkbox"
                           />
                           <label class="form-check-label fw-semibold" for="question-required"
-                            >Question obligatoire</label
+                            >{{ t('builder.field.required') }}</label
                           >
                         </div>
                       </div>
@@ -1411,31 +1368,31 @@ async function performAction(action: () => Promise<string>): Promise<void> {
 
                     <hr class="my-4" />
 
-                    <p class="section-eyebrow mb-2">Popup explicative optionnelle</p>
+                    <p class="section-eyebrow mb-2">{{ t('builder.popup.optional') }}</p>
                     <div class="row g-3">
                       <div class="col-md-5">
-                        <label class="form-label small fw-bold" for="popup-title">Titre</label>
+                        <label class="form-label small fw-bold" for="popup-title">{{ t('common.title') }}</label>
                         <input
                           id="popup-title"
                           v-model="questionForm.popupTitle"
                           class="form-control"
-                          placeholder="Ex. Coordination inter-site"
+                          :placeholder="t('builder.placeholder.popupTitle')"
                         />
                       </div>
                       <div class="col-md-7">
                         <label class="form-label small fw-bold" for="popup-terms"
-                          >Termes expliqués</label
+                          >{{ t('builder.popup.terms') }}</label
                         >
                         <input
                           id="popup-terms"
                           v-model="questionForm.popupTerms"
                           class="form-control"
-                          placeholder="Un terme, plusieurs séparés par virgule"
+                          :placeholder="t('builder.placeholder.popupTerms')"
                         />
                       </div>
                       <div class="col-12">
                         <label class="form-label small fw-bold" for="popup-body"
-                          >Texte explicatif</label
+                          >{{ t('builder.popup.body') }}</label
                         >
                         <textarea
                           id="popup-body"
@@ -1454,15 +1411,14 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                     >
                       {{
                         editingQuestionId
-                          ? 'Mettre à jour la question'
-                          : '+ Ajouter la question au brouillon'
+                          ? t('builder.questions.update')
+                          : t('builder.questions.addToDraft')
                       }}
                     </button>
                   </div>
 
                   <div v-if="!allQuestions.length" class="alert alert-warning rounded-3 mb-0">
-                    Aucune question pour l'instant. Commencez par créer un groupe, puis ajoutez vos
-                    questions.
+                    {{ t('builder.questions.empty') }}
                   </div>
                   <div v-else class="compact-list content-scroll content-scroll-sm">
                     <div v-for="question in allQuestions" :key="question.id" class="question-row">
@@ -1482,16 +1438,12 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                           class="btn btn-sm btn-outline-primary"
                           type="button"
                           @click="editQuestion(question)"
-                        >
-                          Modifier
-                        </button>
+                        >{{ t('common.edit') }}</button>
                         <button
                           class="btn btn-sm btn-outline-danger"
                           type="button"
                           @click="archiveQuestion(question)"
-                        >
-                          Archiver
-                        </button>
+                        >{{ t('common.archive') }}</button>
                         <span v-if="question.popupDefinitions?.length" class="badge-soft warning">
                           {{ question.popupDefinitions.length }} popup(s)
                         </span>
@@ -1506,8 +1458,8 @@ async function performAction(action: () => Promise<string>): Promise<void> {
               v-if="showPreview"
               id="admin-preview"
               class="page-section admin-preview-section"
-              title="Aperçu et contrôles"
-              badge="Brouillon"
+              :title="t('builder.preview.title')"
+              :badge="t('builder.status.draft')"
               badge-tone="success"
               body-class="compact"
             >
@@ -1515,50 +1467,50 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                 <div class="demo-card flat">
                   <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
                     <div>
-                      <p class="section-eyebrow mb-2">Aperçu du questionnaire</p>
+                      <p class="section-eyebrow mb-2">{{ t('builder.preview.questionnaire') }}</p>
                       <h2 class="h5 fw-bold mb-0">
                         {{ selectedQuestionnaire?.title ?? 'Questionnaire' }}
                       </h2>
                     </div>
-                    <span class="badge-soft success">Brouillon non publié</span>
+                    <span class="badge-soft success">{{ t('builder.preview.unpublished') }}</span>
                   </div>
                   <p class="muted">{{ selectedQuestionnaire?.description }}</p>
 
                   <div class="question-help mb-3">
                     <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
                       <div>
-                        <p class="page-header-eyebrow mb-1">Simulation de parcours</p>
-                        <strong>Valeurs de test pour les conditions</strong>
+                        <p class="page-header-eyebrow mb-1">{{ t('builder.preview.simulation') }}</p>
+                        <strong>{{ t('builder.preview.testValues') }}</strong>
                       </div>
-                      <span class="badge-soft warning">randomisation stable</span>
+                      <span class="badge-soft warning">{{ t('builder.preview.stableRandomization') }}</span>
                     </div>
                     <div class="row g-2 align-items-end">
                       <div class="col-md-6">
                         <label class="form-label small fw-bold" for="preview-lang"
-                          >Q-001 · langue</label
+>{{ t('builder.preview.q001Label') }}</label
                         >
                         <select
                           id="preview-lang"
                           v-model="previewAnswers['Q-001']"
                           class="form-select form-select-sm"
                         >
-                          <option value="">Non répondu</option>
-                          <option value="fr">Français</option>
-                          <option value="en">English</option>
+                          <option value="">{{ t('builder.preview.unanswered') }}</option>
+                          <option value="fr">{{ t('language.fr') }}</option>
+                          <option value="en">{{ t('language.en') }}</option>
                         </select>
                       </div>
                       <div class="col-md-6">
                         <label class="form-label small fw-bold" for="preview-q002"
-                          >Q-002 · confirmation</label
+>{{ t('builder.preview.q002Label') }}</label
                         >
                         <select
                           id="preview-q002"
                           v-model="previewAnswers['Q-002']"
                           class="form-select form-select-sm"
                         >
-                          <option value="">Non répondu</option>
-                          <option value="yes">Oui / Yes</option>
-                          <option value="no">Non / No</option>
+                          <option value="">{{ t('builder.preview.unanswered') }}</option>
+                          <option value="yes">{{ t('common.yes') }}</option>
+                          <option value="no">{{ t('common.no') }}</option>
                         </select>
                       </div>
                     </div>
@@ -1568,7 +1520,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                         :key="group.id"
                         class="badge-soft danger"
                       >
-                        Masqué : {{ group.title }} · {{ conditionLabel(group.conditionExpression) }}
+                        {{ t('builder.preview.hiddenGroup', { title: group.title, condition: conditionLabel(group.conditionExpression) }) }}
                       </span>
                     </div>
                   </div>
@@ -1577,10 +1529,10 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                     <div v-for="group in previewGroups" :key="group.id" class="question-row mb-3">
                       <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
                         <span class="badge-soft"
-                          >{{ group.title }} · {{ group.questionsPerPage }} question(s)/page</span
+>{{ t('builder.preview.groupSummary', { title: group.title, count: group.questionsPerPage }) }}</span
                         >
                         <span v-if="group.randomize" class="badge-soft warning"
-                          >ordre randomisé</span
+                          >{{ t('builder.preview.randomOrder') }}</span
                         >
                         <span v-if="group.conditionExpression" class="badge-soft">{{
                           conditionLabel(group.conditionExpression)
@@ -1618,7 +1570,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                           <div
                             class="likert-scale"
                             role="group"
-                            :aria-label="`Échelle Likert ${question.likertScale.points} points`"
+                            :aria-label="t('respondent.likert.group', { points: question.likertScale.points, label: question.label ?? question.title })"
                           >
                             <div
                               v-for="value in likertValues(question.likertScale)"
@@ -1631,7 +1583,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                               <button
                                 class="likert-dot border-0"
                                 type="button"
-                                :aria-label="`${likertLabel(question.likertScale, value)} — valeur ${value}`"
+                                :aria-label="t('respondent.likert.valueLabel', { label: likertLabel(question.likertScale, value), value })"
                               >
                                 {{ value }}
                               </button>
@@ -1658,7 +1610,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                           v-else-if="question.responseType === 'number'"
                           class="form-control mb-3"
                           type="number"
-                          placeholder="Nombre"
+                          :placeholder="t('questionType.number')"
                         />
                         <input
                           v-else-if="question.responseType === 'date'"
@@ -1668,14 +1620,12 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                         <div
                           v-else-if="question.responseType === 'information'"
                           class="alert alert-info rounded-4 mb-3"
-                        >
-                          Bloc d’information sans réponse attendue.
-                        </div>
+                        >{{ t('builder.preview.informationOnly') }}</div>
                         <textarea
                           v-else
                           class="form-control mb-3"
                           rows="3"
-                          placeholder="Réponse du répondant"
+                          :placeholder="t('builder.placeholder.respondentAnswer')"
                         ></textarea>
 
                         <div v-if="question.popupDefinitions?.length" class="info-bubble-list mb-3">
@@ -1696,7 +1646,7 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                         >
                           <div class="d-flex justify-content-between gap-3">
                             <strong>{{ popup.title }}</strong>
-                            <span class="badge-soft warning">popup</span>
+                            <span class="badge-soft warning">{{ t('builder.preview.popup') }}</span>
                           </div>
                           <p class="small muted mb-0 mt-2">{{ popup.body }}</p>
                         </div>
@@ -1706,13 +1656,13 @@ async function performAction(action: () => Promise<string>): Promise<void> {
                 </div>
 
                 <div class="demo-card flat">
-                  <p class="page-header-eyebrow mb-2">Fonctionnalités disponibles</p>
+                  <p class="page-header-eyebrow mb-2">{{ t('builder.features.title') }}</p>
                   <div class="d-grid gap-2">
-                    <span class="badge-soft success">Création sans code</span>
-                    <span class="badge-soft success">Conditions simples question / groupe</span>
-                    <span class="badge-soft success">Parcours multilingue (FR / EN)</span>
-                    <span class="badge-soft success">Randomisation avec ordre stable</span>
-                    <span class="badge-soft success">Popups explicatives versionnées</span>
+                    <span class="badge-soft success">{{ t('builder.features.noCode') }}</span>
+                    <span class="badge-soft success">{{ t('builder.features.conditions') }}</span>
+                    <span class="badge-soft success">{{ t('builder.features.multilingual') }}</span>
+                    <span class="badge-soft success">{{ t('builder.features.randomization') }}</span>
+                    <span class="badge-soft success">{{ t('builder.features.popups') }}</span>
                   </div>
                 </div>
               </div>

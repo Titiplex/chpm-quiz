@@ -1,6 +1,8 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 
+import { t } from '@/i18n'
+
 import { apiRequest } from '@/services/api'
 import type {
   AuditLogsResponse,
@@ -41,7 +43,7 @@ export const useComplianceStore = defineStore('compliance', () => {
       status.value = 'ready'
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Chargement RGPD impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.compliance.loadError')
     }
   }
 
@@ -83,7 +85,7 @@ export const useComplianceStore = defineStore('compliance', () => {
       }
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Export pseudonymisé impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.compliance.exportError')
     }
   }
 
@@ -111,7 +113,7 @@ export const useComplianceStore = defineStore('compliance', () => {
       }
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Action RGPD impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.compliance.actionError')
     }
   }
 

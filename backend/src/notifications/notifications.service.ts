@@ -203,10 +203,8 @@ export class NotificationsService implements OnModuleInit {
             subject: 'Nouvelle soumission questionnaire CHPM',
             text: [
               'Bonjour,',
-              'Une nouvelle soumission pseudonymisée a été reçue.',
-              `Code opérationnel : ${input.publicCode}.`,
-              `Nombre de réponses : ${input.answerCount}.`,
-              'Aucun email répondant n’est inclus dans cette notification.',
+              'Une nouvelle soumission est disponible dans l’espace sécurisé CHPM.',
+              'Connectez-vous à l’application pour la consulter selon vos habilitations.',
             ].join('\n'),
             metadata: {
               subscriptionId: subscription.id,
@@ -320,9 +318,8 @@ export class NotificationsService implements OnModuleInit {
             subject: 'Résumé quotidien CHPM — soumissions questionnaires',
             text: [
               'Bonjour,',
-              `${matchingEvents.length} événement(s) questionnaire nécessitent votre attention.`,
-              `Codes pseudonymisés : ${publicCodes.join(', ')}.`,
-              'Aucun email répondant n’est inclus dans ce résumé.',
+              `${matchingEvents.length} nouvelle(s) soumission(s) nécessitent votre attention.`,
+              'Connectez-vous à l’espace sécurisé CHPM pour les consulter selon vos habilitations.',
             ].join('\n'),
             metadata: {
               subscriptionId: subscription.id,
@@ -367,41 +364,6 @@ export class NotificationsService implements OnModuleInit {
       dryRun: options.dryRun ?? false,
       delivered,
     }
-  }
-
-
-  async notifySubmissionConfirmation(input: SubmissionNotificationInput): Promise<void> {
-    const identity = await this.identityVaultService.loadOutboundEmailForInvitation(input.invitationId)
-    if (!identity) {
-      return
-    }
-
-    const jobId = await this.mailQueue.enqueue({
-      template: 'submission_confirmation',
-      to: { email: identity.email },
-      subject: 'Confirmation de réception de votre questionnaire',
-      text: [
-        'Bonjour,',
-        'Votre questionnaire a bien été soumis et verrouillé.',
-        `Code opérationnel : ${input.publicCode}.`,
-        'Vous ne pouvez plus modifier vos réponses après cette confirmation.',
-        'Les traitements statistiques utilisent ce code pseudonymisé, pas votre adresse email.',
-      ].join('\n'),
-      invitationId: input.invitationId,
-      publicCode: input.publicCode,
-      metadata: {
-        submissionId: input.submissionId,
-        questionnaireVersionId: input.questionnaireVersionId,
-        submittedAt: input.submittedAt.toISOString(),
-      },
-    })
-
-    await this.identityVaultService.recordDeliveryEvent({
-      invitationId: input.invitationId,
-      publicCode: input.publicCode,
-      eventType: 'submission_confirmation_queued',
-      metadata: { jobId },
-    })
   }
 
   private async normalizeAndAssertScope(user: AuthenticatedUser, dto: UpsertNotificationSubscriptionDto): Promise<UpsertNotificationSubscriptionDto> {

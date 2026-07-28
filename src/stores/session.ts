@@ -1,6 +1,8 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
+import { t } from '@/i18n'
+
 import { getVisibleNavigation } from '@/config/navigation'
 import { apiRequest, ApiError } from '@/services/api'
 import { roleProfiles, type Permission, type UserRole } from '@shared/types/rbac'
@@ -62,7 +64,7 @@ export const useSessionStore = defineStore('session', () => {
     } catch (caught) {
       user.value = null
       status.value = 'anonymous'
-      error.value = caught instanceof Error ? caught.message : 'Connexion impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.session.loginError')
       throw caught
     }
   }

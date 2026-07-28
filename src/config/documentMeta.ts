@@ -1,8 +1,8 @@
+import { t } from '@/i18n'
+
 import { appConfig } from './env'
 
 const fallbackDocumentTitle = 'CHPM Survey'
-const fallbackDocumentDescription =
-  'Plateforme de questionnaires, invitations, passation sécurisée et statistiques pseudonymisées.'
 
 export function resolveDocumentTitle(appName = appConfig.appName): string {
   const normalizedAppName = appName.trim()
@@ -11,7 +11,7 @@ export function resolveDocumentTitle(appName = appConfig.appName): string {
 
 export function resolveDocumentDescription(appDescription = appConfig.appDescription): string {
   const normalizedDescription = appDescription.trim()
-  return normalizedDescription || fallbackDocumentDescription
+  return normalizedDescription || t('meta.description')
 }
 
 function updateMetaContent(selector: string, content: string): void {

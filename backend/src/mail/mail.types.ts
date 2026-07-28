@@ -2,7 +2,6 @@ export type MailTemplate =
   | 'invitation'
   | 'reminder'
   | 'expiration'
-  | 'submission_confirmation'
   | 'submission_notification'
   | 'daily_digest'
 

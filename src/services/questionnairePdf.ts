@@ -1,4 +1,5 @@
 import { appConfig } from '@/config/env'
+import { formatDate, getActiveLocale, normalizeLocale, t } from '@/i18n'
 import type { ApiQuestion, ApiQuestionnaire } from '@shared/types/api'
 
 interface PdfLine {
@@ -21,6 +22,7 @@ export interface QuestionnairePdfOptions {
   buildingLabel?: string | null
   generatedBy?: string | null
   fileName?: string
+  locale?: string
 }
 
 const PAGE_WIDTH = 595.28
@@ -66,7 +68,8 @@ export function downloadQuestionnairePdf(options: QuestionnairePdfOptions): void
   const objectUrl = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = objectUrl
-  link.download = options.fileName ?? defaultPdfFileName(options.questionnaire, options.publicCode)
+  const locale = normalizeLocale(options.locale ?? getActiveLocale())
+  link.download = options.fileName ?? defaultPdfFileName(options.questionnaire, options.publicCode, locale)
   link.rel = 'noopener'
   document.body.appendChild(link)
   link.click()
@@ -75,16 +78,23 @@ export function downloadQuestionnairePdf(options: QuestionnairePdfOptions): void
 }
 
 export function createQuestionnairePdfBlob(options: QuestionnairePdfOptions): Blob {
-  const pages = layoutQuestionnaire(options)
-  const pdfBytes = buildPdfBytes(pages)
+  const locale = normalizeLocale(options.locale ?? getActiveLocale())
+  const pages = layoutQuestionnaire(options, locale)
+  const pdfBytes = buildPdfBytes(pages, locale)
   const blobBytes = new Uint8Array(pdfBytes.byteLength)
   blobBytes.set(pdfBytes)
   return new Blob([blobBytes.buffer], { type: 'application/pdf' })
 }
 
-function defaultPdfFileName(questionnaire: ApiQuestionnaire, publicCode?: string | null): string {
+function defaultPdfFileName(
+  questionnaire: ApiQuestionnaire,
+  publicCode: string | null | undefined,
+  locale: string,
+): string {
   const code = sanitizeFilePart(questionnaire.code || questionnaire.title || 'questionnaire')
-  const suffix = publicCode ? `-${sanitizeFilePart(publicCode)}` : '-vierge'
+  const suffix = publicCode
+    ? `-${sanitizeFilePart(publicCode)}`
+    : `-${sanitizeFilePart(t('pdf.file.blank', {}, locale))}`
   return `${code}${suffix}.pdf`
 }
 
@@ -97,7 +107,7 @@ function sanitizeFilePart(value: string): string {
     .toLowerCase()
 }
 
-function layoutQuestionnaire(options: QuestionnairePdfOptions): PageContent[] {
+function layoutQuestionnaire(options: QuestionnairePdfOptions, locale: string): PageContent[] {
   const pages: PageContent[] = [{ lines: [] }]
   let y = PAGE_HEIGHT - MARGIN_TOP
 
@@ -151,19 +161,44 @@ function layoutQuestionnaire(options: QuestionnairePdfOptions): PageContent[] {
 
   text(appConfig.appName, { size: 9, bold: true })
   text(options.questionnaire.title, { size: 18, bold: true, gapAfter: 2 })
-  text(`Questionnaire papier - version ${options.questionnaire.versionLabel} - langue ${options.questionnaire.language.toUpperCase()}`, { size: 10 })
+  const languageKey = `language.${options.questionnaire.language.toLowerCase()}`
+  const languageLabel = t(languageKey, {}, locale)
+  text(
+    t(
+      'pdf.header.versionLanguage',
+      {
+        version: options.questionnaire.versionLabel,
+        language: languageLabel === languageKey ? options.questionnaire.language.toUpperCase() : languageLabel,
+      },
+      locale,
+    ),
+    { size: 10 },
+  )
 
   if (options.publicCode) {
-    text(`Code public a recopier/verifier lors de la saisie : ${options.publicCode}`, { size: 12, bold: true })
+    text(t('pdf.header.publicCodeValue', { code: options.publicCode }, locale), { size: 12, bold: true })
   } else {
-    text('Code public : _______________________________', { size: 12, bold: true })
+    text(t('pdf.header.publicCodeBlank', {}, locale), { size: 12, bold: true })
   }
 
   if (options.buildingLabel) {
-    text(`Batiment : ${options.buildingLabel}`, { size: 10 })
+    text(t('pdf.header.building', { building: options.buildingLabel }, locale), { size: 10 })
   }
 
-  text(`Generation : ${new Date().toLocaleDateString('fr-FR')} ${options.generatedBy ? `- ${options.generatedBy}` : ''}`, { size: 9 })
+  text(
+    options.generatedBy
+      ? t(
+          'pdf.header.generatedBy',
+          { date: formatDate(new Date(), { dateStyle: 'short' }, locale), name: options.generatedBy },
+          locale,
+        )
+      : t(
+          'pdf.header.generated',
+          { date: formatDate(new Date(), { dateStyle: 'short' }, locale) },
+          locale,
+        ),
+    { size: 9 },
+  )
 
   if (options.questionnaire.description) {
     gap(4)
@@ -171,12 +206,12 @@ function layoutQuestionnaire(options: QuestionnairePdfOptions): PageContent[] {
   }
 
   if (options.questionnaire.finality) {
-    text(`Finalite : ${options.questionnaire.finality}`, { size: 9 })
+    text(t('pdf.header.purpose', { purpose: options.questionnaire.finality }, locale), { size: 9 })
   }
 
   separator()
-  text('Consignes papier', { size: 12, bold: true })
-  text('Cochez clairement les cases ou inscrivez la reponse sur les lignes prevues. Le moderateur recopiera ensuite les reponses dans linterface. Aucun email ou telephone nest requis pour cette version papier.', { size: 9 })
+  text(t('pdf.instructions.title', {}, locale), { size: 12, bold: true })
+  text(t('pdf.instructions.body', {}, locale), { size: 9 })
   separator()
 
   for (const group of options.questionnaire.groups) {
@@ -188,7 +223,7 @@ function layoutQuestionnaire(options: QuestionnairePdfOptions): PageContent[] {
     gap(2)
 
     for (const question of group.questions) {
-      renderQuestion(question, text, checkbox, separator, gap, ensureSpace)
+      renderQuestion(question, text, checkbox, separator, gap, ensureSpace, locale)
     }
   }
 
@@ -202,6 +237,7 @@ function renderQuestion(
   separator: () => void,
   gap: (height?: number) => void,
   ensureSpace: (height: number) => void,
+  locale: string,
 ): void {
   const responseType = question.responseType ?? question.type
   ensureSpace(74)
@@ -215,28 +251,28 @@ function renderQuestion(
     const values = likertValues(question.likertScale)
     text(`${question.likertScale.leftAnchor} - ${question.likertScale.rightAnchor}`, { size: 9 })
     for (const value of values) {
-      checkbox(`${value} - ${likertLabel(question.likertScale, value)}`, 12)
+      checkbox(`${value} - ${likertLabel(question.likertScale, value, locale)}`, 12)
     }
     if (question.likertScale.allowNotApplicable) {
-      checkbox('Non applicable', 12)
+      checkbox(t('pdf.answer.notApplicable', {}, locale), 12)
     }
   } else if (responseType === 'single_choice') {
     for (const option of question.options ?? []) {
       checkbox(option.label, 12)
     }
   } else if (responseType === 'multiple_choice') {
-    text('Plusieurs choix possibles.', { size: 9 })
+    text(t('pdf.answer.multipleChoice', {}, locale), { size: 9 })
     for (const option of question.options ?? []) {
       checkbox(option.label, 12)
     }
   } else if (responseType === 'number') {
-    text('Reponse numerique : ______________________________________________', { size: 10, indent: 12 })
+    text(t('pdf.answer.number', {}, locale), { size: 10, indent: 12 })
     gap(4)
   } else if (responseType === 'date') {
-    text('Date : ____ / ____ / ________', { size: 10, indent: 12 })
+    text(t('pdf.answer.date', {}, locale), { size: 10, indent: 12 })
     gap(4)
   } else if (responseType === 'information') {
-    text('Information - aucune reponse attendue.', { size: 9, indent: 12 })
+    text(t('pdf.answer.information', {}, locale), { size: 9, indent: 12 })
   } else {
     for (let line = 0; line < 4; line += 1) {
       text('____________________________________________________________________', { size: 10, indent: 12 })
@@ -251,17 +287,27 @@ function likertValues(scale: { points: number; minValue?: number | null }): numb
   return Array.from({ length: scale.points }, (_, index) => minValue + index)
 }
 
-function likertLabel(scale: { points: number; minValue?: number | null; leftAnchor?: string | null; rightAnchor?: string | null; neutralLabel?: string | null }, value: number): string {
+function likertLabel(
+  scale: {
+    points: number
+    minValue?: number | null
+    leftAnchor?: string | null
+    rightAnchor?: string | null
+    neutralLabel?: string | null
+  },
+  value: number,
+  locale = getActiveLocale(),
+): string {
   const values = likertValues(scale)
   const index = values.indexOf(value)
   const lastIndex = values.length - 1
   const neutralIndex = Math.floor(lastIndex / 2)
 
-  if (index <= 0) return scale.leftAnchor || `Valeur ${value}`
-  if (index === lastIndex) return scale.rightAnchor || `Valeur ${value}`
+  if (index <= 0) return scale.leftAnchor || t('pdf.answer.value', { value }, locale)
+  if (index === lastIndex) return scale.rightAnchor || t('pdf.answer.value', { value }, locale)
   if (scale.neutralLabel && index === neutralIndex) return scale.neutralLabel
 
-  return `Valeur ${value}`
+  return t('pdf.answer.value', { value }, locale)
 }
 
 function wrapText(value: string, maxWidth: number, fontSize: number): string[] {
@@ -288,7 +334,7 @@ function wrapText(value: string, maxWidth: number, fontSize: number): string[] {
   return lines
 }
 
-function buildPdfBytes(pages: PageContent[]): Uint8Array {
+function buildPdfBytes(pages: PageContent[], locale: string): Uint8Array {
   const chunks: Uint8Array[] = []
   const offsets: number[] = [0]
 
@@ -322,7 +368,7 @@ function buildPdfBytes(pages: PageContent[]): Uint8Array {
   object(fontBoldId, ascii('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>'))
 
   pages.forEach((page, index) => {
-    const contentBytes = renderPageContent(page, index + 1, pages.length)
+    const contentBytes = renderPageContent(page, index + 1, pages.length, locale)
     const contentId = contentObjectIds[index]!
     const pageId = pageObjectIds[index]!
 
@@ -342,7 +388,12 @@ function buildPdfBytes(pages: PageContent[]): Uint8Array {
   return concat(chunks)
 }
 
-function renderPageContent(page: PageContent, pageNumber: number, pageCount: number): Uint8Array {
+function renderPageContent(
+  page: PageContent,
+  pageNumber: number,
+  pageCount: number,
+  locale: string,
+): Uint8Array {
   const chunks: Uint8Array[] = []
 
   for (const line of page.lines) {
@@ -359,7 +410,15 @@ function renderPageContent(page: PageContent, pageNumber: number, pageCount: num
     }
   }
 
-  chunks.push(textCommand(`Page ${pageNumber} / ${pageCount}`, PAGE_WIDTH - MARGIN_X - 64, MARGIN_BOTTOM - 24, 8, false))
+  chunks.push(
+    textCommand(
+      t('pdf.page', { page: pageNumber, count: pageCount }, locale),
+      PAGE_WIDTH - MARGIN_X - 80,
+      MARGIN_BOTTOM - 24,
+      8,
+      false,
+    ),
+  )
   return concat(chunks)
 }
 

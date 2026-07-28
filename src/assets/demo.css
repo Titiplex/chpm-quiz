@@ -1452,3 +1452,257 @@ details:not([open]) > .builder-disclosure-summary::after {
     width: 100%;
   }
 }
+
+/* ---- Dynamic project hierarchy ------------------------------------------ */
+.hierarchy-card {
+  border: 1px solid var(--chm-line);
+  border-radius: var(--chm-radius-xl);
+  background: #fff;
+  box-shadow: var(--chm-shadow-sm);
+  overflow: hidden;
+}
+
+.hierarchy-card-header {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 1.25rem 1.35rem;
+  border-bottom: 1px solid var(--chm-line);
+  background: linear-gradient(135deg, rgba(244, 248, 252, 0.96), #fff);
+}
+
+.hierarchy-eyebrow {
+  color: var(--chm-teal);
+  font-size: 0.73rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.hierarchy-card-title {
+  margin: 0;
+  color: var(--chm-navy);
+  font-size: clamp(1.08rem, 2vw, 1.35rem);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+.hierarchy-card-description {
+  max-width: 760px;
+  margin-top: 0.3rem;
+  color: var(--chm-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.hierarchy-state {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+  padding: 1.35rem;
+  color: var(--chm-muted);
+}
+
+.hierarchy-tree {
+  padding: 1rem 1.1rem 1.25rem;
+  overflow-x: auto;
+}
+
+.hierarchy-node {
+  position: relative;
+  min-width: 280px;
+}
+
+.hierarchy-node > summary {
+  list-style: none;
+}
+
+.hierarchy-node > summary::-webkit-details-marker {
+  display: none;
+}
+
+.hierarchy-node-summary,
+.hierarchy-node-leaf {
+  display: flex;
+  gap: 0.7rem;
+  align-items: center;
+  min-height: 54px;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 0.9rem;
+}
+
+.hierarchy-node-summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.hierarchy-node-summary:hover,
+.hierarchy-node-summary:focus-visible,
+.hierarchy-node-leaf:hover {
+  border-color: var(--chm-line);
+  background: var(--chm-bg);
+  outline: none;
+}
+
+.hierarchy-node-current > .hierarchy-node-summary,
+.hierarchy-node-current.hierarchy-node-leaf {
+  border-color: rgba(25, 135, 84, 0.28);
+  background: rgba(25, 135, 84, 0.07);
+}
+
+.hierarchy-node-chevron,
+.hierarchy-node-leaf-spacer {
+  width: 0.8rem;
+  flex: 0 0 0.8rem;
+}
+
+.hierarchy-node-chevron::before {
+  display: block;
+  content: '›';
+  color: var(--chm-muted);
+  font-size: 1.2rem;
+  font-weight: 800;
+  line-height: 1;
+  transform: rotate(0deg);
+  transition: transform 140ms ease;
+}
+
+.hierarchy-node[open] > .hierarchy-node-summary .hierarchy-node-chevron::before {
+  transform: rotate(90deg);
+}
+
+.hierarchy-node-icon {
+  display: inline-grid;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 2rem;
+  place-items: center;
+  border-radius: 0.65rem;
+  background: var(--chm-navy);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.hierarchy-node-site > .hierarchy-node-summary .hierarchy-node-icon,
+.hierarchy-node-site.hierarchy-node-leaf .hierarchy-node-icon {
+  background: var(--chm-teal);
+}
+
+.hierarchy-node-site_manager > .hierarchy-node-summary .hierarchy-node-icon,
+.hierarchy-node-site_manager.hierarchy-node-leaf .hierarchy-node-icon {
+  background: #5b4bb7;
+}
+
+.hierarchy-node-moderator > .hierarchy-node-summary .hierarchy-node-icon,
+.hierarchy-node-moderator.hierarchy-node-leaf .hierarchy-node-icon {
+  background: #4d6577;
+}
+
+.hierarchy-node-team > .hierarchy-node-summary .hierarchy-node-icon,
+.hierarchy-node-team.hierarchy-node-leaf .hierarchy-node-icon {
+  background: #7b8791;
+}
+
+.hierarchy-node-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 0.12rem;
+}
+
+.hierarchy-node-title-row {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.hierarchy-node-title {
+  overflow: hidden;
+  color: var(--chm-navy);
+  font-size: 0.92rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hierarchy-node-meta {
+  overflow: hidden;
+  color: var(--chm-muted);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hierarchy-node-count {
+  display: inline-grid;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--chm-bg);
+  color: var(--chm-muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.hierarchy-children {
+  position: relative;
+  display: grid;
+  gap: 0.15rem;
+  margin: 0 0 0 1.65rem;
+  padding: 0.25rem 0 0.25rem 1.35rem;
+  list-style: none;
+}
+
+.hierarchy-children::before {
+  position: absolute;
+  top: 0;
+  bottom: 1rem;
+  left: 0.55rem;
+  width: 1px;
+  background: var(--chm-line);
+  content: '';
+}
+
+.hierarchy-child {
+  position: relative;
+}
+
+.hierarchy-child::before {
+  position: absolute;
+  top: 1.7rem;
+  left: -0.8rem;
+  width: 0.8rem;
+  height: 1px;
+  background: var(--chm-line);
+  content: '';
+}
+
+@media (max-width: 767.98px) {
+  .hierarchy-card-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .hierarchy-card-header .btn {
+    align-self: flex-start;
+  }
+
+  .hierarchy-tree {
+    padding-inline: 0.65rem;
+  }
+
+  .hierarchy-children {
+    margin-left: 0.75rem;
+    padding-left: 1rem;
+  }
+
+  .hierarchy-node-title,
+  .hierarchy-node-meta {
+    white-space: normal;
+  }
+}

@@ -132,7 +132,6 @@ function makeService(invitation: any) {
   }
   const notifications = {
     notifySubmissionReceived: vi.fn(async () => undefined),
-    notifySubmissionConfirmation: vi.fn(async () => undefined),
   }
 
   return {

@@ -958,30 +958,17 @@ export class ModerationService {
   }
 
   private buildInvitationSms(input: { invitation: any; recipientPhone: string; token: string | null; template: 'invitation' | 'reminder' | 'expiration' }) {
-    const questionnaireTitle = input.invitation.questionnaireVersion?.questionnaire?.title ?? 'questionnaire CHPM'
     const link = input.token ? this.respondentLink(input.token) : null
     const textByTemplate = {
-      invitation: [
-        `CHPM : vous êtes invité(e) à répondre au questionnaire ${questionnaireTitle}.`,
-        `Code ${input.invitation.publicCode}.`,
-        link ? `Lien sécurisé : ${link}` : 'Lien indisponible.',
-        `Expiration : ${new Date(input.invitation.expiresAt).toLocaleString('fr-FR')}.`,
-      ],
-      reminder: [
-        `CHPM : rappel pour le questionnaire ${questionnaireTitle}.`,
-        `Code ${input.invitation.publicCode}.`,
-        link ? `Lien : ${link}` : 'Lien indisponible.',
-      ],
-      expiration: [
-        `CHPM : l'invitation au questionnaire ${questionnaireTitle} est expirée.`,
-        `Code ${input.invitation.publicCode}.`,
-      ],
+      invitation: link ? `Invitation sécurisée : ${link}` : 'Invitation sécurisée indisponible.',
+      reminder: link ? `Rappel — invitation sécurisée : ${link}` : 'Invitation sécurisée indisponible.',
+      expiration: 'Votre invitation sécurisée est expirée.',
     }
 
     return {
       template: input.template,
       to: { phone: input.recipientPhone },
-      text: textByTemplate[input.template].join(' '),
+      text: textByTemplate[input.template],
       invitationId: input.invitation.id,
       publicCode: input.invitation.publicCode,
       metadata: {
@@ -993,35 +980,33 @@ export class ModerationService {
   }
 
   private buildInvitationMail(input: { invitation: any; recipientEmail: string; token: string | null; template: 'invitation' | 'reminder' | 'expiration' }) {
-    const questionnaireTitle = input.invitation.questionnaireVersion?.questionnaire?.title ?? 'questionnaire CHPM'
     const link = input.token ? this.respondentLink(input.token) : null
+    const expiry = new Date(input.invitation.expiresAt).toLocaleString('fr-FR')
     const subjectByTemplate = {
-      invitation: `Invitation à répondre au questionnaire ${questionnaireTitle}`,
-      reminder: `Relance — questionnaire ${questionnaireTitle}`,
-      expiration: `Invitation expirée — questionnaire ${questionnaireTitle}`,
+      invitation: 'Votre invitation sécurisée',
+      reminder: 'Rappel — votre invitation sécurisée',
+      expiration: 'Votre invitation sécurisée a expiré',
     }
 
     const textByTemplate = {
       invitation: [
         'Bonjour,',
-        `Vous êtes invité(e) à répondre au questionnaire : ${questionnaireTitle}.`,
-        `Code unique : ${input.invitation.publicCode}.`,
-        link ? `Lien sécurisé à usage unique : ${link}` : 'Cette invitation est expirée ou indisponible.',
-        `Expiration : ${new Date(input.invitation.expiresAt).toLocaleString('fr-FR')}.`,
-        'Vos réponses sont pseudonymisées ; votre email est conservé dans le coffre identité séparé.',
+        'Une invitation sécurisée vous a été adressée.',
+        link ? `Accéder à l’invitation : ${link}` : 'Cette invitation est indisponible.',
+        `Ce lien expire le ${expiry}.`,
+        'Ne transférez pas ce message ni son lien.',
       ],
       reminder: [
         'Bonjour,',
-        `Rappel : le questionnaire ${questionnaireTitle} est encore en attente.`,
-        `Code unique : ${input.invitation.publicCode}.`,
-        link ? `Lien sécurisé renouvelé : ${link}` : 'Lien indisponible.',
-        `Expiration : ${new Date(input.invitation.expiresAt).toLocaleString('fr-FR')}.`,
+        'Votre invitation sécurisée est toujours disponible.',
+        link ? `Accéder à l’invitation : ${link}` : 'Cette invitation est indisponible.',
+        `Ce lien expire le ${expiry}.`,
+        'Ne transférez pas ce message ni son lien.',
       ],
       expiration: [
         'Bonjour,',
-        `L'invitation au questionnaire ${questionnaireTitle} est expirée.`,
-        `Code unique : ${input.invitation.publicCode}.`,
-        'Aucune action supplémentaire n’est possible avec ce lien.',
+        'Votre invitation sécurisée a expiré.',
+        'Le lien associé ne permet plus d’accéder au service.',
       ],
     }
 

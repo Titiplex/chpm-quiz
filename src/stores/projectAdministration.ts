@@ -1,6 +1,8 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
+import { t } from '@/i18n'
+
 import { apiRequest } from '@/services/api'
 import type {
   ApiSite,
@@ -43,7 +45,7 @@ export const useProjectAdministrationStore = defineStore('projectAdministration'
       status.value = 'ready'
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Chargement de l’administration projet impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.projectAdmin.loadError')
     }
   }
 
@@ -62,7 +64,7 @@ export const useProjectAdministrationStore = defineStore('projectAdministration'
       return response.site
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Création du site impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.projectAdmin.createSiteError')
       throw caught
     }
   }
@@ -85,7 +87,7 @@ export const useProjectAdministrationStore = defineStore('projectAdministration'
       status.value = 'ready'
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Création du responsable de site impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.projectAdmin.createManagerError')
       throw caught
     }
   }
@@ -104,7 +106,7 @@ export const useProjectAdministrationStore = defineStore('projectAdministration'
       status.value = 'ready'
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Mise à jour du responsable de site impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.projectAdmin.updateManagerError')
       throw caught
     }
   }
@@ -126,7 +128,7 @@ export const useProjectAdministrationStore = defineStore('projectAdministration'
       status.value = 'ready'
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Réinitialisation du mot de passe impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.common.resetPasswordError')
       throw caught
     }
   }
@@ -145,7 +147,7 @@ export const useProjectAdministrationStore = defineStore('projectAdministration'
       status.value = 'ready'
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Révocation des sessions impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.common.revokeSessionsError')
       throw caught
     }
   }

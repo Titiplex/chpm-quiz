@@ -1,6 +1,8 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
+import { t } from '@/i18n'
+
 import { apiRequest } from '@/services/api'
 import type {
   ApiTerminalDevice,
@@ -42,7 +44,7 @@ export const useTerminalAdminStore = defineStore('terminalAdmin', () => {
       status.value = 'ready'
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Chargement des terminaux impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.terminals.loadError')
     }
   }
 
@@ -64,7 +66,7 @@ export const useTerminalAdminStore = defineStore('terminalAdmin', () => {
       return response
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Création du terminal impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.terminals.createError')
       throw caught
     }
   }
@@ -83,7 +85,7 @@ export const useTerminalAdminStore = defineStore('terminalAdmin', () => {
       status.value = 'ready'
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Mise à jour du terminal impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.terminals.updateError')
       throw caught
     }
   }
@@ -101,7 +103,7 @@ export const useTerminalAdminStore = defineStore('terminalAdmin', () => {
       status.value = 'ready'
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Révocation du terminal impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.terminals.revokeError')
       throw caught
     }
   }
@@ -122,7 +124,7 @@ export const useTerminalAdminStore = defineStore('terminalAdmin', () => {
       return response
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Régénération du lien terminal impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.terminals.regenerateError')
       throw caught
     }
   }

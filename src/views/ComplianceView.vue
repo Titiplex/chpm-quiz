@@ -5,6 +5,7 @@ import CollapsibleSection from '@/components/common/CollapsibleSection.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import PageSectionNav from '@/components/common/PageSectionNav.vue'
 import RoleGateInfo from '@/components/common/RoleGateInfo.vue'
+import { formatDate as formatLocaleDate, t, tp } from '@/i18n'
 import { useCatalogStore } from '@/stores/catalog'
 import { useComplianceStore } from '@/stores/compliance'
 import { useSessionStore } from '@/stores/session'
@@ -27,10 +28,10 @@ const canRunRetention = computed(() => session.currentRole === 'technical_admin'
 const canExport = computed(() => ['admin', 'analyst'].includes(session.currentRole))
 
 const complianceSections = computed<PageSectionNavItem[]>(() => [
-  { id: 'compliance-register', label: 'Registre', hint: 'Traitements' },
-  { id: 'compliance-retention', label: 'Conservation', hint: 'Maintenance' },
-  ...(canExport.value ? [{ id: 'compliance-export', label: 'Export', hint: 'Pseudonymisé' }] : []),
-  { id: 'compliance-audit', label: 'Audit', hint: 'Événements' },
+  { id: 'compliance-register', label: t('compliance.section.register'), hint: t('compliance.section.registerHint') },
+  { id: 'compliance-retention', label: t('compliance.section.retention'), hint: t('compliance.section.retentionHint') },
+  ...(canExport.value ? [{ id: 'compliance-export', label: t('compliance.section.export'), hint: t('compliance.section.exportHint') }] : []),
+  { id: 'compliance-audit', label: t('compliance.section.audit'), hint: t('compliance.section.auditHint') },
 ])
 
 onMounted(async () => {
@@ -41,10 +42,7 @@ onMounted(async () => {
 })
 
 function formatDate(value: string | null | undefined): string {
-  if (!value) return '—'
-  return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(
-    new Date(value),
-  )
+  return value ? formatLocaleDate(value, { dateStyle: 'short', timeStyle: 'short' }) : '—'
 }
 </script>
 
@@ -52,9 +50,9 @@ function formatDate(value: string | null | undefined): string {
   <section class="demo-page">
     <div class="container-fluid px-4 px-xl-5">
       <PageHeader
-        eyebrow="RGPD / sécurité"
-        title="Registre technique, conservation et preuves d’audit"
-        description="Consultez le registre des traitements, la politique de conservation, les exports pseudonymisés et les journaux d’audit."
+        :eyebrow="t('compliance.header.eyebrow')"
+        :title="t('compliance.header.title')"
+        :description="t('compliance.header.description')"
       />
       <RoleGateInfo class="mb-4" />
 
@@ -65,24 +63,24 @@ function formatDate(value: string | null | undefined): string {
         {{ compliance.message }}
       </div>
       <div v-if="compliance.status === 'loading'" class="demo-card text-center py-5">
-        Chargement du registre RGPD…
+        {{ t('compliance.loading') }}
       </div>
 
       <div class="page-workspace">
-        <PageSectionNav title="Navigation RGPD" :sections="complianceSections" />
+        <PageSectionNav :title="t('compliance.navigation')" :sections="complianceSections" />
         <div class="page-workspace-main">
           <div class="row g-4">
             <div id="compliance-register" class="page-section col-xl-7">
               <CollapsibleSection
-                eyebrow="Registre technique simplifié"
-                title="Traitements et cloisonnement"
-                badge="Email exclu du dashboard métier"
+                :eyebrow="t('compliance.register.eyebrow')"
+                :title="t('compliance.register.title')"
+                :badge="t('compliance.register.badge')"
                 badge-tone="success"
                 body-class="content-scroll content-scroll-sm"
               >
                 <div v-if="!compliance.register" class="empty-state">
-                  <strong>Registre indisponible.</strong>
-                  <p class="muted mb-0">Vérifiez vos permissions ou réessayez ultérieurement.</p>
+                  <strong>{{ t('compliance.register.unavailable') }}</strong>
+                  <p class="muted mb-0">{{ t('compliance.register.retry') }}</p>
                 </div>
                 <div v-else class="compact-list">
                   <div
@@ -96,13 +94,13 @@ function formatDate(value: string | null | undefined): string {
                     </div>
                     <p class="muted mb-2">{{ processing.finality }}</p>
                     <div class="small">
-                      <strong>Base légale :</strong> {{ processing.lawfulBasis }}
+                      <strong>{{ t('compliance.register.lawfulBasis') }}</strong> {{ processing.lawfulBasis }}
                     </div>
                     <div class="small">
-                      <strong>Données :</strong> {{ processing.dataCategories.join(', ') }}
+                      <strong>{{ t('compliance.register.data') }}</strong> {{ processing.dataCategories.join(', ') }}
                     </div>
                     <div class="small">
-                      <strong>Destinataires :</strong> {{ processing.recipients.join(', ') }}
+                      <strong>{{ t('compliance.register.recipients') }}</strong> {{ processing.recipients.join(', ') }}
                     </div>
                   </div>
                 </div>
@@ -111,12 +109,12 @@ function formatDate(value: string | null | undefined): string {
 
             <div id="compliance-retention" class="page-section col-xl-5">
               <CollapsibleSection
-                eyebrow="Conservation"
-                title="Règles MVP"
+                :eyebrow="t('compliance.retention.eyebrow')"
+                :title="t('compliance.retention.title')"
                 body-class="content-scroll content-scroll-sm"
               >
                 <div v-if="!compliance.policy" class="empty-state compact">
-                  Politique de conservation indisponible.
+                  {{ t('compliance.retention.unavailable') }}
                 </div>
                 <div v-else class="timeline">
                   <div
@@ -136,7 +134,7 @@ function formatDate(value: string | null | undefined): string {
                     :disabled="compliance.status === 'saving'"
                     @click="compliance.expireInvitations"
                   >
-                    Expirer les invitations échues
+                    {{ t('compliance.retention.expireInvitations') }}
                   </button>
                   <button
                     class="btn btn-outline-danger rounded-pill"
@@ -144,7 +142,7 @@ function formatDate(value: string | null | undefined): string {
                     :disabled="compliance.status === 'saving'"
                     @click="compliance.cleanupDrafts"
                   >
-                    Nettoyer les brouillons expirés
+                    {{ t('compliance.retention.cleanupDrafts') }}
                   </button>
                   <button
                     v-if="canRunRetention"
@@ -153,26 +151,23 @@ function formatDate(value: string | null | undefined): string {
                     :disabled="compliance.status === 'saving'"
                     @click="compliance.runRetention"
                   >
-                    Exécuter le cycle complet de conservation
+                    {{ t('compliance.retention.run') }}
                   </button>
                 </div>
                 <p v-else class="small muted mt-4 mb-0">
-                  Votre rôle peut consulter la conformité mais pas exécuter les traitements de
-                  maintenance.
+                  {{ t('compliance.retention.readOnly') }}
                 </p>
               </CollapsibleSection>
             </div>
 
             <div v-if="canExport" id="compliance-export" class="page-section col-xl-5">
               <CollapsibleSection
-                eyebrow="Export pseudonymisé"
-                title="Soumissions sans coffre email"
+                :eyebrow="t('compliance.export.eyebrow')"
+                :title="t('compliance.export.title')"
                 :default-open="false"
               >
                 <p class="muted">
-                  L’export exclut la table identity.email_identities. Les réponses signalées comme
-                  potentiellement identifiantes sont masquées pour éviter toute ré-identification
-                  accidentelle.
+                  {{ t('compliance.export.description') }}
                 </p>
                 <button
                   class="btn btn-primary rounded-pill"
@@ -180,7 +175,7 @@ function formatDate(value: string | null | undefined): string {
                   :disabled="compliance.status === 'saving' || !selectedQuestionnaireId"
                   @click="compliance.fetchPseudonymizedExport(selectedQuestionnaireId)"
                 >
-                  Générer l’export pseudonymisé
+                  {{ t('compliance.export.generate') }}
                 </button>
 
                 <div v-if="compliance.exportPayload" class="mt-4 p-3 rounded-4 border bg-white">
@@ -188,27 +183,21 @@ function formatDate(value: string | null | undefined): string {
                   <div class="small muted">
                     {{
                       compliance.exportPayload.displayValue ??
-                      `${compliance.exportPayload.rowCount} ligne(s)`
+                      tp('compliance.export.rows', compliance.exportPayload.rowCount)
                     }}
-                    · empreinte fichier {{ compliance.exportPayload.fingerprint }}
+                    · {{ t('compliance.export.fingerprint', { fingerprint: compliance.exportPayload.fingerprint }) }}
                   </div>
                   <div v-if="compliance.exportPayload.secureDocument" class="small muted mt-1">
-                    Coffre : {{ compliance.exportPayload.secureDocument.storageRef }} · expiration
-                    {{ formatDate(compliance.exportPayload.secureDocument.expiresAt) }}
+                    {{ t('compliance.export.vault', { storageRef: compliance.exportPayload.secureDocument.storageRef, expiresAt: formatDate(compliance.exportPayload.secureDocument.expiresAt) }) }}
                   </div>
                   <div
                     v-if="compliance.exportPayload.suppressedByThreshold"
                     class="alert alert-warning rounded-4 py-2 mt-2 mb-0"
                   >
-                    Export détaillé masqué : effectif inférieur au seuil anti-réidentification ({{
-                      compliance.exportPayload.threshold
-                    }}).
+                    {{ t('compliance.export.suppressed', { threshold: compliance.exportPayload.threshold }) }}
                   </div>
                   <div class="small mt-2">
-                    Email direct :
-                    {{ compliance.exportPayload.containsDirectEmail ? 'présent' : 'absent' }} ·
-                    coffre identité exclu :
-                    {{ compliance.exportPayload.identityVaultExcluded ? 'oui' : 'non' }}.
+                    {{ t('compliance.export.directEmail', { state: compliance.exportPayload.containsDirectEmail ? t('compliance.export.present') : t('compliance.export.absent'), excluded: compliance.exportPayload.identityVaultExcluded ? t('common.yes') : t('common.no') }) }}
                   </div>
                 </div>
               </CollapsibleSection>
@@ -216,8 +205,8 @@ function formatDate(value: string | null | undefined): string {
 
             <div id="compliance-audit" class="page-section col-xl-7">
               <CollapsibleSection
-                eyebrow="Audit consultable"
-                title="Derniers événements sensibles"
+                :eyebrow="t('compliance.audit.eyebrow')"
+                :title="t('compliance.audit.title')"
                 :default-open="false"
                 body-class="compact"
               >
@@ -228,20 +217,20 @@ function formatDate(value: string | null | undefined): string {
                       type="button"
                       @click="compliance.fetchAll()"
                     >
-                      Actualiser
+                      {{ t('common.refresh') }}
                     </button>
                   </div>
                   <div class="table-card table-card-scroll">
                     <table class="table align-middle">
                       <thead class="table-light">
                         <tr>
-                          <th>Date</th>
-                          <th>Action</th>
-                          <th>Entité</th>
-                          <th>Code</th>
-                          <th>Acteur</th>
-                          <th>Justification</th>
-                          <th>Correlation</th>
+                          <th>{{ t('compliance.audit.date') }}</th>
+                          <th>{{ t('compliance.audit.action') }}</th>
+                          <th>{{ t('compliance.audit.entity') }}</th>
+                          <th>{{ t('compliance.audit.code') }}</th>
+                          <th>{{ t('compliance.audit.actor') }}</th>
+                          <th>{{ t('compliance.audit.justification') }}</th>
+                          <th>{{ t('compliance.audit.correlation') }}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -253,7 +242,7 @@ function formatDate(value: string | null | undefined): string {
                           <td>{{ log.entityType }}</td>
                           <td class="fw-semibold">{{ log.publicCode ?? '—' }}</td>
                           <td class="small muted">
-                            {{ log.actor?.displayName ?? log.actorUserId ?? 'système' }}
+                            {{ log.actor?.displayName ?? log.actorUserId ?? t('compliance.audit.system') }}
                             <span v-if="log.actorRole">({{ log.actorRole }})</span>
                           </td>
                           <td class="small muted">{{ log.justification ?? '—' }}</td>
@@ -261,7 +250,7 @@ function formatDate(value: string | null | undefined): string {
                         </tr>
                         <tr v-if="!compliance.auditLogs.length">
                           <td colspan="7" class="text-center muted py-4">
-                            Aucun événement d’audit consultable.
+                            {{ t('compliance.audit.empty') }}
                           </td>
                         </tr>
                       </tbody>

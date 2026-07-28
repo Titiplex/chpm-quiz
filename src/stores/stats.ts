@@ -1,6 +1,8 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 
+import { t } from '@/i18n'
+
 import { apiRequest } from '@/services/api'
 import type { StatsResponse, SubmissionDetailsResponse } from '@shared/types/api'
 
@@ -26,7 +28,7 @@ export const useStatsStore = defineStore('stats', () => {
       status.value = 'ready'
     } catch (caught) {
       status.value = 'error'
-      error.value = caught instanceof Error ? caught.message : 'Chargement des statistiques impossible.'
+      error.value = caught instanceof Error ? caught.message : t('store.stats.loadError')
     }
   }
 
@@ -40,7 +42,7 @@ export const useStatsStore = defineStore('stats', () => {
       submissionStatus.value = 'ready'
     } catch (caught) {
       submissionStatus.value = 'error'
-      submissionError.value = caught instanceof Error ? caught.message : 'Chargement de la soumission impossible.'
+      submissionError.value = caught instanceof Error ? caught.message : t('store.stats.submissionError')
     }
   }
 

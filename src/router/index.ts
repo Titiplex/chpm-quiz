@@ -73,7 +73,7 @@ export function createConnectedRoutes(): RouteRecordRaw[] {
       name: 'change-password',
       component: () => import('@/views/ChangePasswordView.vue'),
       meta: {
-        label: 'Change password',
+        label: t('nav.changePassword'),
         allowedRoles: [...allRoles],
         requiresAuthenticatedUser: true,
       },

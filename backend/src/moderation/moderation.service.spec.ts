@@ -1,6 +1,9 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common'
 import { describe, expect, it, vi } from 'vitest'
 
+import type { MailJobPayload } from '../mail/mail.types'
+import type { SmsJobPayload } from '../sms/sms.types'
+
 vi.mock('../prisma/prisma.service', () => ({ PrismaService: class PrismaService {} }))
 vi.mock('../security/access-token.service', () => ({ AccessTokenService: class AccessTokenService {} }))
 vi.mock('../identity-vault/identity-vault.service', () => ({ IdentityVaultService: class IdentityVaultService {} }))
@@ -78,8 +81,8 @@ function makeService(overrides: Record<string, unknown> = {}, env: Record<string
     loadOutboundEmailForInvitation: vi.fn(async () => ({ email: 'patient@example.test' })),
     loadOutboundPhoneForInvitation: vi.fn(async () => ({ phone: '+33600000000' })),
   }
-  const mailQueue = { enqueue: vi.fn(() => 'mail-job-1') }
-  const smsQueue = { enqueue: vi.fn(() => 'sms-job-1') }
+  const mailQueue = { enqueue: vi.fn((_payload: MailJobPayload) => 'mail-job-1') }
+  const smsQueue = { enqueue: vi.fn((_payload: SmsJobPayload) => 'sms-job-1') }
   const audit = { log: vi.fn(async () => undefined) }
   const config = { get: vi.fn(<T = string>(key: string, fallback?: T) => (key in env ? env[key] as T : fallback)) }
 
@@ -146,7 +149,11 @@ describe('ModerationService', () => {
 
     expect(prisma.invitation.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ deliveryMode: 'email_simulation', status: 'sent', notifyModerator: true }) }))
     expect(identityVault.createEmailIdentity).toHaveBeenCalledWith(expect.objectContaining({ email: 'patient@example.test', invitationId: 'invitation-1' }))
-    expect(mailQueue.enqueue).toHaveBeenCalledWith(expect.objectContaining({ template: 'invitation', subject: expect.stringContaining('Invitation à répondre') }))
+    expect(mailQueue.enqueue).toHaveBeenCalledWith(expect.objectContaining({ template: 'invitation', subject: 'Votre invitation sécurisée' }))
+    const mailPayload = mailQueue.enqueue.mock.calls[0]![0]
+    expect(mailPayload.text).toContain('https://app.example.test/r/')
+    expect(mailPayload.text).not.toContain('ITQ')
+    expect(mailPayload.text).not.toContain('ABCD-1234')
     expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'invitation.create' }))
     expect(result.accessToken).toContain('.signed-token')
     expect(result.devAccessLink).toContain('https://app.example.test/r/')
@@ -166,6 +173,10 @@ describe('ModerationService', () => {
     expect(prisma.invitation.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ deliveryMode: 'sms_simulation', status: 'sent', notifyModerator: true }) }))
     expect(identityVault.createPhoneIdentity).toHaveBeenCalledWith(expect.objectContaining({ phone: '+33600000000', invitationId: 'invitation-1' }))
     expect(smsQueue.enqueue).toHaveBeenCalledWith(expect.objectContaining({ template: 'invitation', to: { phone: '+33600000000' } }))
+    const smsPayload = smsQueue.enqueue.mock.calls[0]![0]
+    expect(smsPayload.text).toContain('https://app.example.test/r/')
+    expect(smsPayload.text).not.toContain('ITQ')
+    expect(smsPayload.text).not.toContain('ABCD-1234')
     expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'invitation.create' }))
     expect(result.accessToken).toContain('.signed-token')
   })

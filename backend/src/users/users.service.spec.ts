@@ -49,6 +49,93 @@ function makeService(overrides: Record<string, unknown> = {}) {
 }
 
 describe('UsersService', () => {
+  it('builds the complete project hierarchy for a project administrator', async () => {
+    const secondModerator = {
+      ...moderator,
+      id: 'mod-2',
+      displayName: 'Second Mod',
+      building: { ...building, label: 'Bâtiment 2' },
+    }
+    const { service, prisma } = makeService({
+      organization: {
+        findUnique: vi.fn(async () => ({ id: 'org-1', code: 'ORG', name: 'Organisation CHPM' })),
+      },
+      site: {
+        findUnique: vi.fn(async () => site),
+        findMany: vi.fn(async () => [site]),
+      },
+      user: {
+        findUnique: vi.fn(async () => moderator),
+        findMany: vi.fn(async () => [
+          { ...adminUser, email: 'admin@example.test', displayName: 'Admin Projet', isActive: true, createdAt: new Date(), updatedAt: new Date(), site: null, building: null },
+          siteAdmin,
+          { ...moderator, building },
+          secondModerator,
+        ]),
+      },
+    })
+
+    const result = await service.getProjectHierarchy(adminUser)
+
+    expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ organizationId: 'org-1' }),
+    }))
+    expect(result.scope).toBe('project')
+    expect(result.hierarchy.label).toBe('Organisation CHPM')
+    expect(result.hierarchy.children[0]?.children).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'project_admin', label: 'Admin Projet' }),
+      expect.objectContaining({ kind: 'site', label: 'Site 1' }),
+    ]))
+    const siteNode = result.hierarchy.children[0]?.children.find((node: any) => node.kind === 'site')
+    expect(siteNode?.children[0]).toMatchObject({ kind: 'site_manager', label: 'Site Admin' })
+    expect(siteNode?.children[0]?.children).toHaveLength(2)
+  })
+
+  it('limits a moderator hierarchy to project admins, site managers, and the moderator themself', async () => {
+    const moderatorActor = { ...moderator, building } as any
+    const projectAdmin = {
+      ...adminUser,
+      email: 'admin@example.test',
+      displayName: 'Admin Projet',
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      site: null,
+      building: null,
+    }
+    const { service, prisma } = makeService({
+      organization: {
+        findUnique: vi.fn(async () => ({ id: 'org-1', code: 'ORG', name: 'Organisation CHPM' })),
+      },
+      site: {
+        findUnique: vi.fn(async () => site),
+        findMany: vi.fn(async () => [site]),
+      },
+      user: {
+        findUnique: vi.fn(async () => moderator),
+        findMany: vi.fn(async () => [projectAdmin, siteAdmin, { ...moderator, building }]),
+      },
+    })
+
+    const result = await service.getProjectHierarchy(moderatorActor)
+
+    expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        OR: [
+          { role: 'admin' },
+          { role: 'site_manager', siteId: 'site-1' },
+          { id: 'mod-1' },
+        ],
+      }),
+    }))
+    expect(result.scope).toBe('self')
+    const siteNode = result.hierarchy.children[0]?.children.find((node: any) => node.kind === 'site')
+    expect(siteNode?.children[0]).toMatchObject({ kind: 'site_manager', label: 'Site Admin' })
+    expect(siteNode?.children[0]?.children).toEqual([
+      expect.objectContaining({ kind: 'moderator', label: 'Mod', isCurrentUser: true }),
+    ])
+  })
+
   it('lists site team in the manager scope', async () => {
     const { service, prisma } = makeService()
 

@@ -251,7 +251,6 @@ export class RespondentService {
     }
 
     await this.notificationsService.notifySubmissionReceived(notificationInput)
-    await this.notificationsService.notifySubmissionConfirmation(notificationInput)
 
     return { submission }
   }

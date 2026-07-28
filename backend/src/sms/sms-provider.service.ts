@@ -60,7 +60,7 @@ export class SmsProviderService {
 
     const body = await this.readBody(response)
     if (!response.ok) {
-      throw new ServiceUnavailableException(`Twilio a refusé le SMS (${response.status}) : ${body}`)
+      throw new ServiceUnavailableException(`Twilio a refusé le SMS (HTTP ${response.status})`)
     }
 
     const parsed = this.tryParse(body)
@@ -87,7 +87,7 @@ export class SmsProviderService {
 
     const body = await this.readBody(response)
     if (!response.ok) {
-      throw new ServiceUnavailableException(`Brevo a refusé le SMS (${response.status}) : ${body}`)
+      throw new ServiceUnavailableException(`Brevo a refusé le SMS (HTTP ${response.status})`)
     }
 
     const parsed = this.tryParse(body)

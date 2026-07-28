@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import NotificationPreferencesCard from '@/components/notifications/NotificationPreferencesCard.vue'
+import { tp } from '@/i18n'
 import { useSessionStore } from '@/stores/session'
 import {
   adminUserFixture,
@@ -143,6 +144,6 @@ describe('NotificationPreferencesCard', () => {
       ?.trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('2 digest(s) livré(s)')
+    expect(wrapper.text()).toContain(tp('notifications.digestDelivered', 2))
   })
 })

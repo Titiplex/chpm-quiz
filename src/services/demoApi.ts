@@ -79,8 +79,11 @@ import type {
   UpdateSiteAdminRequest,
   UpdateSiteModeratorRequest,
   UpsertNotificationSubscriptionRequest,
+  ProjectHierarchyNode,
+  ProjectHierarchyResponse,
 } from '@shared/types/api'
 
+import { t } from '@/i18n'
 interface DemoRequestOptions {
   body?: object | Array<unknown>
 }
@@ -320,6 +323,10 @@ export async function demoApiRequest<T>(
 
   if (method === 'GET' && route === '/me') {
     return asResponse<T>(getCurrentAuthResponse())
+  }
+
+  if (method === 'GET' && route === '/users/hierarchy') {
+    return asResponse<T>(getProjectHierarchy() satisfies ProjectHierarchyResponse)
   }
 
   if (method === 'POST' && route === '/auth/login') {
@@ -715,12 +722,170 @@ function asResponse<T>(payload: unknown): T {
   return clone(payload) as T
 }
 
+function getProjectHierarchy(): ProjectHierarchyResponse {
+  const currentUser = safeCurrentUser()
+  if (!currentUser || !['admin', 'site_manager', 'moderator'].includes(currentUser.role)) {
+    throw new Error(t('demo.error.operationalRoleRequired'))
+  }
+
+  const currentSiteId = currentUser.siteId
+    ?? getBuildings().find((building) => building.id === currentUser.buildingId)?.siteId
+    ?? null
+  if (currentUser.role !== 'admin' && !currentSiteId) {
+    throw new Error(t('demo.error.operationalUserNoSite'))
+  }
+
+  const users = getDemoUsers().filter((user) => {
+    if (!['admin', 'site_manager', 'moderator'].includes(user.role)) return false
+    if (currentUser.role === 'admin') return true
+    if (user.role === 'admin') return true
+    if (currentUser.role === 'site_manager') {
+      return user.id === currentUser.id || (user.role === 'moderator' && user.siteId === currentSiteId)
+    }
+    return (user.role === 'site_manager' && user.siteId === currentSiteId) || user.id === currentUser.id
+  })
+
+  const projectAdmins = users
+    .filter((user) => user.role === 'admin')
+    .map((user) => toDemoHierarchyPersonNode(user, currentUser.id ?? ''))
+  const sites = getDemoSites().filter((site) => currentUser.role === 'admin' || site.id === currentSiteId)
+
+  const siteNodes: ProjectHierarchyNode[] = sites.map((site) => {
+    const managers = users
+      .filter((user) => user.role === 'site_manager' && user.siteId === site.id)
+      .map((user) => toDemoHierarchyPersonNode(user, currentUser.id ?? ''))
+    const moderators = users
+      .filter((user) => user.role === 'moderator' && user.siteId === site.id)
+      .map((user) => toDemoHierarchyPersonNode(user, currentUser.id ?? ''))
+
+    let children: ProjectHierarchyNode[]
+    if (managers.length === 1 && managers[0]) {
+      children = [{ ...managers[0], children: moderators }]
+    } else if (managers.length > 1) {
+      children = [
+        {
+          id: `site-management-${site.id}`,
+          kind: 'team',
+          label: 'Responsables de site',
+          subtitle: `${managers.length} responsables affectés`,
+          role: null,
+          isActive: null,
+          isCurrentUser: managers.some((manager) => manager.isCurrentUser),
+          children: managers,
+        },
+        {
+          id: `site-moderators-${site.id}`,
+          kind: 'team',
+          label: 'Modérateurs',
+          subtitle: `${moderators.length} personnes`,
+          role: null,
+          isActive: null,
+          isCurrentUser: moderators.some((moderator) => moderator.isCurrentUser),
+          children: moderators,
+        },
+      ]
+    } else {
+      children = moderators.length
+        ? [{
+            id: `site-moderators-${site.id}`,
+            kind: 'team',
+            label: 'Modérateurs sans responsable affecté',
+            subtitle: `${moderators.length} personnes`,
+            role: null,
+            isActive: null,
+            isCurrentUser: moderators.some((moderator) => moderator.isCurrentUser),
+            children: moderators,
+          }]
+        : []
+    }
+
+    return {
+      id: `site-${site.id}`,
+      kind: 'site',
+      label: site.name,
+      subtitle: site.code,
+      role: null,
+      isActive: null,
+      isCurrentUser: currentUser.role !== 'admin' && site.id === currentSiteId,
+      children,
+    }
+  })
+
+  const visibleSiteIds = new Set(sites.map((site) => site.id))
+  const unassignedPeople = currentUser.role === 'admin'
+    ? users
+        .filter((user) => user.role !== 'admin' && (!user.siteId || !visibleSiteIds.has(user.siteId)))
+        .map((user) => toDemoHierarchyPersonNode(user, currentUser.id ?? ''))
+    : []
+  const unassignedNode: ProjectHierarchyNode | null = unassignedPeople.length
+    ? {
+        id: `project-unassigned-${DEMO_ORGANIZATION_ID}`,
+        kind: 'team',
+        label: 'Affectations incomplètes',
+        subtitle: `${unassignedPeople.length} personnes à rattacher`,
+        role: null,
+        isActive: null,
+        isCurrentUser: unassignedPeople.some((person) => person.isCurrentUser),
+        children: unassignedPeople,
+      }
+    : null
+
+  return {
+    hierarchy: {
+      id: `project-${DEMO_ORGANIZATION_ID}`,
+      kind: 'project',
+      label: 'CH Montfavet',
+      subtitle: 'CHPM',
+      role: null,
+      isActive: null,
+      isCurrentUser: false,
+      children: [{
+        id: `project-administration-${DEMO_ORGANIZATION_ID}`,
+        kind: 'team',
+        label: 'Administration projet',
+        subtitle: `${projectAdmins.length} administrateur${projectAdmins.length > 1 ? 's' : ''} projet`,
+        role: null,
+        isActive: null,
+        isCurrentUser: projectAdmins.some((admin) => admin.isCurrentUser),
+        children: [...projectAdmins, ...siteNodes, ...(unassignedNode ? [unassignedNode] : [])],
+      }],
+    },
+    scope: currentUser.role === 'admin' ? 'project' : currentUser.role === 'site_manager' ? 'site' : 'self',
+    generatedAt: new Date().toISOString(),
+  }
+}
+
+function toDemoHierarchyPersonNode(user: DemoUserSeed, currentUserId: string): ProjectHierarchyNode {
+  const building = user.buildingId
+    ? getBuildings().find((candidate) => candidate.id === user.buildingId)
+    : undefined
+  const site = user.siteId
+    ? getDemoSites().find((candidate) => candidate.id === user.siteId)
+    : undefined
+  const role = user.role as 'admin' | 'site_manager' | 'moderator'
+
+  return {
+    id: `user-${user.id ?? user.email}`,
+    kind: role === 'admin' ? 'project_admin' : role,
+    label: user.displayName,
+    subtitle: role === 'admin'
+      ? roleProfiles.admin.label
+      : role === 'site_manager'
+        ? (site?.name ?? roleProfiles.site_manager.label)
+        : (building?.label ?? site?.name ?? roleProfiles.moderator.label),
+    role,
+    isActive: user.isActive !== false,
+    isCurrentUser: (user.id ?? '') === currentUserId,
+    children: [],
+  }
+}
+
 function getCurrentAuthResponse(): AuthResponse {
   const email = window.localStorage.getItem(SESSION_EMAIL_STORAGE_KEY)
   const user = getDemoUsers().find((candidate) => candidate.email === email)
 
   if (!user) {
-    throw new Error('Session de démonstration absente.')
+    throw new Error(t('demo.error.sessionMissing'))
   }
 
   return { user: toAuthUserProfile(user) }
@@ -736,7 +901,7 @@ function login(credentials: { email?: string; password?: string }): AuthResponse
   )
 
   if (!user) {
-    throw new Error('Identifiants de démonstration invalides.')
+    throw new Error(t('demo.error.invalidCredentials'))
   }
 
   window.localStorage.setItem(SESSION_EMAIL_STORAGE_KEY, user.email)
@@ -799,10 +964,10 @@ function saveDemoUsers(users: DemoUserSeed[]): void {
 function requireSiteTeamManager(): DemoUserSeed {
   const currentUser = safeCurrentUser()
   if (!currentUser || currentUser.role !== 'site_manager') {
-    throw new Error('Seul un responsable de site peut gérer une équipe de site.')
+    throw new Error(t('demo.error.siteManagerRequired'))
   }
   if (!currentUser.siteId) {
-    throw new Error('Gestionnaire de site sans site affecté.')
+    throw new Error(t('demo.error.siteManagerNoSite'))
   }
   return currentUser
 }
@@ -862,7 +1027,7 @@ function createSite(payload: CreateSiteRequest): SiteMutationResponse {
   const code = normalizeCode(payload.code || `SITE-${sites.length + 1}`)
 
   if (sites.some((site) => normalizeCode(site.code) === code)) {
-    throw new Error('Ce code site existe déjà dans la démo.')
+    throw new Error(t('demo.error.duplicateSiteCode'))
   }
 
   const site: ApiSite = {
@@ -893,12 +1058,12 @@ function saveBuildings(buildings: ApiBuilding[]): void {
 function createBuilding(payload: CreateBuildingRequest): BuildingMutationResponse {
   const currentUser = requireSiteTeamManager()
   const site = getDemoSites().find((candidate) => candidate.id === currentUser.siteId)
-  if (!site) throw new Error('Site courant introuvable dans la démo.')
+  if (!site) throw new Error(t('demo.error.currentSiteNotFound'))
 
   const buildings = getBuildings()
   const code = normalizeCode(payload.code || `BAT-${buildings.length + 1}`)
   if (buildings.some((building) => normalizeCode(building.code) === code)) {
-    throw new Error('Ce code bâtiment existe déjà dans la démo.')
+    throw new Error(t('demo.error.duplicateBuildingCode'))
   }
 
   const building: ApiBuilding = {
@@ -950,14 +1115,14 @@ function getSiteAdmins(): SiteAdminsResponse {
 function upsertSiteAdmin(payload: CreateSiteAdminRequest): SiteAdminMutationResponse {
   requireProjectAdmin()
   const site = getDemoSites().find((candidate) => candidate.id === payload.siteId)
-  if (!site) throw new Error('Site introuvable dans la démo.')
+  if (!site) throw new Error(t('demo.error.siteNotFound'))
 
   const users = getDemoUsers()
   const email = payload.email.trim().toLowerCase()
   const existingIndex = users.findIndex((candidate) => candidate.email === email)
   const existing = existingIndex >= 0 ? users[existingIndex] : undefined
   if (existing && existing.role !== 'site_manager')
-    throw new Error('Cet email correspond déjà à un compte qui n’est pas responsable de site.')
+    throw new Error(t('demo.error.emailNotSiteManager'))
 
   const temporaryPassword = payload.temporaryPassword ?? generateDemoTemporaryPassword()
   const now = nowIso()
@@ -995,9 +1160,9 @@ function updateSiteAdmin(id: string, payload: UpdateSiteAdminRequest): SiteAdmin
   const index = users.findIndex((candidate) => candidate.id === id)
   const user = index >= 0 ? users[index] : undefined
   if (!user || user.role !== 'site_manager')
-    throw new Error('Responsable de site introuvable dans la démo.')
+    throw new Error(t('demo.error.siteManagerNotFound'))
   if (payload.siteId && !getDemoSites().some((site) => site.id === payload.siteId))
-    throw new Error('Site introuvable dans la démo.')
+    throw new Error(t('demo.error.siteNotFound'))
 
   const updated: DemoUserSeed = {
     ...user,
@@ -1023,7 +1188,7 @@ function resetSiteAdminPassword(id: string): SiteAdminMutationResponse {
   const index = users.findIndex((candidate) => candidate.id === id)
   const user = index >= 0 ? users[index] : undefined
   if (!user || user.role !== 'site_manager')
-    throw new Error('Responsable de site introuvable dans la démo.')
+    throw new Error(t('demo.error.siteManagerNotFound'))
   const temporaryPassword = generateDemoTemporaryPassword()
   const updated: DemoUserSeed = {
     ...user,
@@ -1044,7 +1209,7 @@ function revokeSiteAdminSessions(id: string): RevokeSessionsResponse {
   const user = getDemoUsers().find(
     (candidate) => candidate.id === id && candidate.role === 'site_manager',
   )
-  if (!user) throw new Error('Responsable de site introuvable dans la démo.')
+  if (!user) throw new Error(t('demo.error.siteManagerNotFound'))
   appendAuditLog('user.siteAdmin.revokeSessions', 'User', user.id ?? null, null, {
     email: user.email,
   })
@@ -1054,7 +1219,7 @@ function revokeSiteAdminSessions(id: string): RevokeSessionsResponse {
 function upsertSiteModerator(payload: CreateSiteModeratorRequest): SiteModeratorMutationResponse {
   const currentUser = requireSiteTeamManager()
   const building = getBuildings().find((candidate) => candidate.id === payload.buildingId)
-  if (!building) throw new Error('Bâtiment introuvable dans la démo.')
+  if (!building) throw new Error(t('demo.error.buildingNotFound'))
   assertBuildingInCurrentUserScope(building)
 
   const users = getDemoUsers()
@@ -1062,10 +1227,10 @@ function upsertSiteModerator(payload: CreateSiteModeratorRequest): SiteModerator
   const existingIndex = users.findIndex((candidate) => candidate.email === email)
   const existing = existingIndex >= 0 ? users[existingIndex] : undefined
   if (existing && existing.role !== 'moderator') {
-    throw new Error('Cet email correspond déjà à un compte qui n’est pas modérateur.')
+    throw new Error(t('demo.error.emailNotModerator'))
   }
   if (existing && !isUserInSiteTeamScope(currentUser, existing)) {
-    throw new Error('Modérateur hors de votre périmètre.')
+    throw new Error(t('demo.error.moderatorOutOfScope'))
   }
 
   const temporaryPassword = payload.temporaryPassword ?? generateDemoTemporaryPassword()
@@ -1111,7 +1276,7 @@ function updateSiteModerator(
   const index = users.findIndex((candidate) => candidate.id === id)
   const user = index >= 0 ? users[index] : undefined
   if (!user || user.role !== 'moderator' || !isUserInSiteTeamScope(currentUser, user)) {
-    throw new Error('Modérateur introuvable dans votre périmètre.')
+    throw new Error(t('demo.error.moderatorNotFound'))
   }
 
   let nextBuilding = user.buildingId
@@ -1119,7 +1284,7 @@ function updateSiteModerator(
     : undefined
   if (payload.buildingId) {
     nextBuilding = getBuildings().find((candidate) => candidate.id === payload.buildingId)
-    if (!nextBuilding) throw new Error('Bâtiment introuvable dans la démo.')
+    if (!nextBuilding) throw new Error(t('demo.error.buildingNotFound'))
     assertBuildingInCurrentUserScope(nextBuilding)
   }
 
@@ -1154,7 +1319,7 @@ function resetSiteModeratorPassword(id: string): SiteModeratorMutationResponse {
   const index = users.findIndex((candidate) => candidate.id === id)
   const user = index >= 0 ? users[index] : undefined
   if (!user || user.role !== 'moderator' || !isUserInSiteTeamScope(currentUser, user)) {
-    throw new Error('Modérateur introuvable dans votre périmètre.')
+    throw new Error(t('demo.error.moderatorNotFound'))
   }
 
   const temporaryPassword = generateDemoTemporaryPassword()
@@ -1177,7 +1342,7 @@ function revokeSiteModeratorSessions(id: string): RevokeSessionsResponse {
   const currentUser = requireSiteTeamManager()
   const user = getDemoUsers().find((candidate) => candidate.id === id)
   if (!user || user.role !== 'moderator' || !isUserInSiteTeamScope(currentUser, user)) {
-    throw new Error('Modérateur introuvable dans votre périmètre.')
+    throw new Error(t('demo.error.moderatorNotFound'))
   }
   appendAuditLog('user.siteModerator.revokeSessions', 'User', user.id ?? null, null, {
     email: user.email,
@@ -1334,17 +1499,17 @@ function addQuestionnaireLanguage(
 ): AddQuestionnaireLanguageResponse {
   const questionnaires = getQuestionnaires()
   const source = questionnaires.find((candidate) => candidate.id === questionnaireId)
-  if (!source) throw new Error('Questionnaire source introuvable dans la démo.')
+  if (!source) throw new Error(t('demo.error.sourceQuestionnaireNotFound'))
 
   const language = payload.language
   if (source.language === language) {
-    throw new Error('Cette langue correspond déjà à la version courante.')
+    throw new Error(t('demo.error.sameTranslationLanguage'))
   }
 
   const codeRoot = source.code.replace(/-(FR|EN|ES)$/i, '')
   const code = normalizeCode(`${codeRoot}-${language.toUpperCase()}`)
   if (questionnaires.some((candidate) => candidate.code === code)) {
-    throw new Error('Une traduction avec ce code existe déjà dans la démo.')
+    throw new Error(t('demo.error.duplicateTranslationCode'))
   }
 
   const questionnaire: ApiQuestionnaire = {
@@ -1512,7 +1677,7 @@ function updateQuestion(
     const question = questionnaire.groups
       .flatMap((group) => group.questions)
       .find((candidate) => candidate.id === questionId)
-    if (!question) throw new Error('Question introuvable dans la démo.')
+    if (!question) throw new Error(t('demo.error.questionNotFound'))
 
     question.code = payload.code ?? question.code
     question.label = payload.label ?? question.label
@@ -1558,7 +1723,7 @@ function mutateQuestionnaire(
   const questionnaire = questionnaires.find((candidate) => candidate.id === questionnaireId)
 
   if (!questionnaire) {
-    throw new Error('Questionnaire introuvable dans la démo.')
+    throw new Error(t('demo.error.questionnaireNotFound'))
   }
 
   mutation(questionnaire)
@@ -1569,7 +1734,7 @@ function mutateQuestionnaire(
 
 function findGroup(questionnaire: ApiQuestionnaire, groupId: string) {
   const group = questionnaire.groups.find((candidate) => candidate.id === groupId)
-  if (!group) throw new Error('Groupe introuvable dans la démo.')
+  if (!group) throw new Error(t('demo.error.groupNotFound'))
   return group
 }
 
@@ -1619,11 +1784,11 @@ function assertBuildingInCurrentUserScope(building: ApiBuilding): void {
   const currentUser = safeCurrentUser()
 
   if (currentUser?.role === 'moderator' && currentUser.buildingId !== building.id) {
-    throw new Error('Le bâtiment sélectionné est hors de votre périmètre de modération.')
+    throw new Error(t('demo.error.buildingOutsideModerationScope'))
   }
 
   if (currentUser?.role === 'site_manager' && currentUser.siteId !== building.siteId) {
-    throw new Error('Le bâtiment sélectionné est hors de votre site.')
+    throw new Error(t('demo.error.buildingOutsideSite'))
   }
 }
 
@@ -1631,7 +1796,7 @@ function assertCanAdministerTerminalInDemo(building: ApiBuilding): void {
   const currentUser = safeCurrentUser()
 
   if (!currentUser || !['admin', 'site_manager', 'technical_admin'].includes(currentUser.role)) {
-    throw new Error('Votre rôle ne permet pas d’administrer les terminaux.')
+    throw new Error(t('demo.error.terminalAdministrationForbidden'))
   }
 
   assertBuildingInCurrentUserScope(building)
@@ -1645,7 +1810,7 @@ function createInvitation(payload: CreateInvitationRequest): CreateInvitationRes
   const building = getBuildings().find((candidate) => candidate.id === payload.buildingId)
 
   if (!questionnaire || !building) {
-    throw new Error('Questionnaire ou bâtiment de démonstration introuvable.')
+    throw new Error(t('demo.error.questionnaireOrBuildingNotFound'))
   }
 
   assertBuildingInCurrentUserScope(building)
@@ -1657,18 +1822,18 @@ function createInvitation(payload: CreateInvitationRequest): CreateInvitationRes
     : null
 
   if (deliveryMode === 'onsite_terminal') {
-    if (!terminalDevice) throw new Error('Terminal de démonstration introuvable.')
+    if (!terminalDevice) throw new Error(t('demo.error.terminalNotFound'))
     if (terminalDevice.building.id !== building.id)
-      throw new Error('Le terminal choisi est hors du bâtiment sélectionné.')
+      throw new Error(t('demo.error.terminalWrongBuilding'))
   } else if (
     deliveryMode !== 'paper_form' &&
     deliveryMode !== 'refusal_record' &&
     (deliveryMode === 'email' || deliveryMode === 'email_simulation') &&
     !payload.email
   ) {
-    throw new Error('Adresse email requise pour une invitation email.')
+    throw new Error(t('demo.error.emailRequired'))
   } else if ((deliveryMode === 'sms' || deliveryMode === 'sms_simulation') && !payload.phone) {
-    throw new Error('Numéro de téléphone requis pour une invitation SMS.')
+    throw new Error(t('demo.error.phoneRequired'))
   }
 
   const invitations = getInvitations()
@@ -1753,11 +1918,11 @@ function resendInvitation(invitationId: string): { invitation: ApiInvitation } {
   const invitation = invitations.find((candidate) => candidate.id === invitationId)
 
   if (!invitation) {
-    throw new Error('Invitation introuvable dans la démo.')
+    throw new Error(t('demo.error.invitationNotFound'))
   }
 
   if (invitation.deliveryMode === 'paper_form' || invitation.deliveryMode === 'refusal_record') {
-    throw new Error('Les lignes papier et les refus ne peuvent pas être relancés.')
+    throw new Error(t('demo.error.reminderForbidden'))
   }
 
   invitation.sentAt = nowIso()
@@ -1774,15 +1939,15 @@ function submitPaperResponses(
   const invitation = invitations.find((candidate) => candidate.id === invitationId)
 
   if (!invitation) {
-    throw new Error('Invitation papier introuvable dans la démo.')
+    throw new Error(t('demo.error.paperInvitationNotFound'))
   }
 
   if (invitation.deliveryMode !== 'paper_form') {
-    throw new Error('La saisie manuelle est réservée aux versions papier.')
+    throw new Error(t('demo.error.paperEntryOnly'))
   }
 
   if (['submitted', 'cancelled', 'blocked', 'expired'].includes(invitation.status)) {
-    throw new Error('Cette invitation papier ne peut plus être saisie.')
+    throw new Error(t('demo.error.paperInvitationClosed'))
   }
 
   assertBuildingInCurrentUserScope(invitation.building)
@@ -1791,7 +1956,7 @@ function submitPaperResponses(
     (candidate) => candidate.versionId === invitation.questionnaireVersionId,
   )
   if (!questionnaire) {
-    throw new Error('Questionnaire papier introuvable dans la démo.')
+    throw new Error(t('demo.error.paperQuestionnaireNotFound'))
   }
 
   const questions = questionnaire.groups.flatMap((group) => group.questions)
@@ -1833,7 +1998,7 @@ function submitPaperResponses(
   for (const answerInput of answers) {
     const sourceQuestion = questionById.get(answerInput.questionId)
     if (!sourceQuestion) {
-      throw new Error('Une réponse papier cible une question inconnue.')
+      throw new Error(t('demo.error.unknownPaperQuestion'))
     }
 
     validateDemoPaperAnswer(sourceQuestion, answerInput.value)
@@ -1954,7 +2119,7 @@ function registerTerminalDevice(
   payload: RegisterTerminalDeviceRequest,
 ): RegisterTerminalDeviceResponse {
   const building = getBuildings().find((candidate) => candidate.id === payload.buildingId)
-  if (!building) throw new Error('Bâtiment introuvable pour créer le terminal.')
+  if (!building) throw new Error(t('demo.error.terminalBuildingNotFound'))
 
   assertCanAdministerTerminalInDemo(building)
 
@@ -1994,7 +2159,7 @@ function updateTerminalDevice(
 ): { terminalDevice: ApiTerminalDevice } {
   const devices = getTerminalDevices()
   const index = devices.findIndex((candidate) => candidate.id === terminalDeviceId)
-  if (index < 0) throw new Error('Terminal introuvable dans la démo.')
+  if (index < 0) throw new Error(t('demo.error.terminalNotFound'))
 
   const existing = devices[index]!
   assertCanAdministerTerminalInDemo(existing.building)
@@ -2029,7 +2194,7 @@ function revokeTerminalDevice(terminalDeviceId: string): { terminalDevice: ApiTe
 function regenerateTerminalToken(terminalDeviceId: string): RegenerateTerminalDeviceTokenResponse {
   const devices = getTerminalDevices()
   const device = devices.find((candidate) => candidate.id === terminalDeviceId)
-  if (!device) throw new Error('Terminal introuvable dans la démo.')
+  if (!device) throw new Error(t('demo.error.terminalNotFound'))
   assertCanAdministerTerminalInDemo(device.building)
 
   const token = `${terminalDeviceId}-token-${crypto.randomUUID()}`
@@ -2084,21 +2249,21 @@ function openTerminalInvitation(
   const invitations = getInvitations()
   const invitation = invitations.find((candidate) => candidate.id === invitationId)
 
-  if (!invitation) throw new Error('Invitation terminal introuvable.')
+  if (!invitation) throw new Error(t('demo.error.terminalInvitationNotFound'))
   if (invitation.deliveryMode !== 'onsite_terminal')
-    throw new Error('Cette invitation n’est pas destinée à un terminal.')
+    throw new Error(t('demo.error.invitationNotForTerminal'))
   if (invitation.terminalDevice?.id !== terminalDevice.id)
-    throw new Error('Invitation affectée à un autre terminal.')
+    throw new Error(t('demo.error.invitationTerminalMismatch'))
   if (invitation.building.id !== terminalDevice.building.id)
-    throw new Error('Terminal hors bâtiment.')
+    throw new Error(t('demo.error.terminalOutsideBuilding'))
   if (invitation.status === 'submitted' || invitation.responseStatus === 'locked')
-    throw new Error('Invitation déjà soumise.')
-  if (new Date(invitation.expiresAt).getTime() <= Date.now()) throw new Error('Invitation expirée.')
+    throw new Error(t('demo.error.invitationAlreadySubmitted'))
+  if (new Date(invitation.expiresAt).getTime() <= Date.now()) throw new Error(t('demo.error.invitationExpired'))
 
   const questionnaire = getQuestionnaires().find(
     (candidate) => candidate.versionId === invitation.questionnaireVersionId,
   )
-  if (!questionnaire) throw new Error('Questionnaire terminal introuvable.')
+  if (!questionnaire) throw new Error(t('demo.error.terminalQuestionnaireNotFound'))
 
   const accessToken = `demo-terminal-${invitation.publicCode.toLowerCase()}-${crypto.randomUUID()}`
   const sessions = getRespondentSessions()
@@ -2145,7 +2310,7 @@ function findTerminalByToken(terminalToken: string): ApiTerminalDevice {
     ? getTerminalDevices().find((device) => device.id === terminalId)
     : null
   if (!terminalDevice || terminalDevice.status !== 'active') {
-    throw new Error('Terminal de démonstration invalide ou désactivé.')
+    throw new Error(t('demo.error.invalidTerminal'))
   }
 
   return terminalDevice
@@ -2159,7 +2324,7 @@ function assertTerminalTokenIfNeeded(
 
   const terminalDevice = findTerminalByToken(terminalToken ?? '')
   if (session.invitation.terminalDevice?.id !== terminalDevice.id) {
-    throw new Error('Cette session répondant doit rester sur le terminal hospitalier affecté.')
+    throw new Error(t('demo.error.respondentTerminalMismatch'))
   }
 }
 
@@ -2168,7 +2333,7 @@ function getRespondentSession(token: string, terminalToken?: string): Respondent
   const session = sessions[token]
 
   if (!session) {
-    throw new Error('Lien répondant invalide ou expiré dans la démo.')
+    throw new Error(t('demo.error.respondentLinkInvalid'))
   }
 
   assertTerminalTokenIfNeeded(session, terminalToken)
@@ -2198,7 +2363,7 @@ function saveRespondentAnswers(payload: SaveAnswersRequest): SaveAnswersResponse
   const session = sessions[token]
 
   if (!session || session.responseSession.status === 'locked') {
-    throw new Error('Session répondant verrouillée ou introuvable.')
+    throw new Error(t('demo.error.respondentSessionLocked'))
   }
 
   assertTerminalTokenIfNeeded(session, payload.terminalToken)
@@ -2252,7 +2417,7 @@ function submitRespondentSession(payload: {
   const session = sessions[token]
 
   if (!session) {
-    throw new Error('Session répondant introuvable dans la démo.')
+    throw new Error(t('demo.error.respondentSessionNotFound'))
   }
 
   assertTerminalTokenIfNeeded(session, payload.terminalToken)
@@ -2313,7 +2478,7 @@ function findRespondentQuestion(
   const question = session.questionnaire.groups
     .flatMap((group) => group.questions)
     .find((candidate) => candidate.id === questionId)
-  if (!question) throw new Error('Question répondant introuvable.')
+  if (!question) throw new Error(t('demo.error.respondentQuestionNotFound'))
   return question
 }
 
@@ -3301,7 +3466,7 @@ function upsertNotificationSubscription(
   const currentUser = safeCurrentUser()
 
   if (!currentUser) {
-    throw new Error('Session requise pour modifier les notifications.')
+    throw new Error(t('demo.error.notificationSessionRequired'))
   }
 
   const subscriptions = readStorage(
@@ -3650,7 +3815,7 @@ function getPseudonymizedExport(questionnaireId?: string): PseudonymizedExportRe
     questionnaires.find((candidate) => candidate.id === questionnaireId) ?? questionnaires[0]
 
   if (!questionnaire) {
-    throw new Error('Questionnaire introuvable pour export pseudonymisé.')
+    throw new Error(t('demo.error.exportQuestionnaireNotFound'))
   }
 
   const questions = questionnaire.groups.flatMap((group) => group.questions)
@@ -3863,7 +4028,7 @@ function createStats(questionnaireId: string): StatsResponse['stats'] {
     getQuestionnaires()[0]
 
   if (!questionnaire) {
-    throw new Error('Questionnaire introuvable pour les statistiques de démonstration.')
+    throw new Error(t('demo.error.statsQuestionnaireNotFound'))
   }
 
   const questions = questionnaire.groups.flatMap((group) => group.questions)
@@ -4135,13 +4300,13 @@ function getSubmissionDetails(publicCode: string): SubmissionDetailsResponse {
   const questionnaire = getQuestionnaires()[0]
 
   if (!questionnaire) {
-    throw new Error('Questionnaire introuvable pour la soumission de démonstration.')
+    throw new Error(t('demo.error.submissionQuestionnaireNotFound'))
   }
 
   const submission = createDemoSubmissions(questionnaire)[0]
 
   if (!submission) {
-    throw new Error('Soumission de démonstration introuvable.')
+    throw new Error(t('demo.error.submissionNotFound'))
   }
 
   const answers = questionnaire.groups
@@ -4262,7 +4427,7 @@ function updateJudicialRequest(id: string, action: string): JudicialAccessReques
   const currentUser = safeCurrentUser()
 
   if (!request) {
-    throw new Error('Demande judiciaire introuvable.')
+    throw new Error(t('demo.error.judicialRequestNotFound'))
   }
 
   if (action === 'validate-dpo') {
@@ -4281,7 +4446,7 @@ function updateJudicialRequest(id: string, action: string): JudicialAccessReques
 
   if (action === 'execute') {
     if (request.status !== 'validated')
-      throw new Error('Double validation requise avant exécution.')
+      throw new Error(t('demo.error.doubleApprovalRequired'))
     request.status = 'executed'
     request.executedAt = nowIso()
     request.executedByUserId = `demo-user-${currentUser?.role ?? 'dpo'}`
