@@ -89,7 +89,7 @@ export class MailProviderService {
       }),
     })
 
-    const body = await this.readBody(response)
+    await this.readBody(response)
     if (!response.ok) {
       throw new ServiceUnavailableException(`SendGrid a refusé l'email (HTTP ${response.status})`)
     }
