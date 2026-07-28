@@ -5,9 +5,9 @@
   "description": "NestJS API for the CHPM Survey platform.",
   "license": "UNLICENSED",
   "scripts": {
-    "build": "nest build",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json",
     "predev": "npm run prisma:generate",
-    "dev": "nest start --watch",
+    "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",
     "start:prod": "node dist/main.js",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.scripts.json",
@@ -47,7 +47,6 @@
     "rxjs": "7.8.2"
   },
   "devDependencies": {
-    "@nestjs/cli": "11.0.23",
     "@nestjs/schematics": "11.1.0",
     "@nestjs/testing": "11.1.26",
     "@types/cookie-parser": "1.4.10",
@@ -71,6 +70,7 @@
     "npm": "10.9.x"
   },
   "overrides": {
-    "multer": "2.2.0"
+    "multer": "2.2.0",
+    "postcss": "8.5.23"
   }
 }
