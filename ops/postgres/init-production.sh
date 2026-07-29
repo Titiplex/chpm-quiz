@@ -34,6 +34,7 @@ ALTER SCHEMA identity OWNER TO chpm_migrator;
 REVOKE ALL ON SCHEMA public, identity FROM PUBLIC;
 SELECT format('REVOKE CONNECT ON DATABASE %I FROM PUBLIC', current_database()) \gexec
 SELECT format('GRANT CONNECT ON DATABASE %I TO chpm_migrator, chpm_operational, chpm_identity, chpm_dpo', current_database()) \gexec
+SELECT format('GRANT CREATE ON DATABASE %I TO chpm_migrator', current_database()) \gexec
 GRANT USAGE ON SCHEMA public TO chpm_operational;
 GRANT USAGE ON SCHEMA identity TO chpm_identity;
 GRANT USAGE ON SCHEMA public, identity TO chpm_dpo;
