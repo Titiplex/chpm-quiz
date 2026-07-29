@@ -10,6 +10,7 @@ COPY index.html env.d.ts tsconfig*.json vite.config.ts vitest.config.ts eslint.c
 COPY public ./public
 COPY shared ./shared
 COPY src ./src
+COPY scripts ./scripts
 ARG VITE_APP_NAME="CHPM Survey"
 ARG VITE_APP_DESCRIPTION="Secure questionnaire and pseudonymized survey platform."
 ARG VITE_DEFAULT_LOCALE="en"
