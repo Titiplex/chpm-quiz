@@ -29,7 +29,7 @@ services:
     environment:
       DATABASE_URL: ${MIGRATION_DATABASE_URL:?MIGRATION_DATABASE_URL is required}
       MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:?MIGRATION_DATABASE_URL is required}
-    command: sh -c "node scripts/prisma.mjs validate && node scripts/prisma.mjs migrate deploy && npm run db:apply-dpo-grants"
+    command: sh -c "node scripts/prisma.mjs validate && node scripts/prisma.mjs migrate deploy && npm run db:apply-runtime-grants && npm run db:apply-dpo-grants"
     depends_on:
       postgres:
         condition: service_healthy
@@ -164,8 +164,13 @@ services:
       - public
 
   encrypted-backup:
-    image: postgres:17-alpine
     profiles: ['maintenance']
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+      args:
+        POSTGRES_IMAGE: postgres:17-alpine
+    image: chpm-encrypted-backup:local
     environment:
       OPERATIONAL_DATABASE_URL: ${OPERATIONAL_DATABASE_URL:?OPERATIONAL_DATABASE_URL is required}
       IDENTITY_DATABASE_URL: ${IDENTITY_DATABASE_URL:?IDENTITY_DATABASE_URL is required}

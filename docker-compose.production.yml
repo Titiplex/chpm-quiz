@@ -37,7 +37,7 @@ services:
       [
         'sh',
         '-c',
-        'node scripts/prisma.mjs validate && node scripts/prisma.mjs migrate deploy && npm run db:apply-dpo-grants && node scripts/prisma.mjs migrate status',
+        'node scripts/prisma.mjs validate && node scripts/prisma.mjs migrate deploy && npm run db:apply-runtime-grants && npm run db:apply-dpo-grants && node scripts/prisma.mjs migrate status',
       ]
     depends_on:
       postgres:
@@ -233,7 +233,12 @@ services:
 
   encrypted-backup:
     profiles: ['maintenance']
-    image: ${POSTGRES_IMAGE:?POSTGRES_IMAGE must be pinned}
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+      args:
+        POSTGRES_IMAGE: ${POSTGRES_IMAGE:?POSTGRES_IMAGE must be pinned}
+    image: chpm-encrypted-backup:local
     environment:
       OPERATIONAL_DATABASE_URL: ${OPERATIONAL_DATABASE_URL:?OPERATIONAL_DATABASE_URL is required}
       IDENTITY_DATABASE_URL: ${IDENTITY_DATABASE_URL:?IDENTITY_DATABASE_URL is required}

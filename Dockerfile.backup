@@ -1,0 +1,6 @@
+# syntax=docker/dockerfile:1.7
+
+ARG POSTGRES_IMAGE=postgres:17-alpine
+FROM ${POSTGRES_IMAGE}
+
+RUN apk add --no-cache openssl
